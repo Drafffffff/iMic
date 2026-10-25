@@ -1,0 +1,54 @@
+build/
+.build/
+
+# XcodeGen 生成的工程与 Xcode 本机状态
+ios/*.xcodeproj/
+ios/*.xcworkspace/
+.DS_Store
+*.xcuserstate
+xcuserdata/
+DerivedData/
+*.xcresult
+*.xcarchive/
+*.dSYM/
+.swiftpm/
+
+# 系统、工具缓存与临时文件
+.cache/
+__pycache__/
+*.py[cod]
+*.tmp
+*.swp
+*~
+
+# 本地凭据、签名材料与配对状态
+.env
+.env.*
+*.p12
+*.pfx
+*.pem
+*.key
+*.cer
+*.crt
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
+paired.json
+imic-token.txt
+imic-device-id.txt
+
+# 调试日志、录音与发布产物
+logs/
+recordings/
+*.log
+*.log.*
+*.pcm
+*.wav
+*.aiff
+*.aif
+*.m4a
+*.caf
+*.mp3
+*.ipa
+*.dmg
+*.app/

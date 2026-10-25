@@ -1,0 +1,314 @@
+import SwiftUI
+
+enum Theme {
+    static let ink = Color(red: 0.019, green: 0.019, blue: 0.019)
+    static let panel = Color(red: 0.043, green: 0.043, blue: 0.043)
+    static let panelRaised = Color(red: 0.065, green: 0.065, blue: 0.065)
+    static let orange = Color(red: 1.0, green: 0.29, blue: 0.0)
+    static let orangeDeep = Color(red: 0.48, green: 0.14, blue: 0.0)
+    static let ivory = Color(red: 0.95, green: 0.94, blue: 0.90)
+    static let muted = Color(red: 0.55, green: 0.53, blue: 0.50)
+    static let line = Color.white.opacity(0.10)
+    static let hairline = Color.white.opacity(0.06)
+}
+
+struct MetaLabel: View {
+    let text: String
+    var color: Color = Theme.muted
+    var body: some View {
+        Text(text)
+            .font(.system(size: 9, weight: .medium, design: .monospaced))
+            .tracking(1.4)
+            .foregroundStyle(color)
+            .lineLimit(1)
+    }
+}
+
+struct Hairline: View {
+    var color: Color = Theme.hairline
+    var body: some View {
+        Rectangle().fill(color).frame(height: 1)
+    }
+}
+
+/// 黑底与极淡网格。静止背景不参与动画。
+struct TechBackground: View {
+    var body: some View {
+        ZStack {
+            Theme.ink.ignoresSafeArea()
+            Canvas { context, size in
+                var grid = Path()
+                for x in stride(from: 0.0, through: size.width, by: 26.0) {
+                    grid.move(to: CGPoint(x: x, y: 0))
+                    grid.addLine(to: CGPoint(x: x, y: size.height))
+                }
+                for y in stride(from: 0.0, through: size.height, by: 26.0) {
+                    grid.move(to: CGPoint(x: 0, y: y))
+                    grid.addLine(to: CGPoint(x: size.width, y: y))
+                }
+                context.stroke(grid, with: .color(Color.white.opacity(0.019)), lineWidth: 0.5)
+
+                var axis = Path()
+                axis.move(to: CGPoint(x: size.width / 2, y: 0))
+                axis.addLine(to: CGPoint(x: size.width / 2, y: size.height))
+                context.stroke(axis, with: .color(Color.white.opacity(0.035)), lineWidth: 0.5)
+            }
+            .ignoresSafeArea()
+        }
+    }
+}
+
+/// 无 SwiftUI/显示时钟依赖的主图模型，可用缓存 bands 和合成频谱直接验证。
+enum TorusGeometry {
+    static let ringCount = 44
+
+    struct RingPosition {
+        let progress: CGFloat
+        let envelope: CGFloat
+    }
+
+    static let positions: [RingPosition] = (0..<ringCount).map { index in
+        let t = CGFloat(index) / CGFloat(ringCount - 1)
+        return RingPosition(progress: t, envelope: pow(max(0, sin(t * .pi)), 0.7))
+    }
+
+    static let orbitSamples: [CGPoint] = (0..<96).map { index in
+        let angle = Double(index) * 2 * .pi / 96
+        return CGPoint(x: cos(angle), y: sin(angle))
+    }
+
+    struct SpectrumRelief {
+        let floor: CGFloat
+        let span: CGFloat
+        let presence: CGFloat
+
+        init(bands: [CGFloat]) {
+            var sum: CGFloat = 0
+            var peak: CGFloat = 0
+            for band in bands {
+                let value = min(1, max(0, band))
+                sum += value
+                peak = max(peak, value)
+            }
+            let mean = bands.isEmpty ? 0 : sum / CGFloat(bands.count)
+            // 扩开旧缓存的窄动态范围；新 FFT 的零谷保持为零。0.38 下限
+            // 和绝对 presence 防止把静音/微小浮动再次归一成满幅形变。
+            floor = max(0, mean - 0.24)
+            span = max(0.38, peak - floor)
+            presence = min(1, peak * 2)
+        }
+
+        func shape(energy: CGFloat) -> CGFloat {
+            let relative = min(1, max(0, (energy - floor) / span))
+            // 保留绝对包络，不能让逐帧归一化抵消声音的起落缓动。
+            return relative * relative * (3 - 2 * relative) * (0.35 + 0.65 * min(1, max(0, energy)))
+        }
+    }
+
+    struct RingProfile {
+        let radius: CGFloat
+        let opacity: CGFloat
+    }
+
+    static func ringProfile(energy: CGFloat, relief: SpectrumRelief, level: CGFloat,
+                            breath: CGFloat, texture: CGFloat,
+                            envelope: CGFloat) -> RingProfile {
+        let shape = relief.shape(energy: energy)
+        let idle = 0.46 + 0.08 * breath + texture * 0.018
+        // 静止约半高；有声时峰/谷主导雕塑，不再由响度统一撑大。
+        let body = min(0.98, max(0.16,
+            idle - 0.15 * relief.presence + 0.59 * shape + 0.025 * level))
+        return RingProfile(
+            radius: (0.30 + 0.70 * envelope) * body,
+            opacity: min(1, 0.30 + 0.07 * breath + 0.12 * level + 0.35 * shape)
+        )
+    }
+
+    static func projectedPull(_ pull: CGFloat, height: CGFloat, baseRadius: CGFloat) -> CGFloat {
+        // 留足完整环半径、纹理与描边预算；高速弹簧过冲也不能越过 Canvas。
+        let budget = max(1, height / 2 - baseRadius - 12)
+        return budget * tanh(pull / budget)
+    }
+
+    static func stringDisplacement(progress: CGFloat, anchor: CGFloat, pull: CGFloat) -> CGFloat {
+        guard progress > 0, progress < 1 else { return 0 }
+        let anchor = min(0.85, max(0.15, anchor))
+        let distance = progress <= anchor ? progress / anchor : (1 - progress) / (1 - anchor)
+        // 两端固定，受力点两侧连续光滑展开，而不是局部凹陷或整体平移。
+        return pull * sin(distance * .pi / 2)
+    }
+
+    static func stringSlope(progress: CGFloat, anchor: CGFloat, pull: CGFloat, width: CGFloat) -> CGFloat {
+        let anchor = min(0.85, max(0.15, anchor))
+        let left = progress <= anchor
+        let span = left ? anchor : 1 - anchor
+        let distance = left ? progress / span : (1 - progress) / span
+        let direction: CGFloat = left ? 1 : -1
+        return direction * pull * .pi / (2 * span * max(1, width)) * cos(distance * .pi / 2)
+    }
+}
+
+/// 中心主图：一条会随声音振动、也能被手指拨动的弦，44 个圆环穿在弦上。
+/// 频段塑形，响度仅增加少量 presence/亮度；手势与解析弹簧共用显示时钟。
+struct TorusView: View {
+    @ObservedObject var store: SpectrumStore
+    @ObservedObject private var motionStore: StringMotionStore
+    var dimmed: Bool
+
+    init(store: SpectrumStore, dimmed: Bool = false) {
+        self.store = store
+        self.motionStore = store.stringMotion
+        self.dimmed = dimmed
+    }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Canvas { context, size in
+            draw(context: context, size: size)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func draw(context: GraphicsContext, size: CGSize) {
+        let spectrum = store.frame.bands
+        let time = store.frame.time
+        let motion: CGFloat = reduceMotion ? 0 : 1
+        let breath = 0.5 + (store.frame.breath - 0.5) * motion
+        let level = min(1, max(0, store.frame.level))
+
+        let cx = size.width / 2
+        let cy = size.height / 2
+        let relief = TorusGeometry.SpectrumRelief(bands: spectrum)
+        let bar = size.width * 0.80
+        let baseRy = min(size.height * 0.23, max(0, cy - 16))
+        let color = motionStore.armed ? Theme.ivory : (dimmed ? Theme.muted : Theme.orange)
+
+        let leftRail = cx - bar / 2 - 12
+        let rightRail = cx + bar / 2 + 12
+        let rulerTop = cy - baseRy * 1.42
+        let rulerBottom = cy + baseRy * 1.42
+        let effectivePull = TorusGeometry.projectedPull(
+            motionStore.pull, height: size.height, baseRadius: baseRy * 1.12)
+
+        func stringY(_ x: CGFloat) -> CGFloat {
+            let progress = (x - leftRail) / max(1, rightRail - leftRail)
+            let bend = TorusGeometry.stringDisplacement(
+                progress: progress, anchor: motionStore.anchor, pull: effectivePull)
+            let t = Double((x - leftRail) / max(1, rightRail - leftRail))
+            let texture = CGFloat(BreathingNoise.value(t * 2.6 + time * 0.20))
+            // No travelling sine: the silhouette stays grounded while voice adds detail.
+            let pinnedEnvelope = max(0, 4 * progress * (1 - progress))
+            let contour = texture * (0.35 + level * 1.3) * motion * pinnedEnvelope
+            return cy + bend + contour
+        }
+
+        // 左右标尺，不再画中间横线；横线由真正的弦代替。
+        var ruler = Path()
+        for x in [leftRail, rightRail] {
+            ruler.move(to: CGPoint(x: x, y: rulerTop))
+            ruler.addLine(to: CGPoint(x: x, y: rulerBottom))
+            for y in [rulerTop, rulerBottom] {
+                ruler.move(to: CGPoint(x: x - 2.5, y: y))
+                ruler.addLine(to: CGPoint(x: x + 2.5, y: y))
+            }
+        }
+        context.stroke(ruler, with: .color(color.opacity(0.48)), lineWidth: 0.9)
+
+        // 上下轨道沿同一固定端弦形弯曲，不能再整块平移。
+        let orbitHeight = size.height * (0.05 + 0.018 * relief.presence)
+        for offset in [CGFloat(-0.62), CGFloat(0.62)] {
+            let separation = offset * baseRy * (0.72 + 0.28 * relief.presence)
+            var path = Path()
+            for (index, sample) in TorusGeometry.orbitSamples.enumerated() {
+                let x = cx + sample.x * bar / 2
+                let point = CGPoint(x: x, y: stringY(x) + separation + sample.y * orbitHeight / 2)
+                if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+            path.closeSubpath()
+            context.stroke(path, with: .color(color.opacity(0.26)), lineWidth: 0.7)
+        }
+
+        // 圆环展示当前频谱，峰谷控制半径；线宽永远固定 1.3pt。
+        let tension = min(1, abs(effectivePull) / max(1, size.height * 0.20))
+        for (index, position) in TorusGeometry.positions.enumerated() {
+            let t = position.progress
+            let envelope = position.envelope
+            let energy = min(1, max(0, index < spectrum.count ? spectrum[index] : 0))
+            let grain = BreathingNoise.value(time * 0.16 + Double(index) * 0.085)
+            let texture = CGFloat(grain) * motion
+            let profile = TorusGeometry.ringProfile(
+                energy: energy, relief: relief, level: level, breath: breath,
+                texture: texture, envelope: envelope)
+            let stretch = 1 + 0.10 * tension * envelope
+            let ry = baseRy * profile.radius * stretch
+            let rx = size.width * (0.011 + 0.009 * envelope) / stretch
+            let x = cx + (t - 0.5) * bar
+            let progress = (x - leftRail) / max(1, rightRail - leftRail)
+            let slope = TorusGeometry.stringSlope(
+                progress: progress, anchor: motionStore.anchor,
+                pull: effectivePull, width: rightRail - leftRail)
+            var ringContext = context
+            ringContext.translateBy(x: x, y: stringY(x))
+            ringContext.rotate(by: .radians(Double(min(0.50, max(-0.50, atan(slope))))))
+            let path = Path(ellipseIn: CGRect(x: -rx, y: -ry, width: rx * 2, height: ry * 2))
+            ringContext.stroke(path, with: .color(color.opacity(profile.opacity)), lineWidth: 1.3)
+        }
+
+        // A fine structural spine; the rings, not a glowing travelling wave, are the hero.
+        var stringPath = Path()
+        var first = true
+        var x = leftRail
+        while x < rightRail {
+            let point = CGPoint(x: x, y: stringY(x))
+            if first {
+                stringPath.move(to: point)
+                first = false
+            } else {
+                stringPath.addLine(to: point)
+            }
+            x += 2
+        }
+        stringPath.addLine(to: CGPoint(x: rightRail, y: stringY(rightRail)))
+        let stringBoost = motionStore.armed ? 1.0 : (0.35 + 0.65 * level)
+        context.stroke(stringPath, with: .color(color.opacity(0.08 + 0.10 * stringBoost)), lineWidth: 3)
+        context.stroke(stringPath, with: .color(color.opacity(0.38 + 0.40 * stringBoost)), lineWidth: 0.8)
+
+        // 两个连接点始终钉在标尺中线，不随声音、拖动或弹簧余振移动。
+        for point in [
+            CGPoint(x: leftRail, y: cy),
+            CGPoint(x: rightRail, y: cy)
+        ] {
+            context.fill(
+                Path(CGRect(x: point.x - 2.5, y: point.y - 2.5, width: 5, height: 5)),
+                with: .color(color)
+            )
+        }
+        for point in [
+            CGPoint(x: leftRail, y: rulerTop),
+            CGPoint(x: rightRail, y: rulerTop),
+            CGPoint(x: leftRail, y: rulerBottom),
+            CGPoint(x: rightRail, y: rulerBottom)
+        ] {
+            context.fill(
+                Path(CGRect(x: point.x - 2.5, y: point.y - 2.5, width: 5, height: 5)),
+                with: .color(color)
+            )
+        }
+
+        context.draw(
+            Text("FFT · 44 BANDS · 16 kHz")
+                .font(.system(size: 7.5, weight: .regular, design: .monospaced))
+                .foregroundStyle(Theme.muted.opacity(dimmed ? 0.5 : 1)),
+            at: CGPoint(x: cx, y: rulerBottom + 14),
+            anchor: .center
+        )
+        context.draw(
+            Text("RX 01")
+                .font(.system(size: 7.5, weight: .regular, design: .monospaced))
+                .foregroundStyle(Theme.muted.opacity(dimmed ? 0.5 : 1)),
+            at: CGPoint(x: cx, y: rulerTop - 12),
+            anchor: .center
+        )
+    }
+}
+

@@ -1,0 +1,355 @@
+import SwiftUI
+import UIKit
+
+struct PairingSheet: View {
+    @EnvironmentObject private var link: LinkClient
+    @EnvironmentObject private var session: SessionModel
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    @State private var code = ""
+    @State private var submittedCode = ""
+    @State private var showForget = false
+    @State private var showWaveforms = false
+    @FocusState private var codeFocused: Bool
+
+    var body: some View {
+        ZStack {
+            Theme.ink.ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 18) {
+                header
+                content
+                Spacer(minLength: 8)
+                footer
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 22)
+            .padding(.bottom, 18)
+            .overlay(alignment: .top) {
+                Rectangle().fill(Theme.line).frame(height: 1)
+            }
+        }
+        .presentationDetents([.height(404), .large])
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(Theme.ink)
+        .onAppear {
+            if case .needsCode = link.phase {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { codeFocused = true }
+            }
+        }
+        .onChange(of: link.phase) { _, phase in
+            switch phase {
+            case .ready:
+                Haptics.shared.play(.pairingSuccess)
+                codeFocused = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    if !showWaveforms { dismiss() }
+                }
+            case .needsCode:
+                code = ""
+                submittedCode = ""
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { codeFocused = true }
+            default:
+                break
+            }
+        }
+        .onChange(of: code) { oldValue, value in
+            let digits = PairingCode.normalize(value)
+            if digits.count > oldValue.count {
+                Haptics.shared.play(.codeDigit)
+            }
+            if digits != value { code = digits }
+            guard digits.count == 6, digits != submittedCode else { return }
+            submittedCode = digits
+            codeFocused = false
+            link.submitCode(digits)
+        }
+        .onChange(of: link.pairingError) { _, error in
+            guard error != nil else { return }
+            Haptics.shared.play(.pairingFailed)
+            code = ""
+            submittedCode = ""
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { codeFocused = true }
+        }
+        .confirmationDialog("断开并忘记这台 Mac？", isPresented: $showForget, titleVisibility: .visible) {
+            Button("断开并忘记", role: .destructive) {
+                Haptics.shared.play(.tap)
+                link.forgetMac()
+                dismiss()
+            }
+            Button("取消", role: .cancel) {
+                Haptics.shared.play(.tap)
+            }
+        } message: {
+            Text("下次连接需要重新输入配对码。")
+        }
+        .sheet(isPresented: $showWaveforms) {
+            WaveformLibraryView()
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            PixelText(text: "LINK", cell: 4, color: Theme.ivory, tracking: 2.4)
+            Rectangle().fill(Theme.orange).frame(width: 4, height: 20)
+            Spacer()
+            Button {
+                Haptics.shared.play(.tap)
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Theme.muted)
+                    .frame(width: 34, height: 34)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("关闭")
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch link.phase {
+        case .ready(let name):
+            connected(name: name)
+        case .needsCode(let name):
+            codeEntry(name: name)
+        case .connecting(let name):
+            linking(name: name)
+        case .failed(let message):
+            failure(message)
+        case .searching, .idle:
+            discovery
+        }
+    }
+
+    private func connected(name: String) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Circle().fill(Theme.orange).frame(width: 6, height: 6)
+                Text(name)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Theme.ivory)
+                Spacer()
+                MetaLabel(text: "ENCRYPTED", color: Theme.orange)
+            }
+            .padding(14)
+            .overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
+
+            Text("按住底部横条说话。松开后，文字会直接填入 Mac 上正在使用的应用。")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 12) {
+                Button {
+                    Haptics.shared.play(.tap)
+                    dismiss()
+                } label: {
+                    PixelText(text: "DONE", cell: 2.6, color: Theme.ink, tracking: 2)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Theme.orange)
+                }
+
+                Button {
+                    Haptics.shared.play(.warning)
+                    showForget = true
+                } label: {
+                    Text("忘记")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                        .frame(width: 74, height: 52)
+                        .overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
+                }
+            }
+        }
+    }
+
+    private func codeEntry(name: String) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            MetaLabel(text: "PAIR WITH \(name)".uppercased(), color: Theme.orange)
+            Text("在 Mac 的 iMic 窗口里找到 6 位配对码。")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.muted)
+            ZStack {
+                HStack(spacing: 7) {
+                    ForEach(0..<6, id: \.self) { index in
+                        let characters = Array(code)
+                        let value = index < characters.count ? String(characters[index]) : ""
+                        Text(value)
+                            .font(.system(size: 24, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Theme.ivory)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(Theme.panel)
+                            .overlay(
+                                Rectangle().stroke(
+                                    index == characters.count ? Theme.orange : Theme.line,
+                                    lineWidth: index == characters.count ? 1.5 : 1
+                                )
+                            )
+                    }
+                }
+                TextField("", text: $code)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .focused($codeFocused)
+                    .foregroundStyle(.clear)
+                    .tint(.clear)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .opacity(0.02)
+                    .accessibilityLabel("六位配对码")
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                Haptics.shared.play(.selection)
+                codeFocused = true
+            }
+
+            if let error = link.pairingError {
+                Text(error)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.orange)
+            } else if link.pairing {
+                HStack(spacing: 8) {
+                    ProgressView().tint(Theme.orange).scaleEffect(0.7)
+                    MetaLabel(text: "VERIFYING", color: Theme.muted)
+                }
+            } else {
+                MetaLabel(text: "输入满 6 位后自动连接", color: Theme.muted)
+            }
+
+            HStack(spacing: 8) {
+                Rectangle().fill(Theme.orange.opacity(0.5)).frame(width: 3, height: 3)
+                Text("配对码每 10 分钟轮换。配对成功后，iMic 自动记住这台 Mac。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    private func linking(name: String) -> some View {
+        HStack(spacing: 12) {
+            ProgressView().tint(Theme.orange).scaleEffect(0.8)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("正在连接 \(name)")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Theme.ivory)
+                MetaLabel(text: "BONJOUR · CURVE25519", color: Theme.muted)
+            }
+        }
+        .padding(.vertical, 20)
+    }
+
+    private func failure(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(message)
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                Haptics.shared.play(.tap)
+                link.retry()
+            } label: {
+                PixelText(text: "RETRY", cell: 2.4, color: Theme.ink, tracking: 2)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .background(Theme.orange)
+            }
+        }
+    }
+
+    private var discovery: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                MetaLabel(text: "NEARBY MACS", color: Theme.orange)
+                Spacer()
+                if link.macs.isEmpty {
+                    MetaLabel(text: "SEARCHING", color: Theme.muted)
+                } else {
+                    MetaLabel(text: "\(link.macs.count) FOUND", color: Theme.muted)
+                }
+            }
+            if link.macs.isEmpty {
+                HStack(spacing: 8) {
+                    ProgressView().tint(Theme.orange).scaleEffect(0.7)
+                    Text("确保 iPhone 与 Mac 在同一 Wi-Fi，且已允许「本地网络」。")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 12)
+                Button {
+                    Haptics.shared.play(.tap)
+                    link.retry()
+                } label: {
+                    Text("重新搜索")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.orange)
+                }
+            } else {
+                ForEach(link.macs) { mac in
+                    Button {
+                        Haptics.shared.play(.selection)
+                        link.connect(to: mac)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Rectangle().fill(Theme.orange).frame(width: 4, height: 18)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(mac.name)
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundStyle(Theme.ivory)
+                                MetaLabel(text: "READY TO PAIR", color: Theme.muted)
+                            }
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Theme.orange)
+                        }
+                        .padding(12)
+                        .overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
+                    }
+                }
+                Text("点击 Mac 后，按窗口里的配对码确认。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.muted)
+            }
+        }
+    }
+
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                codeFocused = false
+                showWaveforms = true
+            } label: {
+                HStack {
+                    Text("波形复看").font(.system(size: 12, weight: .medium))
+                    Spacer()
+                    MetaLabel(text: "LOCAL · 24H", color: Theme.muted)
+                    Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
+                }
+                .foregroundStyle(Theme.orange)
+                .frame(minHeight: 36)
+                .contentShape(Rectangle())
+            }
+            Hairline()
+            HStack {
+                MetaLabel(text: "SAME WI-FI · LOCAL NETWORK")
+                Spacer()
+                Button {
+                    Haptics.shared.play(.tap)
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        openURL(url)
+                    }
+                } label: {
+                    MetaLabel(text: "SETTINGS", color: Theme.orange)
+                }
+            }
+        }
+    }
+}

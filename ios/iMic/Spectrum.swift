@@ -1,0 +1,679 @@
+import Accelerate
+import Combine
+import Foundation
+import QuartzCore
+
+/// Display-only gain for mono, signed PCM16. Recording bytes are never modified.
+/// The anchors keep quiet speech legible without making loud speech a solid block.
+enum VoiceVisualLevel {
+
+    static func level(rmsDB: Double) -> CGFloat {
+        guard rmsDB.isFinite, rmsDB > -60 else { return 0 }
+        switch rmsDB {
+        case ..<(-54): return CGFloat((rmsDB + 60) / 6 * 0.08)
+        case ..<(-48): return CGFloat(0.08 + (rmsDB + 54) / 6 * 0.14)
+        case ..<(-24): return CGFloat(0.22 + (rmsDB + 48) / 24 * 0.52)
+        case ..<(-12): return CGFloat(0.74 + (rmsDB + 24) / 12 * 0.16)
+        default: return CGFloat(min(0.98, 0.90 + (rmsDB + 12) / 12 * 0.08))
+        }
+    }
+}
+
+/// 512 点 DFT：重叠的 32ms PCM 窗映射为 70Hz–7kHz 的当前频谱，不滚动历史。
+/// 窗增益、对数分频和三角权重只在初始化/频段数变化时计算。
+final class SpectrumAnalyzer {
+    private let size = 512
+    private let sampleRate: Float = 16_000
+    private let setup: vDSP_DFT_Setup
+    private var window: [Float]
+    private var windowSums: [Float]
+    private struct BinWeight {
+        let bin: Int
+        let weight: Float
+    }
+    private struct BandFilter {
+        let weights: [BinWeight]
+        let weightSum: Float
+        let tiltDB: Float
+    }
+    private var filters: [BandFilter] = []
+    private var bandDB: [Float] = []
+    private var real: [Float]
+    private var imaginary: [Float]
+    private var outReal: [Float]
+    private var outImag: [Float]
+    private var binPowers: [Float]
+
+    init() {
+        guard let setup = vDSP_DFT_zop_CreateSetup(nil, vDSP_Length(512), .FORWARD) else {
+            fatalError("Unable to create DFT setup")
+        }
+        self.setup = setup
+        window = [Float](repeating: 0, count: 512)
+        vDSP_hann_window(&window, vDSP_Length(512), Int32(vDSP_HANN_NORM))
+        windowSums = [Float](repeating: 0, count: 513)
+        for index in 0..<512 {
+            windowSums[index + 1] = windowSums[index] + window[index]
+        }
+        real = [Float](repeating: 0, count: 512)
+        imaginary = [Float](repeating: 0, count: 512)
+        outReal = [Float](repeating: 0, count: 512)
+        outImag = [Float](repeating: 0, count: 512)
+        binPowers = [Float](repeating: 0, count: 256)
+        prepareFilters(count: 44)
+    }
+
+    deinit {
+        vDSP_DFT_DestroySetup(setup)
+    }
+
+    /// RMS 仍是未加窗原始 dBFS；bands 是受绝对有声门限约束的相对谱形。
+    /// 调用方可直接用低幅合成 PCM 验证峰的位置；不依赖音量/显示时钟。
+    func analyze(_ pcm: Data, count: Int = 44) -> (bands: [CGFloat], level: CGFloat, rmsDB: Double) {
+        for index in 0..<size {
+            real[index] = 0
+            imaginary[index] = 0
+        }
+        let sampleCount = min(size, pcm.count / 2)
+        guard sampleCount > 0, count > 0 else { return ([], 0, -.infinity) }
+
+        var squares = 0.0
+        if filters.count != count { prepareFilters(count: count) }
+        pcm.withUnsafeBytes { raw in
+            for index in 0..<sampleCount {
+                let sample = Float(raw.loadUnaligned(fromByteOffset: index * 2, as: Int16.self)) / 32768
+                real[index] = sample * window[index]
+                squares += Double(sample * sample)
+            }
+        }
+        let rmsDB = squares > 0 ? 10 * log10(squares / Double(sampleCount)) : -.infinity
+        let visualLevel = VoiceVisualLevel.level(rmsDB: rmsDB)
+        // 相对归一化只在确有声音时生效；低于 -60dBFS 全零，
+        // -60…-48dBFS 渐入，不能把底噪归一成满幅频峰。
+        let gate = Float(min(1, max(0, (rmsDB + 60) / 12)))
+        guard gate > 0 else { return ([CGFloat](repeating: 0, count: count), visualLevel, rmsDB) }
+        real.withUnsafeMutableBufferPointer { realPointer in
+            imaginary.withUnsafeMutableBufferPointer { imaginaryPointer in
+                outReal.withUnsafeMutableBufferPointer { outRealPointer in
+                    outImag.withUnsafeMutableBufferPointer { outImagPointer in
+                        guard let realBase = realPointer.baseAddress,
+                              let imagBase = imaginaryPointer.baseAddress,
+                              let outRealBase = outRealPointer.baseAddress,
+                              let outImagBase = outImagPointer.baseAddress else { return }
+                        vDSP_DFT_Execute(setup, realBase, imagBase, outRealBase, outImagBase)
+                    }
+                }
+            }
+        }
+
+        let coherentGain = 2 / max(1, windowSums[sampleCount])
+        for bin in 1..<(size / 2) {
+            binPowers[bin] = outReal[bin] * outReal[bin] + outImag[bin] * outImag[bin]
+        }
+        var strongestDB: Float = -160
+        for band in filters.indices {
+            let filter = filters[band]
+            var weightedPower: Float = 0
+            var peakPower: Float = 0
+            for item in filter.weights {
+                let power = binPowers[item.bin] * item.weight
+                weightedPower += power
+                peakPower = max(peakPower, power)
+            }
+            // 峰值保留窄带共振；少量均方能量保留宽频声，避免高频宽带天然占优。
+            let power = (0.75 * peakPower + 0.25 * weightedPower / filter.weightSum)
+                * coherentGain * coherentGain
+            let db = 10 * log10f(max(1e-16, power)) + filter.tiltDB
+            bandDB[band] = db
+            strongestDB = max(strongestDB, db)
+        }
+
+        // 每帧保留最强峰以下 34dB 的谱形，而不是把 60dB 绝对范围挤在一起。
+        // 绝对可听度再约束峰值：即使频谱有相对峰，也不能把极弱噪声拉满。
+        let floorDB = max(-84, strongestDB - 34)
+        let spanDB = max(1, strongestDB - floorDB)
+        let audibility = min(1, max(0, (strongestDB + 78) / 30))
+        var result = [CGFloat](repeating: 0, count: count)
+        for band in filters.indices {
+            let relative = min(1, max(0, (bandDB[band] - floorDB) / spanDB))
+            let shape = relative * relative * (3 - 2 * relative)
+            result[band] = CGFloat(shape * gate * audibility)
+        }
+        return (result, visualLevel, rmsDB)
+    }
+
+    private func prepareFilters(count: Int) {
+        let binWidth = sampleRate / Float(size)
+        let lastBin = size / 2 - 1
+        filters = (0..<count).map { band in
+            let center = 70 * powf(100, (Float(band) + 0.5) / Float(count))
+            let low = min(center - binWidth, 70 * powf(100, (Float(band) - 0.5) / Float(count)))
+            let high = max(center + binWidth, 70 * powf(100, (Float(band) + 1.5) / Float(count)))
+            let first = max(1, Int(ceil(low / binWidth)))
+            let last = min(lastBin, Int(floor(high / binWidth)))
+            var weights: [BinWeight] = []
+            var weightSum: Float = 0
+            for bin in first...max(first, last) {
+                let frequency = Float(bin) * binWidth
+                let width = frequency <= center ? center - low : high - center
+                let weight = max(0, 1 - abs(frequency - center) / width)
+                if weight > 0 {
+                    weights.append(BinWeight(bin: bin, weight: weight))
+                    weightSum += weight
+                }
+            }
+            return BandFilter(weights: weights, weightSum: max(0.0001, weightSum),
+                              tiltDB: 3 * Float(band) / Float(max(1, count - 1)))
+        }
+        bandDB = [Float](repeating: -160, count: count)
+    }
+}
+
+/// 仅改变展示排布：相邻频段按均方能量合组，低频居中，向两侧对称展开。
+/// 不增强高频底噪，不改 FFT 原始顺序、缓存或录音 PCM。
+enum SpectrumPresentation {
+    static func balancedBands(_ values: [CGFloat], count: Int) -> [CGFloat] {
+        var result = [CGFloat](repeating: 0, count: count)
+        guard count > 0 else { return result }
+        func band(_ index: Int) -> CGFloat {
+            index < values.count ? min(1, max(0, values[index])) : 0
+        }
+        let half = count / 2
+        let center = count % 2
+        if center == 1 { result[half] = band(0) }
+        for pair in 0..<half {
+            let first = band(center + pair * 2)
+            let second = band(center + pair * 2 + 1)
+            let energy = sqrt((first * first + second * second) / 2)
+            result[half - 1 - pair] = energy
+            result[half + center + pair] = energy
+        }
+        return result
+    }
+}
+
+/// 连续速度的临界阻尼包络；起音约 120ms 到九成，回落约 280ms。
+/// 解析更新不依赖帧率，也不需要降低真实音频采集频率。
+struct SpectrumResponse {
+    private let time: CGFloat
+    private let attackDecay: CGFloat
+    private let releaseDecay: CGFloat
+
+    init(dt: Double) {
+        time = CGFloat(max(0, dt))
+        attackDecay = exp(-32 * time)
+        releaseDecay = exp(-14 * time)
+    }
+
+    func advance(value: CGFloat, velocity: CGFloat, target: CGFloat) -> (value: CGFloat, velocity: CGFloat) {
+        guard time > 0 else { return (value, velocity) }
+        let rising = target > value
+        let omega: CGFloat = rising ? 32 : 14
+        let offset = value - target
+        let b = velocity + omega * offset
+        let decay = rising ? attackDecay : releaseDecay
+        let next = target + (offset + b * time) * decay
+        let nextVelocity = (velocity - omega * b * time) * decay
+        if next < 0 { return (0, 0) }
+        if next > 1 { return (1, 0) }
+        return (next, nextVelocity)
+    }
+}
+
+struct SpectrumFrame {
+    var bands: [CGFloat]
+    var breath: CGFloat
+    var time: Double
+    /// 快速响度包络（0…1），仅用于少量 presence 与亮度，不统一放大圆环。
+    var level: CGFloat
+    /// 带保持时间的峰值包络（0…1），用于外层余辉。
+    var peak: CGFloat
+}
+
+/// 一维平滑值噪声，供呼吸纹理和全局呼吸共用。
+enum BreathingNoise {
+    static func value(_ x: Double) -> Double {
+        let base = floor(x)
+        let fraction = x - base
+        let index = Int(base)
+        let smooth = fraction * fraction * fraction * (fraction * (fraction * 6 - 15) + 10)
+        let first = hash(index)
+        let second = hash(index + 1)
+        return first + (second - first) * smooth
+    }
+
+    private static func hash(_ index: Int) -> Double {
+        var value = UInt64(bitPattern: Int64(index))
+        value ^= value >> 33
+        value &*= 0xff51afd7ed558ccd
+        value ^= value >> 33
+        value &*= 0xc4ceb9fe1a85ec53
+        value ^= value >> 33
+        return Double(value & 0xFFFF_FFFF) / Double(UInt32.max) * 2 - 1
+    }
+}
+
+/// 120 Hz 显示时钟：频谱按时间常数连续插值，呼吸用一维 Perlin 噪声，
+/// 只让中心 Canvas 订阅，避免整个页面跟着 120 帧重排。
+@MainActor
+final class SpectrumStore: ObservableObject {
+    @Published private(set) var frame: SpectrumFrame
+    private var target: [CGFloat]
+    private var displayBands: [CGFloat]
+    private var bandVelocities: [CGFloat]
+    private var targetLevel: CGFloat = 0
+    private var displayLevel: CGFloat = 0
+    private var levelVelocity: CGFloat = 0
+    private var displayPeak: CGFloat = 0
+    private var peakHoldUntil: CFTimeInterval = 0
+    private var noiseTime: Double = 0
+    private var lastTick: CFTimeInterval = 0
+    private var displayLink: CADisplayLink?
+    private let proxy = DisplayLinkProxy()
+    let stringMotion = StringMotionStore()
+
+    init(count: Int = 44) {
+        let zeros = [CGFloat](repeating: 0, count: count)
+        frame = SpectrumFrame(bands: zeros, breath: 0.5, time: 0, level: 0, peak: 0)
+        target = zeros
+        displayBands = zeros
+        bandVelocities = zeros
+        proxy.store = self
+        let link = CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.tick(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+        lastTick = CACurrentMediaTime()
+    }
+
+    deinit {
+        displayLink?.invalidate()
+    }
+
+    func update(_ incoming: [CGFloat], level: CGFloat) {
+        target = displayTargets(incoming)
+        targetLevel = min(1, max(0, level))
+    }
+
+    func set(_ values: [CGFloat], level: CGFloat = 0) {
+        let next = displayTargets(values)
+        let clamped = min(1, max(0, level))
+        target = next
+        displayBands = next
+        bandVelocities = [CGFloat](repeating: 0, count: next.count)
+        levelVelocity = 0
+        targetLevel = clamped
+        displayLevel = clamped
+        displayPeak = clamped
+        peakHoldUntil = CACurrentMediaTime() + 0.25
+        frame = SpectrumFrame(
+            bands: next,
+            breath: frame.breath,
+            time: frame.time,
+            level: clamped,
+            peak: clamped
+        )
+    }
+
+    func reset() {
+        let zeros = [CGFloat](repeating: 0, count: target.count)
+        target = zeros
+        displayBands = zeros
+        bandVelocities = zeros
+        levelVelocity = 0
+        targetLevel = 0
+        displayLevel = 0
+        displayPeak = 0
+        peakHoldUntil = 0
+        frame = SpectrumFrame(
+            bands: zeros,
+            breath: frame.breath,
+            time: frame.time,
+            level: 0,
+            peak: 0
+        )
+    }
+
+    fileprivate func tick() {
+        let now = CACurrentMediaTime()
+        let elapsed = lastTick == 0 ? 1.0 / 60.0 : max(0, now - lastTick)
+        let dt = min(0.05, elapsed)
+        lastTick = now
+        stringMotion.tick(now: now, dt: elapsed)
+        noiseTime += dt
+
+        // 两段低频平滑噪声叠加，输出完整的 0…1，呼吸幅度不再被压扁。
+        let value = 0.7 * BreathingNoise.value(noiseTime * 0.13)
+            + 0.3 * BreathingNoise.value(noiseTime * 0.37 + 9.1)
+        let breath = CGFloat(min(1, max(0, 0.5 + 0.5 * value)))
+
+        let easing = SpectrumResponse(dt: dt)
+        var next = displayBands
+        for index in 0..<min(next.count, target.count) {
+            let response = easing.advance(
+                value: next[index], velocity: bandVelocities[index], target: target[index])
+            next[index] = response.value
+            bandVelocities[index] = response.velocity
+        }
+        displayBands = next
+
+        // 亮度与频段同样保留惯性，但不会统一撑大所有圆环。
+        let levelResponse = easing.advance(
+            value: displayLevel, velocity: levelVelocity, target: targetLevel)
+        displayLevel = levelResponse.value
+        levelVelocity = levelResponse.velocity
+        if targetLevel >= displayPeak {
+            displayPeak = targetLevel
+            peakHoldUntil = now + 0.08
+        } else if now >= peakHoldUntil {
+            let peakEase = CGFloat(1 - exp(-dt / 0.16))
+            displayPeak += (displayLevel - displayPeak) * peakEase
+        }
+        if displayLevel < 0.001 && targetLevel < 0.001 {
+            displayLevel = 0
+        }
+        if displayPeak < 0.001 && displayLevel < 0.001 {
+            displayPeak = 0
+        }
+
+        frame = SpectrumFrame(
+            bands: next,
+            breath: breath,
+            time: noiseTime,
+            level: displayLevel,
+            peak: displayPeak
+        )
+    }
+
+    private func displayTargets(_ values: [CGFloat]) -> [CGFloat] {
+        SpectrumPresentation.balancedBands(values, count: target.count)
+    }
+
+}
+
+private final class DisplayLinkProxy {
+    weak var store: SpectrumStore?
+
+    @objc func tick(_ link: CADisplayLink) {
+        MainActor.assumeIsolated {
+            store?.tick()
+        }
+    }
+}
+
+/// Pure, frame-rate-independent string physics; velocities are in points/second.
+struct StringSpring {
+    private(set) var position: CGFloat = 0
+    private(set) var velocity: CGFloat = 0
+    private var origin: CGFloat = 0
+    private static let dragGain: CGFloat = 0.80
+    private static let damping: CGFloat = 6.0
+    private static let frequency: CGFloat = 21
+
+    static func travelLimit(height: CGFloat) -> CGFloat { max(12, height * 0.21) }
+    static func threshold(height: CGFloat) -> CGFloat { travelLimit(height: height) * 0.52 }
+
+    mutating func begin() {
+        // Regrabbing even a fast overshoot must start at exactly the current position.
+        origin = position
+    }
+
+    mutating func drag(translation: CGFloat, velocity: CGFloat, limit: CGFloat) {
+        let normalized = translation * Self.dragGain / limit
+        let resistance = tanh(normalized)
+        position = origin + limit * resistance
+        self.velocity = velocity * Self.dragGain * (1 - resistance * resistance)
+    }
+
+    /// First future zero with upward velocity, for a positively stretched string.
+    /// The analytic deadline cannot miss a crossing after a delayed display frame.
+    func upwardNeutralTime() -> Double {
+        guard position > 0 else { return 0 }
+        let b = (velocity + Self.damping * position) / Self.frequency
+        return Double((atan2(b, position) + .pi / 2) / Self.frequency)
+    }
+
+    mutating func advance(dt: Double, reduceMotion: Bool) {
+        guard dt > 0 else { return }
+        let t = CGFloat(dt)
+        let x = position
+        let v = velocity
+        if reduceMotion {
+            // Critical damping: a quick return without repeated oscillations.
+            let omega: CGFloat = 30
+            let b = v + omega * x
+            let decay = exp(-omega * t)
+            position = (x + b * t) * decay
+            velocity = (v - omega * b * t) * decay
+        } else {
+            // Exact underdamped solution, stable even after a dropped display frame.
+            let damping = Self.damping
+            let frequency = Self.frequency
+            let decay = exp(-damping * t)
+            let c = cos(frequency * t)
+            let s = sin(frequency * t)
+            let b = (v + damping * x) / frequency
+            position = decay * (x * c + b * s)
+            velocity = decay * ((-damping * x + frequency * b) * c
+                + (-damping * b - frequency * x) * s)
+        }
+        if abs(position) < 0.08 && abs(velocity) < 0.4 { reset() }
+    }
+
+    mutating func reset() {
+        position = 0
+        velocity = 0
+        origin = 0
+    }
+}
+
+/// No timers or async work: one due delete per display tick, never a catch-up burst.
+struct StringDeleteHold {
+    private(set) var armedAt: Double?
+    private(set) var repeating = false
+    private(set) var repeatedInGesture = false
+    private var nextDeleteAt: Double = 0
+    private var directionReversed = false
+    private var reversalTravel: CGFloat = 0
+    static let directionHysteresis: CGFloat = 2.5
+
+    mutating func update(beyondThreshold: Bool, movement: CGFloat, now: Double) {
+        // Accumulate net retreat from the latest directional extreme. Subpixel
+        // jitter neither restarts the dwell nor resumes deletion after a real reversal.
+        if directionReversed {
+            reversalTravel = min(0, reversalTravel + movement)
+            if reversalTravel <= -Self.directionHysteresis {
+                directionReversed = false
+                reversalTravel = 0
+            }
+        } else {
+            reversalTravel = max(0, reversalTravel + movement)
+            if reversalTravel >= Self.directionHysteresis {
+                directionReversed = true
+                reversalTravel = 0
+            }
+        }
+        guard beyondThreshold, !directionReversed else {
+            armedAt = nil
+            repeating = false
+            return
+        }
+        if armedAt == nil {
+            armedAt = now
+            nextDeleteAt = now + 0.4
+        }
+    }
+
+    mutating func advance(now: Double) -> Bool {
+        guard let armedAt, now >= nextDeleteAt else { return false }
+        repeating = true
+        repeatedInGesture = true
+        let acceleration = min(1, max(0, (now - armedAt - 0.4) / 2.2))
+        let interval = 0.18 + (0.06 - 0.18) * acceleration
+        nextDeleteAt = now + interval
+        return true
+    }
+
+    mutating func reset() { self = StringDeleteHold() }
+}
+
+/// Only TorusView observes per-frame motion. HomeView receives hint changes only.
+@MainActor
+final class StringMotionStore: ObservableObject {
+    @Published private(set) var pull: CGFloat = 0
+    @Published private(set) var anchor: CGFloat = 0.5
+    @Published private(set) var armed = false
+    @Published private(set) var hint: String?
+    var onRepeatDelete: (() -> Bool)?
+    var onFireReturn: (() -> Bool)?
+    private(set) var pendingReturn = false
+    private var returnRemaining: Double = 0
+    var reduceMotion = false
+    private var spring = StringSpring()
+    private var deleteHold = StringDeleteHold()
+    private var dragging = false
+    private var cancelled = false
+    private var height: CGFloat = 1
+    private var previousTranslation: CGFloat = 0
+    private var returnEnabled = false
+    private var deleteEnabled = false
+
+    func begin(anchor: CGFloat, height: CGFloat) {
+        cancelPendingReturn()
+        BowReleaseSound.shared.stop()
+        self.anchor = min(1, max(0, anchor))
+        self.height = height
+        spring.begin()
+        deleteHold.reset()
+        previousTranslation = 0
+        dragging = true
+        cancelled = false
+    }
+
+    func drag(translation: CGFloat, velocity: CGFloat, returnEnabled: Bool, deleteEnabled: Bool,
+              now: Double = CACurrentMediaTime()) {
+        guard dragging, !cancelled else { return }
+        self.returnEnabled = returnEnabled
+        self.deleteEnabled = deleteEnabled
+        spring.drag(translation: translation, velocity: velocity,
+                    limit: StringSpring.travelLimit(height: height))
+        pull = spring.position
+        let threshold = StringSpring.threshold(height: height)
+        let enabled = pull > 0 ? returnEnabled : deleteEnabled
+        let nextArmed = abs(pull) >= threshold && enabled
+        if nextArmed != armed {
+            armed = nextArmed
+            if nextArmed, pull > 0 {
+                Haptics.shared.prepareBowRelease()
+                BowReleaseSound.shared.prepare()
+                Haptics.shared.play(.bowArmed)
+            } else {
+                Haptics.shared.play(nextArmed ? .cancelArmed : .cancelDisarmed)
+            }
+        }
+        deleteHold.update(beyondThreshold: pull <= -threshold && deleteEnabled,
+                          movement: translation - previousTranslation, now: now)
+        previousTranslation = translation
+        updateHint()
+    }
+
+    /// Upward release deletes immediately; downward release only arms the flight.
+    func finish(translation: CGFloat, velocity: CGFloat,
+                returnEnabled: Bool, deleteEnabled: Bool) -> String? {
+        defer {
+            dragging = false
+            cancelled = false
+            deleteHold.reset()
+            armed = false
+            hint = nil
+        }
+        guard dragging, !cancelled else { return nil }
+        spring.drag(translation: translation, velocity: velocity,
+                    limit: StringSpring.travelLimit(height: height))
+        pull = spring.position
+        let threshold = StringSpring.threshold(height: height)
+        if spring.position >= threshold && returnEnabled {
+            pendingReturn = true
+            Haptics.shared.prepareBowRelease()
+            BowReleaseSound.shared.prepare()
+            // Reduced motion settles once in finite time, without oscillation.
+            returnRemaining = reduceMotion ? min(0.10, spring.upwardNeutralTime()) : spring.upwardNeutralTime()
+            return nil
+        }
+        if spring.position <= -threshold && deleteEnabled && !deleteHold.repeatedInGesture {
+            return "delete"
+        }
+        return nil
+    }
+
+    func cancelPendingReturn() {
+        pendingReturn = false
+        returnRemaining = 0
+    }
+
+    /// Cancels the current touch as well as repeat state; it cannot rearm until lift.
+    func cancel() {
+        cancelPendingReturn()
+        cancelled = true
+        BowReleaseSound.shared.stop()
+        dragging = false
+        deleteHold.reset()
+        spring.reset()
+        pull = 0
+        armed = false
+        hint = nil
+    }
+
+    func tick(now: Double, dt: Double) {
+        if dragging, !cancelled {
+            if deleteHold.advance(now: now) {
+                guard onRepeatDelete?() == true else {
+                    cancel()
+                    return
+                }
+                updateHint()
+            }
+        } else if !cancelled {
+            if pendingReturn {
+                let step = min(max(0, dt), returnRemaining)
+                spring.advance(dt: step, reduceMotion: reduceMotion)
+                returnRemaining -= step
+                if returnRemaining <= 0 {
+                    // Consume before calling out: reentrancy or later oscillations
+                    // cannot duplicate the command. The visual is at neutral now.
+                    cancelPendingReturn()
+                    if reduceMotion {
+                        spring.reset()
+                    }
+                    pull = 0
+                    if onFireReturn?() == true {
+                        BowReleaseSound.shared.play()
+                        Haptics.shared.play(.bowRelease)
+                    }
+                    return
+                }
+            } else {
+                spring.advance(dt: dt, reduceMotion: reduceMotion)
+            }
+            if pull != spring.position { pull = spring.position }
+        }
+    }
+
+    private func updateHint() {
+        let next: String?
+        if abs(pull) < StringSpring.threshold(height: height) {
+            next = nil
+        } else if pull > 0 {
+            next = returnEnabled ? "松手回弹 · 过中线发送回车" : "回车已在 Mac 关闭"
+        } else if !deleteEnabled {
+            next = "删除已在 Mac 关闭"
+        } else if deleteHold.repeating {
+            next = "正在连续删除 · 下移或松手停止"
+        } else if deleteHold.armedAt != nil {
+            next = "松手删除一字 · 保持上拉连续删除"
+        } else {
+            next = "连续删除已暂停 · 继续上拉可恢复"
+        }
+        if hint != next { hint = next }
+    }
+}
