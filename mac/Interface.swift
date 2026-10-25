@@ -18,6 +18,75 @@ final class InkView: NSView {
     }
 }
 
+/// A fixed 1.92-second history of received 20 ms RMS frames, not a frequency spectrum.
+final class AudioActivityView: NSControl {
+    private static let frameCount = 96
+    // Input is RMS / 7000; this floor is approximately -60 dBFS for signed 16-bit PCM.
+    private static let noiseFloor = 0.0047
+    private var levels = [Double](repeating: 0, count: AudioActivityView.frameCount)
+    private var nextFrame = 0
+    private var latestLevel = 0.0
+    private var sessionID: Int?
+    private var hasFrames = false
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: 36)
+    }
+
+    override var doubleValue: Double {
+        get { latestLevel }
+        set {
+            latestLevel = newValue.isFinite ? min(1, max(0, newValue)) : 0
+            let gate = min(1, max(0, (latestLevel - Self.noiseFloor) / Self.noiseFloor))
+            let softGate = gate * gate * (3 - 2 * gate)
+            levels[nextFrame] = sqrt(latestLevel) * softGate
+            nextFrame = (nextFrame + 1) % Self.frameCount
+            hasFrames = true
+            needsDisplay = true
+        }
+    }
+
+    func prepareForSession(_ session: Int?) {
+        guard sessionID != session else { return }
+        sessionID = session
+        reset()
+    }
+
+    func reset() {
+        guard hasFrames else { return }
+        for index in levels.indices { levels[index] = 0 }
+        nextFrame = 0
+        latestLevel = 0
+        hasFrames = false
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let plot = bounds.insetBy(dx: 1, dy: 3)
+        guard plot.width > 0, plot.height > 0 else { return }
+        context.saveGState()
+        defer { context.restoreGState() }
+        context.clip(to: bounds)
+        let pixel = 1 / (window?.backingScaleFactor ?? 2)
+        context.setFillColor(NSColor.imicHairline.cgColor)
+        context.fill(CGRect(x: plot.minX, y: plot.midY - pixel / 2,
+                            width: plot.width, height: pixel))
+
+        let step = plot.width / CGFloat(Self.frameCount)
+        let barWidth = min(step, min(2.5, step * 0.68))
+        context.setFillColor(NSColor.imicOrange.cgColor)
+        for column in 0..<Self.frameCount {
+            let level = levels[(nextFrame + column) % Self.frameCount]
+            guard level > 0 else { continue }
+            let height = plot.height * CGFloat(level)
+            let x = plot.minX + (CGFloat(column) + 0.5) * step - barWidth / 2
+            context.fill(CGRect(x: x, y: plot.midY - height / 2,
+                                width: barWidth, height: height))
+        }
+    }
+}
+
 extension AppDelegate {
     // MARK: - Helpers
 
@@ -292,14 +361,12 @@ extension AppDelegate {
         resultScroll.translatesAutoresizingMaskIntoConstraints = false
         resultScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 168).isActive = true
 
-        meter.levelIndicatorStyle = .continuousCapacity
-        meter.minValue = 0
-        meter.maxValue = 1
-        meter.warningValue = 1
-        meter.criticalValue = 1
-        meter.fillColor = .imicOrange
         meter.translatesAutoresizingMaskIntoConstraints = false
-        meter.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        meter.setContentHuggingPriority(.init(1), for: .horizontal)
+        meter.heightAnchor.constraint(equalToConstant: 36).isActive = true
+        meter.setAccessibilityLabel("接收音量")
+        meter.setAccessibilityHelp("从左到右显示最近 1.92 秒的真实音量；不是频率分布。")
+        meter.toolTip = "接收音量 · 最近 1.92 秒"
         elapsedLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         elapsedLabel.textColor = .imicMuted
         spinner.style = .spinning
@@ -310,7 +377,11 @@ extension AppDelegate {
         spinner.heightAnchor.constraint(equalToConstant: 16).isActive = true
         activityHint.font = .systemFont(ofSize: 11)
         activityHint.textColor = .imicMuted
-        activityRow = row([meter, elapsedLabel, spinner, activityHint], spacing: 10)
+        let activityDetails = row([elapsedLabel, spinner, activityHint], spacing: 10)
+        activityRow = column([meter, activityDetails], spacing: 8)
+        activityRow.detachesHiddenViews = true
+        fullWidth(meter, in: activityRow)
+        fullWidth(activityDetails, in: activityRow)
         resultMeta.font = .monospacedSystemFont(ofSize: 9, weight: .regular)
         resultMeta.textColor = .imicMuted
 
@@ -394,6 +465,7 @@ extension AppDelegate {
         let listening = currentSession != nil && stopAt == nil
         let processing = currentSession != nil && stopAt != nil
         let hasText = !transcriptText.isEmpty
+        meter.prepareForSession(listening ? currentSession : nil)
 
         emptyMark.isHidden = hasText || listening || processing
         resultScroll.isHidden = !hasText
@@ -412,14 +484,12 @@ extension AppDelegate {
         if listening {
             stageTitle.stringValue = "正在听…"
             stageHint.stringValue = "在 iPhone 上松开会自动识别。上滑即可取消。"
-            activityHint.stringValue = "16 kHz · 20 ms"
-            meter.doubleValue = max(meter.doubleValue, 0.05)
+            activityHint.stringValue = "接收音量 · 16 kHz"
         } else if processing {
             stageTitle.stringValue = "正在整理文字…"
-            stageHint.stringValue = "百炼正在把这段语音转成文字，通常不到一秒。"
+            stageHint.stringValue = "语音正在识别与整理，请稍候；已有文字会保留。"
             activityHint.stringValue = "识别中"
             spinner.startAnimation(nil)
-            meter.doubleValue = 0
         } else if hasText {
             stageTitle.font = .systemFont(ofSize: 17, weight: .semibold)
             stageTitle.stringValue = lastInsertSucceeded ? "已输入" : "识别完成"

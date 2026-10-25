@@ -91,6 +91,29 @@ final class LinkWireTests: XCTestCase {
     }
 }
 
+final class AudioSessionBoundsTests: XCTestCase {
+    func testLongSessionAndPartialFinalFrameAreAccepted() {
+        let longSamples = IMicLink.sampleRate * 120
+        XCTAssertTrue(IMicLink.isValidAudioEnd(
+            samples: longSamples, frames: longSamples / IMicLink.frameSamples))
+        XCTAssertTrue(IMicLink.isValidAudioEnd(
+            samples: longSamples + 1, frames: longSamples / IMicLink.frameSamples + 1))
+    }
+
+    func testMismatchedAndOverflowingEndCountsAreRejected() {
+        XCTAssertFalse(IMicLink.isValidAudioEnd(samples: 0, frames: 0))
+        XCTAssertFalse(IMicLink.isValidAudioEnd(samples: -1, frames: 1))
+        XCTAssertFalse(IMicLink.isValidAudioEnd(samples: 321, frames: 1))
+        XCTAssertFalse(IMicLink.isValidAudioEnd(samples: 320, frames: 2))
+        XCTAssertFalse(IMicLink.isValidAudioEnd(samples: Int.max, frames: Int.max))
+        let maximum = IMicLink.sampleRate * IMicLink.maxSessionSeconds
+        XCTAssertTrue(IMicLink.isValidAudioEnd(
+            samples: maximum, frames: maximum / IMicLink.frameSamples))
+        XCTAssertFalse(IMicLink.isValidAudioEnd(
+            samples: maximum + 1, frames: maximum / IMicLink.frameSamples + 1))
+    }
+}
+
 final class LinkCryptoTests: XCTestCase {
     func testPairingDerivesTheSameKeyOnBothSides() throws {
         let phone = LinkCrypto.makePrivateKey()

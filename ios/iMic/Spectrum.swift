@@ -253,6 +253,106 @@ enum BreathingNoise {
     }
 }
 
+/// 文字到达留下的局部光能；独立于音频 bands，不向 Home 发布逐帧状态。
+@MainActor
+final class WaveformInkStore {
+    private struct Slot {
+        var charge: CGFloat = 0
+        var value: CGFloat = 0
+        var arrivalTarget: CGFloat = 0
+        var arrival: CGFloat = 0
+        var releasePeak: CGFloat = 0
+    }
+
+    private var slots = [Slot](repeating: Slot(), count: TorusGeometry.ringCount)
+    private var nextCharge = [CGFloat](repeating: 0, count: TorusGeometry.ringCount)
+    private var nextArrival = [CGFloat](repeating: 0, count: TorusGeometry.ringCount)
+    private var releasing = false
+    var reduceMotion = false
+    private(set) var releaseFlash: CGFloat = 0
+
+    func deposit(at ring: Int, weight: CGFloat) {
+        guard slots.indices.contains(ring), weight.isFinite, weight > 0 else { return }
+        let weight = min(1, weight)
+        releasing = false
+        // 饱和叠加：再长的文字也只趋近上限，不积出无限亮度。
+        slots[ring].charge += (1 - slots[ring].charge) * weight * 0.24
+        if !reduceMotion {
+            slots[ring].arrivalTarget += (1 - slots[ring].arrivalTarget) * weight * 0.64
+        }
+    }
+
+    func release(strength: CGFloat) {
+        let strength = min(1, max(0, strength))
+        releasing = true
+        releaseFlash = 0
+        for index in slots.indices {
+            let local = max(slots[index].value, slots[index].charge)
+            let peak = reduceMotion ? 0 : local * (0.38 + 0.62 * strength)
+            slots[index].releasePeak = peak
+            slots[index].charge = 0
+            slots[index].arrivalTarget = 0
+            releaseFlash = max(releaseFlash, peak)
+        }
+    }
+
+    func reset() {
+        for index in slots.indices {
+            slots[index] = Slot()
+            nextCharge[index] = 0
+            nextArrival[index] = 0
+        }
+        releasing = false
+        releaseFlash = 0
+    }
+
+    func tick(dt: Double) {
+        guard dt.isFinite, dt > 0 else { return }
+        let dt = CGFloat(min(0.05, dt))
+        let chargeSpread = min(0.20, dt * 0.7)
+        let arrivalSpread = min(0.24, dt * 5)
+        let chargeDecay: CGFloat = releasing ? exp(-dt / 0.13) : 1
+        let arrivalDecay = exp(-dt / 0.11)
+        let valueEase = 1 - exp(-dt / (releasing ? 0.065 : 0.09))
+        let arrivalEase = 1 - exp(-dt / 0.025)
+        let peakDecay = exp(-dt / 0.075)
+
+        // 双缓冲只在初始化分配；相邻槽缓慢传光，不改变圆环几何或音频。
+        for index in slots.indices {
+            let slot = slots[index]
+            let left = index > 0 ? slots[index - 1] : slot
+            let right = index + 1 < slots.count ? slots[index + 1] : slot
+            nextCharge[index] = (slot.charge
+                + (left.charge + right.charge - 2 * slot.charge) * chargeSpread) * chargeDecay
+            nextArrival[index] = reduceMotion ? 0 : (slot.arrivalTarget
+                + (left.arrivalTarget + right.arrivalTarget - 2 * slot.arrivalTarget) * arrivalSpread)
+                * arrivalDecay
+        }
+        releaseFlash = 0
+        for index in slots.indices {
+            slots[index].charge = nextCharge[index]
+            slots[index].arrivalTarget = nextArrival[index]
+            slots[index].value += (nextCharge[index] - slots[index].value) * valueEase
+            slots[index].arrival += (nextArrival[index] - slots[index].arrival) * arrivalEase
+            slots[index].releasePeak = reduceMotion ? 0 : slots[index].releasePeak * peakDecay
+            releaseFlash = max(releaseFlash, slots[index].releasePeak)
+            if reduceMotion { slots[index].arrival = 0 }
+        }
+    }
+
+    func intensity(at ring: Int) -> CGFloat {
+        guard slots.indices.contains(ring) else { return 0 }
+        let slot = slots[ring]
+        return min(1, slot.value * 0.78 + slot.arrival * 0.28 + slot.releasePeak * 0.70)
+    }
+
+    /// 只有短弧消费到达/释放峰；累计能量仍保持橙色。
+    func accent(at ring: Int) -> CGFloat {
+        guard !reduceMotion, slots.indices.contains(ring) else { return 0 }
+        return min(1, slots[ring].arrival * 0.45 + slots[ring].releasePeak)
+    }
+}
+
 /// 120 Hz 显示时钟：频谱按时间常数连续插值，呼吸用一维 Perlin 噪声，
 /// 只让中心 Canvas 订阅，避免整个页面跟着 120 帧重排。
 @MainActor
@@ -271,6 +371,7 @@ final class SpectrumStore: ObservableObject {
     private var displayLink: CADisplayLink?
     private let proxy = DisplayLinkProxy()
     let stringMotion = StringMotionStore()
+    let ink = WaveformInkStore()
 
     init(count: Int = 44) {
         let zeros = [CGFloat](repeating: 0, count: count)
@@ -339,7 +440,6 @@ final class SpectrumStore: ObservableObject {
         let elapsed = lastTick == 0 ? 1.0 / 60.0 : max(0, now - lastTick)
         let dt = min(0.05, elapsed)
         lastTick = now
-        stringMotion.tick(now: now, dt: elapsed)
         noiseTime += dt
 
         // 两段低频平滑噪声叠加，输出完整的 0…1，呼吸幅度不再被压扁。
@@ -383,6 +483,10 @@ final class SpectrumStore: ObservableObject {
             level: displayLevel,
             peak: displayPeak
         )
+        ink.reduceMotion = stringMotion.reduceMotion
+        ink.tick(dt: dt)
+        // 渲染器在弦 tick 的 defer 中读取几何，此时必须已拿到当前声帧。
+        stringMotion.tick(now: now, dt: elapsed)
     }
 
     private func displayTargets(_ values: [CGFloat]) -> [CGFloat] {
@@ -517,6 +621,12 @@ struct StringDeleteHold {
     mutating func reset() { self = StringDeleteHold() }
 }
 
+/// The receiver shares the string's display clock without publishing animation frames to SwiftUI.
+@MainActor
+protocol StringMotionRendering: AnyObject {
+    func renderStringMotion(_ motion: StringMotionStore, now: Double, dt: Double)
+}
+
 /// Only TorusView observes per-frame motion. HomeView receives hint changes only.
 @MainActor
 final class StringMotionStore: ObservableObject {
@@ -526,6 +636,9 @@ final class StringMotionStore: ObservableObject {
     @Published private(set) var hint: String?
     var onRepeatDelete: (() -> Bool)?
     var onFireReturn: (() -> Bool)?
+    weak var renderer: (any StringMotionRendering)?
+    var velocity: CGFloat { spring.velocity }
+    private(set) var releaseStrength: CGFloat = 0
     private(set) var pendingReturn = false
     private var returnRemaining: Double = 0
     var reduceMotion = false
@@ -564,7 +677,6 @@ final class StringMotionStore: ObservableObject {
         if nextArmed != armed {
             armed = nextArmed
             if nextArmed, pull > 0 {
-                Haptics.shared.prepareBowRelease()
                 BowReleaseSound.shared.prepare()
                 Haptics.shared.play(.bowArmed)
             } else {
@@ -594,7 +706,7 @@ final class StringMotionStore: ObservableObject {
         let threshold = StringSpring.threshold(height: height)
         if spring.position >= threshold && returnEnabled {
             pendingReturn = true
-            Haptics.shared.prepareBowRelease()
+            releaseStrength = min(1, max(0, spring.position / StringSpring.travelLimit(height: height)))
             BowReleaseSound.shared.prepare()
             // Reduced motion settles once in finite time, without oscillation.
             returnRemaining = reduceMotion ? min(0.10, spring.upwardNeutralTime()) : spring.upwardNeutralTime()
@@ -609,6 +721,7 @@ final class StringMotionStore: ObservableObject {
     func cancelPendingReturn() {
         pendingReturn = false
         returnRemaining = 0
+        releaseStrength = 0
     }
 
     /// Cancels the current touch as well as repeat state; it cannot rearm until lift.
@@ -625,6 +738,7 @@ final class StringMotionStore: ObservableObject {
     }
 
     func tick(now: Double, dt: Double) {
+        defer { renderer?.renderStringMotion(self, now: now, dt: dt) }
         if dragging, !cancelled {
             if deleteHold.advance(now: now) {
                 guard onRepeatDelete?() == true else {
@@ -641,14 +755,17 @@ final class StringMotionStore: ObservableObject {
                 if returnRemaining <= 0 {
                     // Consume before calling out: reentrancy or later oscillations
                     // cannot duplicate the command. The visual is at neutral now.
+                    let strength = releaseStrength
                     cancelPendingReturn()
+                    releaseStrength = strength
                     if reduceMotion {
                         spring.reset()
                     }
                     pull = 0
                     if onFireReturn?() == true {
-                        BowReleaseSound.shared.play()
-                        Haptics.shared.play(.bowRelease)
+                        BowReleaseSound.shared.play(strength: Float(releaseStrength))
+                    } else {
+                        releaseStrength = 0
                     }
                     return
                 }

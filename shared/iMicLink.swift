@@ -15,11 +15,21 @@ public enum IMicLink {
     public static let sampleRate = 16_000
     /// 20ms @ 16kHz mono PCM16.
     public static let frameSamples = 320
-    public static let maxSessionSeconds = 60
+    public static let maxSessionSeconds = 600
     /// 少于该时长的误触不送去识别。
     public static let minimumSamples = 8_000
     public static let handshakeTimeout: TimeInterval = 12
     public static let pairingCodeLifetime: TimeInterval = 600
+    public static let bleServiceUUID = "7E570000-7F4A-4C7E-9A2B-1C0D5E6F7A80"
+    public static let bleUplinkUUID = "7E570001-7F4A-4C7E-9A2B-1C0D5E6F7A80"
+    public static let bleDownlinkUUID = "7E570002-7F4A-4C7E-9A2B-1C0D5E6F7A80"
+    /// 只用于发现时筛选目标；信任仍由后续密钥握手建立。
+    public static let bleIdentityUUID = "7E570003-7F4A-4C7E-9A2B-1C0D5E6F7A80"
+
+    public static func isValidAudioEnd(samples: Int, frames: Int) -> Bool {
+        guard samples > 0, samples <= sampleRate * maxSessionSeconds, frames > 0 else { return false }
+        return frames == (samples + frameSamples - 1) / frameSamples
+    }
 }
 
 public enum LinkFrameKind: UInt8 {

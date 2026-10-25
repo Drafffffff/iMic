@@ -13,6 +13,8 @@ struct HomeView: View {
     @State private var interactionStart = false
     @State private var showCopied = false
     @State private var showResult = false
+    @State private var showDevices = false
+    @StateObject private var receiver = ReceiverFlowStore()
     @State private var connectionAnnounced = false
     @State private var stringAxis: StringAxis?
     @State private var stringHint: String?
@@ -29,10 +31,11 @@ struct HomeView: View {
 
     private var stringMotion: StringMotionStore { session.spectrumStore.stringMotion }
     private var canUseString: Bool {
-        linkReady && scenePhase == .active && !showPairing && !showResult
+        linkReady && scenePhase == .active && !showPairing && !showResult && !showDevices
     }
 
     var body: some View {
+        NavigationStack {
         GeometryReader { geometry in
             ZStack {
                 TechBackground()
@@ -57,6 +60,9 @@ struct HomeView: View {
                         )
                     }
                     .frame(height: min(360, geometry.size.height * 0.40))
+                    .anchorPreference(key: ReceiverAnchorsKey.self, value: .bounds) {
+                        ReceiverAnchors(torus: $0)
+                    }
 
                     // 固定高度的不可见留白：即使出现结果或提示，主图与底栏也不移动。
                     Color.clear.frame(height: 38)
@@ -64,6 +70,9 @@ struct HomeView: View {
                     Spacer(minLength: 16)
 
                     holdBar(width: geometry.size.width - contentInset * 2)
+                        .anchorPreference(key: ReceiverAnchorsKey.self, value: .bounds) {
+                            ReceiverAnchors(source: $0)
+                        }
                     footer
                 }
                 .frame(maxWidth: .infinity)
@@ -111,6 +120,24 @@ struct HomeView: View {
                 }
             }
             .animation(.easeOut(duration: 0.22), value: showResult)
+            .overlayPreferenceValue(ReceiverAnchorsKey.self) { anchors in
+                GeometryReader { proxy in
+                    if !showResult, let torus = anchors.torus, let source = anchors.source {
+                        ReceiverFlowView(store: receiver, spectrum: session.spectrumStore,
+                                         torusFrame: proxy[torus], sourceFrame: proxy[source])
+                    }
+                }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(isPresented: $showDevices) {
+            DeviceSelectionView()
+                .environmentObject(link)
+                .environmentObject(session)
+                .toolbar(.visible, for: .navigationBar)
+        }
         }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
@@ -126,23 +153,26 @@ struct HomeView: View {
             session.activateAudio()
             stringMotion.reduceMotion = reduceMotion
             BowReleaseSound.shared.prepare()
-            stringMotion.onFireReturn = { [weak session, weak link] in
+            stringMotion.onFireReturn = { [weak session = session, weak link = link, weak receiver = receiver] in
                 guard let session, let link, link.phase.isReady,
-                      session.snapReturnEnabled, !showPairing, !showResult,
+                      session.snapReturnEnabled, !showPairing, !showResult, !showDevices,
                       UIApplication.shared.applicationState == .active,
                       session.sendInput("return") else { return false }
                 session.showGestureNotice("回车")
+                receiver?.fire()
                 return true
             }
-            stringMotion.onRepeatDelete = { [weak session, weak link] in
+            stringMotion.onRepeatDelete = { [weak session = session, weak link = link] in
                 guard let session, let link, link.phase.isReady,
                       session.pullDeleteEnabled,
                       UIApplication.shared.applicationState == .active else { return false }
                 session.sendInput("delete")
                 return true
             }
-            if case .needsCode = link.phase {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { showPairing = true }
+            if case .needsCode = link.phase, !showDevices {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    if !showDevices { showPairing = true }
+                }
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-preview=pairing") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showPairing = true }
@@ -162,16 +192,25 @@ struct HomeView: View {
                 }
             }
             #endif
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--ui-preview=devices") {
+                showDevices = true
+            }
+            #endif
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
             stringMotion.cancel()
+            receiver.cancelFlight()
             stringMotion.onRepeatDelete = nil
             stringMotion.onFireReturn = nil
             session.deactivateAudio()
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active { stringMotion.cancel() }
+            if phase != .active {
+                stringMotion.cancel()
+                receiver.cancelFlight()
+            }
             if phase == .active {
                 session.handleForeground()
             } else if phase == .background {
@@ -179,12 +218,15 @@ struct HomeView: View {
             }
         }
         .onChange(of: link.phase) { _, phase in
-            if !phase.isReady { stringMotion.cancel() }
+            if !phase.isReady {
+                stringMotion.cancel()
+                receiver.cancelFlight()
+            }
             switch phase {
             case .needsCode:
                 connectionAnnounced = false
                 Haptics.shared.play(.pairingRequired)
-                showPairing = true
+                if !showDevices { showPairing = true }
             case .ready:
                 if !connectionAnnounced {
                     Haptics.shared.play(showPairing ? .pairingSuccess : .connected)
@@ -201,7 +243,18 @@ struct HomeView: View {
         }
         .onChange(of: session.phase) { _, phase in
             if phase == .listening || phase == .idle {
+                receiver.reset()
                 showResult = false
+            }
+        }
+        .onChange(of: session.liveTranscript) { _, text in
+            receiver.update(text: text)
+        }
+        .onChange(of: showDevices) { _, presented in
+            if presented {
+                showPairing = false
+                stringMotion.cancel()
+                receiver.cancelFlight()
             }
         }
         .onChange(of: showPairing) { _, presented in
@@ -250,13 +303,25 @@ struct HomeView: View {
                 .frame(width: 3, height: 12)
             MetaLabel(text: "SYS 01", color: Theme.orange)
             Spacer()
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(connectionColor)
-                    .frame(width: 5, height: 5)
-                MetaLabel(text: connectionLabel, color: linkReady ? Theme.ivory : Theme.muted)
-                    .lineLimit(1)
+            Button {
+                Haptics.shared.play(.tap)
+                showPairing = false
+                showDevices = true
+            } label: {
+                HStack(spacing: 6) {
+                    Circle().fill(connectionColor).frame(width: 5, height: 5)
+                    MetaLabel(text: connectionLabel, color: linkReady ? Theme.ivory : Theme.muted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(Theme.muted)
+                }
+                .frame(minHeight: 30)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("连接电脑，\(connectionLabel)，点击切换 Mac")
             Button {
                 Haptics.shared.play(.tap)
                 showPairing = true
@@ -334,14 +399,16 @@ struct HomeView: View {
                     .accessibilityLabel("关闭结果")
                 }
 
-                Text(session.transcript)
-                    .font(.system(size: 16, weight: .regular))
-                    .lineSpacing(4)
-                    .foregroundStyle(Theme.ivory)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .lineLimit(10)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
+                ScrollView {
+                    Text(session.transcript)
+                        .font(.system(size: 16, weight: .regular))
+                        .lineSpacing(4)
+                        .foregroundStyle(Theme.ivory)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: 280)
 
                 HStack {
                     MetaLabel(text: (session.target ?? "MAC").uppercased())
@@ -544,13 +611,13 @@ struct HomeView: View {
             Spacer()
             ZStack(alignment: .trailing) {
                 MetaLabel(text: "16 kHz · PCM")
-                    .opacity(session.phase == .result && !session.transcript.isEmpty ? 0 : 1)
+                    .opacity(hasResultText ? 0 : 1)
                 Text("查看结果  ›")
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .tracking(1.4)
                     .foregroundStyle(Theme.orange)
-                    .opacity(session.phase == .result && !session.transcript.isEmpty ? 1 : 0)
-                    .allowsHitTesting(session.phase == .result && !session.transcript.isEmpty)
+                    .opacity(hasResultText ? 1 : 0)
+                    .allowsHitTesting(hasResultText)
                     .onTapGesture {
                         Haptics.shared.play(.overlayOpen)
                         showResult = true
@@ -561,6 +628,10 @@ struct HomeView: View {
             .frame(width: 98, alignment: .trailing)
         }
         .padding(.top, 12)
+    }
+
+    private var hasResultText: Bool {
+        !session.transcript.isEmpty && session.phase != .listening
     }
 
     // MARK: - Derived copy
@@ -619,7 +690,7 @@ struct HomeView: View {
             return "松开即发送 · 上滑取消"
         case .transcribing:
             if !linkReady { return "正在连接 Mac，连接后立即发送" }
-            return "正在把语音变成文字"
+            return session.message ?? (session.isUploading ? "正在上传音频…" : "正在把语音变成文字")
         case .result:
             if session.pasted, let target = session.target {
                 return "已填入 \(target)"
@@ -676,5 +747,19 @@ struct HomeView: View {
         // 给左右 padding、麦克风图标和计时/提示留出空间，再拟合像素字。
         let available = max(120, width - 36 - 13 - 12 - 8)
         return max(1.8, min(2.7, available / max(1, length * 5 + (length - 1) * 0.8)))
+    }
+}
+
+private struct ReceiverAnchors {
+    var torus: Anchor<CGRect>?
+    var source: Anchor<CGRect>?
+}
+
+private struct ReceiverAnchorsKey: PreferenceKey {
+    static var defaultValue = ReceiverAnchors()
+    static func reduce(value: inout ReceiverAnchors, nextValue: () -> ReceiverAnchors) {
+        let next = nextValue()
+        if let torus = next.torus { value.torus = torus }
+        if let source = next.source { value.source = source }
     }
 }

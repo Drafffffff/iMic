@@ -124,6 +124,102 @@ enum TorusGeometry {
         )
     }
 
+    /// 与 Canvas 使用相同的局部椭圆及旋转；文字可直接附着到真实描边。
+    struct Ring {
+        let center: CGPoint
+        let radiusX: CGFloat
+        let radiusY: CGFloat
+        let rotation: CGFloat
+        let opacity: CGFloat
+
+        func point(at angle: CGFloat) -> CGPoint {
+            let x = cos(angle) * radiusX
+            let y = sin(angle) * radiusY
+            let c = cos(rotation)
+            let s = sin(rotation)
+            return CGPoint(x: center.x + x * c - y * s,
+                           y: center.y + x * s + y * c)
+        }
+    }
+
+    /// 一帧只解析一次全频谱；圆环、轨道和文字共用固定端弦的投影预算。
+    struct Layout {
+        let size: CGSize
+        let frame: SpectrumFrame
+        let anchor: CGFloat
+        let motion: CGFloat
+        let breath: CGFloat
+        let level: CGFloat
+        let relief: SpectrumRelief
+        let cx: CGFloat
+        let cy: CGFloat
+        let bar: CGFloat
+        let baseRy: CGFloat
+        let leftRail: CGFloat
+        let rightRail: CGFloat
+        let rulerTop: CGFloat
+        let rulerBottom: CGFloat
+        let orbitHeight: CGFloat
+        let effectivePull: CGFloat
+        let tension: CGFloat
+
+        init(size: CGSize, frame: SpectrumFrame, pull: CGFloat,
+             anchor: CGFloat, reducedMotion: Bool) {
+            self.size = size
+            self.frame = frame
+            self.anchor = anchor
+            motion = reducedMotion ? 0 : 1
+            breath = 0.5 + (frame.breath - 0.5) * motion
+            level = min(1, max(0, frame.level))
+            relief = SpectrumRelief(bands: frame.bands)
+            cx = size.width / 2
+            cy = size.height / 2
+            bar = size.width * 0.80
+            baseRy = min(size.height * 0.23, max(0, cy - 16))
+            leftRail = cx - bar / 2 - 12
+            rightRail = cx + bar / 2 + 12
+            rulerTop = cy - baseRy * 1.42
+            rulerBottom = cy + baseRy * 1.42
+            orbitHeight = size.height * (0.05 + 0.018 * relief.presence)
+            effectivePull = TorusGeometry.projectedPull(
+                pull, height: size.height, baseRadius: baseRy * 1.12)
+            tension = min(1, abs(effectivePull) / max(1, size.height * 0.20))
+        }
+
+        func stringY(at x: CGFloat) -> CGFloat {
+            let progress = (x - leftRail) / max(1, rightRail - leftRail)
+            let bend = TorusGeometry.stringDisplacement(
+                progress: progress, anchor: anchor, pull: effectivePull)
+            let texture = CGFloat(BreathingNoise.value(Double(progress) * 2.6 + frame.time * 0.20))
+            let pinnedEnvelope = max(0, 4 * progress * (1 - progress))
+            let contour = texture * (0.35 + level * 1.3) * motion * pinnedEnvelope
+            return cy + bend + contour
+        }
+
+        func ring(at index: Int) -> Ring {
+            let index = min(TorusGeometry.ringCount - 1, max(0, index))
+            let position = TorusGeometry.positions[index]
+            let energy = min(1, max(0, index < frame.bands.count ? frame.bands[index] : 0))
+            let texture = CGFloat(BreathingNoise.value(frame.time * 0.16 + Double(index) * 0.085)) * motion
+            let profile = TorusGeometry.ringProfile(
+                energy: energy, relief: relief, level: level, breath: breath,
+                texture: texture, envelope: position.envelope)
+            let stretch = 1 + 0.10 * tension * position.envelope
+            let x = cx + (position.progress - 0.5) * bar
+            let progress = (x - leftRail) / max(1, rightRail - leftRail)
+            let slope = TorusGeometry.stringSlope(
+                progress: progress, anchor: anchor,
+                pull: effectivePull, width: rightRail - leftRail)
+            return Ring(
+                center: CGPoint(x: x, y: stringY(at: x)),
+                radiusX: size.width * (0.011 + 0.009 * position.envelope) / stretch,
+                radiusY: baseRy * profile.radius * stretch,
+                rotation: min(0.50, max(-0.50, atan(slope))),
+                opacity: profile.opacity
+            )
+        }
+    }
+
     static func projectedPull(_ pull: CGFloat, height: CGFloat, baseRadius: CGFloat) -> CGFloat {
         // 留足完整环半径、纹理与描边预算；高速弹簧过冲也不能越过 Canvas。
         let budget = max(1, height / 2 - baseRadius - 12)
@@ -170,37 +266,20 @@ struct TorusView: View {
     }
 
     private func draw(context: GraphicsContext, size: CGSize) {
-        let spectrum = store.frame.bands
-        let time = store.frame.time
-        let motion: CGFloat = reduceMotion ? 0 : 1
-        let breath = 0.5 + (store.frame.breath - 0.5) * motion
-        let level = min(1, max(0, store.frame.level))
-
-        let cx = size.width / 2
-        let cy = size.height / 2
-        let relief = TorusGeometry.SpectrumRelief(bands: spectrum)
-        let bar = size.width * 0.80
-        let baseRy = min(size.height * 0.23, max(0, cy - 16))
-        let color = motionStore.armed ? Theme.ivory : (dimmed ? Theme.muted : Theme.orange)
-
-        let leftRail = cx - bar / 2 - 12
-        let rightRail = cx + bar / 2 + 12
-        let rulerTop = cy - baseRy * 1.42
-        let rulerBottom = cy + baseRy * 1.42
-        let effectivePull = TorusGeometry.projectedPull(
-            motionStore.pull, height: size.height, baseRadius: baseRy * 1.12)
-
-        func stringY(_ x: CGFloat) -> CGFloat {
-            let progress = (x - leftRail) / max(1, rightRail - leftRail)
-            let bend = TorusGeometry.stringDisplacement(
-                progress: progress, anchor: motionStore.anchor, pull: effectivePull)
-            let t = Double((x - leftRail) / max(1, rightRail - leftRail))
-            let texture = CGFloat(BreathingNoise.value(t * 2.6 + time * 0.20))
-            // No travelling sine: the silhouette stays grounded while voice adds detail.
-            let pinnedEnvelope = max(0, 4 * progress * (1 - progress))
-            let contour = texture * (0.35 + level * 1.3) * motion * pinnedEnvelope
-            return cy + bend + contour
-        }
+        let layout = TorusGeometry.Layout(
+            size: size, frame: store.frame, pull: motionStore.pull,
+            anchor: motionStore.anchor, reducedMotion: reduceMotion)
+        let cx = layout.cx
+        let cy = layout.cy
+        let level = layout.level
+        let relief = layout.relief
+        let bar = layout.bar
+        let baseRy = layout.baseRy
+        let leftRail = layout.leftRail
+        let rightRail = layout.rightRail
+        let rulerTop = layout.rulerTop
+        let rulerBottom = layout.rulerBottom
+        let color = dimmed ? Theme.muted : Theme.orange
 
         // 左右标尺，不再画中间横线；横线由真正的弦代替。
         var ruler = Path()
@@ -215,13 +294,13 @@ struct TorusView: View {
         context.stroke(ruler, with: .color(color.opacity(0.48)), lineWidth: 0.9)
 
         // 上下轨道沿同一固定端弦形弯曲，不能再整块平移。
-        let orbitHeight = size.height * (0.05 + 0.018 * relief.presence)
+        let orbitHeight = layout.orbitHeight
         for offset in [CGFloat(-0.62), CGFloat(0.62)] {
             let separation = offset * baseRy * (0.72 + 0.28 * relief.presence)
             var path = Path()
             for (index, sample) in TorusGeometry.orbitSamples.enumerated() {
                 let x = cx + sample.x * bar / 2
-                let point = CGPoint(x: x, y: stringY(x) + separation + sample.y * orbitHeight / 2)
+                let point = CGPoint(x: x, y: layout.stringY(at: x) + separation + sample.y * orbitHeight / 2)
                 if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
             }
             path.closeSubpath()
@@ -229,29 +308,30 @@ struct TorusView: View {
         }
 
         // 圆环展示当前频谱，峰谷控制半径；线宽永远固定 1.3pt。
-        let tension = min(1, abs(effectivePull) / max(1, size.height * 0.20))
-        for (index, position) in TorusGeometry.positions.enumerated() {
-            let t = position.progress
-            let envelope = position.envelope
-            let energy = min(1, max(0, index < spectrum.count ? spectrum[index] : 0))
-            let grain = BreathingNoise.value(time * 0.16 + Double(index) * 0.085)
-            let texture = CGFloat(grain) * motion
-            let profile = TorusGeometry.ringProfile(
-                energy: energy, relief: relief, level: level, breath: breath,
-                texture: texture, envelope: envelope)
-            let stretch = 1 + 0.10 * tension * envelope
-            let ry = baseRy * profile.radius * stretch
-            let rx = size.width * (0.011 + 0.009 * envelope) / stretch
-            let x = cx + (t - 0.5) * bar
-            let progress = (x - leftRail) / max(1, rightRail - leftRail)
-            let slope = TorusGeometry.stringSlope(
-                progress: progress, anchor: motionStore.anchor,
-                pull: effectivePull, width: rightRail - leftRail)
+        for index in 0..<TorusGeometry.ringCount {
+            let ring = layout.ring(at: index)
+            let ink = dimmed ? 0 : store.ink.intensity(at: index)
+            let opacity = min(1, ring.opacity + (1 - ring.opacity) * ink * 0.82)
             var ringContext = context
-            ringContext.translateBy(x: x, y: stringY(x))
-            ringContext.rotate(by: .radians(Double(min(0.50, max(-0.50, atan(slope))))))
-            let path = Path(ellipseIn: CGRect(x: -rx, y: -ry, width: rx * 2, height: ry * 2))
-            ringContext.stroke(path, with: .color(color.opacity(profile.opacity)), lineWidth: 1.3)
+            ringContext.translateBy(x: ring.center.x, y: ring.center.y)
+            ringContext.rotate(by: .radians(Double(ring.rotation)))
+            let path = Path(ellipseIn: CGRect(
+                x: -ring.radiusX, y: -ring.radiusY,
+                width: ring.radiusX * 2, height: ring.radiusY * 2))
+            ringContext.stroke(path, with: .color(color.opacity(opacity)), lineWidth: 1.3)
+
+            // 暖白只落在短弧上；不把蓄力扩成整图泛白或背景辉光。
+            let accent = reduceMotion || dimmed ? 0 : store.ink.accent(at: index)
+            if accent > 0.01 {
+                var highlight = Path()
+                for sample in 0...8 {
+                    let angle = -CGFloat.pi / 2 - 0.28 + CGFloat(sample) * 0.07
+                    let point = CGPoint(x: cos(angle) * ring.radiusX, y: sin(angle) * ring.radiusY)
+                    if sample == 0 { highlight.move(to: point) } else { highlight.addLine(to: point) }
+                }
+                ringContext.stroke(
+                    highlight, with: .color(Theme.ivory.opacity(accent * 0.68)), lineWidth: 1.3)
+            }
         }
 
         // A fine structural spine; the rings, not a glowing travelling wave, are the hero.
@@ -259,7 +339,7 @@ struct TorusView: View {
         var first = true
         var x = leftRail
         while x < rightRail {
-            let point = CGPoint(x: x, y: stringY(x))
+            let point = CGPoint(x: x, y: layout.stringY(at: x))
             if first {
                 stringPath.move(to: point)
                 first = false
@@ -268,7 +348,7 @@ struct TorusView: View {
             }
             x += 2
         }
-        stringPath.addLine(to: CGPoint(x: rightRail, y: stringY(rightRail)))
+        stringPath.addLine(to: CGPoint(x: rightRail, y: layout.stringY(at: rightRail)))
         let stringBoost = motionStore.armed ? 1.0 : (0.35 + 0.65 * level)
         context.stroke(stringPath, with: .color(color.opacity(0.08 + 0.10 * stringBoost)), lineWidth: 3)
         context.stroke(stringPath, with: .color(color.opacity(0.38 + 0.40 * stringBoost)), lineWidth: 0.8)

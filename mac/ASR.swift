@@ -4,6 +4,13 @@ enum ASRConfiguration {
     static let model="qwen-audio-3.1-asr-flash-message"
     static let defaultEndpoint="wss://dashscope.aliyuncs.com/api-ws/v1/inference"
     private static let migrationKey="asrMessageProtocolVersion"
+    static let finalResultTimeout: TimeInterval = 60
+    static func uploadTimeout(audioSeconds: TimeInterval) -> TimeInterval {
+        max(30, min(Double(IMicLink.maxSessionSeconds), max(0, audioSeconds)) * 2 + 15)
+    }
+    static var resourceTimeout: TimeInterval {
+        Double(IMicLink.maxSessionSeconds) + 2 * uploadTimeout(audioSeconds: Double(IMicLink.maxSessionSeconds)) + finalResultTimeout + 15
+    }
 
     // Preserve the configured region/workspace host and credentials. Message ASR
     // uses a different WebSocket path and a run-task payload, not ?model=.
@@ -52,7 +59,9 @@ private final class ASRWebSocketTransport:ASRMessageTransport {
     private let socket:URLSessionWebSocketTask
     init(_ request:URLRequest) {
         let config=URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest=15;config.timeoutIntervalForResource=90
+        // WebSocket 可能长时间只上传音频；不能把单次 HTTP 的 15/90 秒用于整段任务。
+        config.timeoutIntervalForRequest=ASRConfiguration.resourceTimeout
+        config.timeoutIntervalForResource=ASRConfiguration.resourceTimeout
         session=URLSession(configuration:config)
         socket=session.webSocketTask(with:request)
     }
@@ -95,6 +104,8 @@ final class BailianASR {
     private var queuedAtEndMS=0.0
     private var transport:ASRMessageTransport?
     private var queue: [Data] = []
+    private var queueHead=0
+    private var queueOffset=0
     private var queuedBytes=0
     private var sending=false
     private var ready=false
@@ -104,6 +115,10 @@ final class BailianASR {
     private var endAt:Date?
     private var results:[Int:String]=[:]
     private var timer:Timer?
+    private var startupTimer:Timer?
+    private var totalBytes=0
+    /// audio.end 后先等上传，finish-task 送达后才进入最终识别期限。
+    private(set) var completionDeadline:Date?
 
     // manual remains source-compatible with the old benchmark entry point.
     // Message ASR always aggregates VAD sentences until explicit end().
@@ -121,7 +136,7 @@ final class BailianASR {
               components.path=="/api-ws/v1/inference",let url=components.url else{
             fail("识别地址应为 wss:// 服务域名/api-ws/v1/inference");return
         }
-        var request=URLRequest(url:url);request.timeoutInterval=10
+        var request=URLRequest(url:url);request.timeoutInterval=ASRConfiguration.resourceTimeout
         request.setValue("Bearer \(key)",forHTTPHeaderField:"Authorization")
         request.setValue("iMic/1.0",forHTTPHeaderField:"User-Agent")
         let transport=transportFactory(request);self.transport=transport
@@ -130,13 +145,13 @@ final class BailianASR {
         sendJSON(["header":header("run-task"),"payload":["task_group":"audio","task":"asr",
             "function":"recognition","model":model,"input":[:],
             "parameters":["format":"pcm","sample_rate":16000,"intermediate_result_enabled":false,
-                "vad_model":"near_meeting_16k"]]]){[weak self] error in
+                "vad_model":"near_meeting_16k","heartbeat":true]]]){[weak self] error in
             guard let self=self,!self.cancelled else{return}
             self.sending=false
             if error != nil{self.fail("识别任务启动失败")}else{self.pump()}
         }
         if !cancelled && !ready {
-            timer=Timer.scheduledTimer(withTimeInterval:10,repeats:false){[weak self] _ in
+            startupTimer=Timer.scheduledTimer(withTimeInterval:10,repeats:false){[weak self] _ in
                 if self?.ready != true{self?.fail("百炼连接超时，请检查网络、Key、地域和模型")}
             }
         }
@@ -152,13 +167,13 @@ final class BailianASR {
     func append(_ pcm:Data) {
         guard started,!cancelled,!ended,!pcm.isEmpty else{return}
         guard pcm.count%2==0 else{fail("录音数据格式错误");return}
-        // 允许整段 60 秒音频排队；旧版 3 秒上限会让长句在 WebSocket
-        // 握手稍慢时直接失败，表现就是“说了一长串但没有输出”。
+        // 累计音频与共享会话上限一致，队列只是尚未上传的子集，不能靠排空绕过上限。
         let limit = IMicLink.maxSessionSeconds * IMicLink.sampleRate * 2
-        guard queuedBytes+pcm.count<=limit else{
-            IMicLog.write("mac.asr", "queue overflow queued=\(queuedBytes) incoming=\(pcm.count) limit=\(limit)")
-            fail("网络上传过慢，本次输入已停止");return
+        guard pcm.count<=limit-totalBytes else{
+            IMicLog.write("mac.asr", "audio overflow total=\(totalBytes) incoming=\(pcm.count) limit=\(limit)")
+            fail("录音超过单次时长上限，本次输入已停止");return
         }
+        totalBytes+=pcm.count
         queue.append(pcm);queuedBytes+=pcm.count
         if queuedBytes > 320_000 && queuedBytes % 64_000 < pcm.count {
             IMicLog.write("mac.asr", "queue high queued=\(queuedBytes)")
@@ -168,23 +183,36 @@ final class BailianASR {
     func end() {
         guard started,!cancelled,!ended else{return}
         ended=true;endAt=Date();queuedAtEndMS=Double(queuedBytes)/32
+        let wait=ASRConfiguration.uploadTimeout(audioSeconds:Double(queuedBytes)/Double(IMicLink.sampleRate*2))
+        armDeadline(wait,message:"百炼音频上传超时")
+        IMicLog.write("mac.asr", "end queued=\(queuedBytes) at=\(String(format: "%.1f", queuedAtEndMS))ms upload_timeout=\(Int(wait))")
         pump()
-        guard !cancelled else{return}
-        IMicLog.write("mac.asr", "end queued=\(queuedBytes) at=\(String(format: "%.1f", queuedAtEndMS))ms")
-        timer?.invalidate();timer=Timer.scheduledTimer(withTimeInterval:45,repeats:false){[weak self] _ in
-            self?.fail("等待最终识别结果超时")
+    }
+    private func armDeadline(_ interval:TimeInterval,message:String) {
+        timer?.invalidate()
+        completionDeadline=Date().addingTimeInterval(interval)
+        timer=Timer.scheduledTimer(withTimeInterval:interval,repeats:false){[weak self] _ in
+            self?.fail(message)
         }
     }
     private func pump() {
         guard ready,!sending,!cancelled,let transport=transport else{return}
-        if !queue.isEmpty {
-            // Binary PCM, not base64 JSON. Send no more than 100ms at a time
-            // and flush queued frames before finish-task, without a silence wait.
-            var pcm=Data()
-            while !queue.isEmpty && pcm.count<3200 {
-                let count=min(3200-pcm.count,queue[0].count)
-                pcm.append(queue[0].prefix(count));queuedBytes-=count
-                if count==queue[0].count{queue.removeFirst()}else{queue[0].removeFirst(count)}
+        if queueHead<queue.count {
+            // Binary PCM, not base64 JSON. Avoid repeatedly shifting a long
+            // recording's frame array; compact only after a substantial prefix.
+            var pcm=Data(capacity:3200)
+            while queueHead<queue.count && pcm.count<3200 {
+                let count=min(3200-pcm.count,queue[queueHead].count-queueOffset)
+                pcm.append(queue[queueHead].dropFirst(queueOffset).prefix(count))
+                queuedBytes-=count;queueOffset+=count
+                if queueOffset==queue[queueHead].count {
+                    queue[queueHead]=Data();queueHead+=1;queueOffset=0
+                }
+            }
+            if queueHead==queue.count {
+                queue.removeAll(keepingCapacity:true);queueHead=0
+            } else if queueHead>=128 && queueHead>=queue.count/2 {
+                queue.removeFirst(queueHead);queueHead=0
             }
             sending=true
             transport.send(.audio(pcm)){[weak self] error in
@@ -195,7 +223,11 @@ final class BailianASR {
             finishSent=true;finishAt=Date();sending=true
             sendJSON(["header":header("finish-task"),"payload":["input":[:]]]){[weak self] error in
                 guard let self=self,!self.cancelled else{return};self.sending=false
-                if error != nil{self.fail("结束识别失败")}
+                if error != nil{self.fail("结束识别失败")}else{
+                    self.finishAt=Date()
+                    self.armDeadline(ASRConfiguration.finalResultTimeout,message:"等待最终识别结果超时")
+                    IMicLog.write("mac.asr", "finish-task drained final_timeout=\(Int(ASRConfiguration.finalResultTimeout))")
+                }
             }
         }
     }
@@ -218,8 +250,9 @@ final class BailianASR {
         switch header["event"] as? String ?? "" {
         case "task-started":
             guard !ready else{return};ready=true;readyAt=Date()
+            startupTimer?.invalidate();startupTimer=nil
             IMicLog.write("mac.asr", "task started after_ms=\(Int((readyAt ?? Date()).timeIntervalSince(startedAt)*1000)) queued=\(queuedBytes)")
-            if !ended{timer?.invalidate()};pump()
+            pump()
         case "result-generated":
             guard ready,let payload=value["payload"] as? [String:Any],let output=payload["output"] as? [String:Any],
                   let sentence=output["sentence"] as? [String:Any],sentence["heartbeat"] as? Bool != true,
@@ -255,7 +288,8 @@ final class BailianASR {
         }
     }
     func cancel() {
-        cancelled=true;timer?.invalidate();timer=nil;queue.removeAll();queuedBytes=0
+        cancelled=true;timer?.invalidate();timer=nil;startupTimer?.invalidate();startupTimer=nil
+        completionDeadline=nil;queue.removeAll();queueHead=0;queueOffset=0;queuedBytes=0
         transport?.cancel();transport=nil
     }
     private func fail(_ message:String){guard !cancelled else{return};IMicLog.write("mac.asr", "fail reason=\(message) queued=\(queuedBytes)");cancel();onError?(message)}

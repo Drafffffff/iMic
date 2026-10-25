@@ -13,20 +13,22 @@ flowchart LR
 
 | 文件 | 职责 |
 | --- | --- |
-| `LinkClient.swift` | Bonjour/TCP 主链路、BLE 兜底切换、握手、AES-GCM 帧、重连、令牌存取 |
+| `LinkClient.swift` / `DeviceSelectionView.swift` | 带 TXT 的 Bonjour 发现、明确目标选择与持久化、每台独立令牌、TCP/BLE 定向重连、代际隔离 |
 | `BLELinkClient.swift` | iOS BLE 中心端，把 iMic Link 字节流搬到 Mac |
-| `SpeechPreview.swift` | Apple Speech 临时转写，正常停录排空尾部、取消时作废代际 |
+| `SpeechPreview.swift` | Apple Speech 每 45 秒滚动分段、保留文字前缀、处理提前 final/error、正常停录排空尾字 |
 | `AudioCapture.swift` | 前台热麦、每代输入引擎与 sink 生命周期；请求 10ms IO，playAndRecord 允许触感与短弓弦声同时工作 |
 | `IMicAudioInputBridge.h` / `.m` | 原生 sink 回调、预分配 SPSC 槽位、串行重采样与排空；向 Swift 交付有所有权的 16 kHz PCM16 数据 |
-| `SessionModel.swift` | 按住 / 松开 / 取消 / 识别超时状态机、60 秒音频日志、触感、结果 |
+| `SessionModel.swift` | 按住 / 松开 / 取消 / 上传与识别超时、600 秒音频日志、本机临时文字、结果保留 |
 | `HomeView.swift` | 主界面、线框转轴、波形、结果卡、按住横条手势 |
 | `PairingSheet.swift` | Mac 列表、六位配对码输入 |
-| `DesignSystem.swift` / `Spectrum.swift` | 44 环频谱弦、共用 CADisplayLink、解析弹簧与持续删除状态机 |
+| `DesignSystem.swift` / `Spectrum.swift` | 44 环频谱弦、共享 `TorusGeometry.Layout` / `Ring`、有界局部光能、共用 CADisplayLink、解析弹簧与持续删除状态机；`Info.plist` 允许 iPhone 高刷新率，实际频率由系统调度 |
+| `ReceiverFlow.swift` | 新增字形排入分帧摄取队列，沿真实椭圆融合、随弦蓄力；过中线后整批高初速弹射，完整越过顶部才回收。取消拒绝迟到文字，减少动态时仅保留亮度；不向 Home 发布视效帧 |
+| `WaveTextRenderer.swift` / `WaveText.metal` | 字形图集、按页批量实例绘制、三缓冲与有序纹理上传；摄取时扩容，常规显示帧复用存储；无逐字 UIView/CALayer 或运行时着色器编译 |
 | `WaveformTrace.swift` / `WaveformReplayView.swift` | 有界频谱缓存、原始响度统计与无音频复看 |
-| `BowReleaseSound.swift` | 一次合成、缓存复用的 105ms 弓弦与气流释放声，发射前准备资源 |
+| `BowReleaseSound.swift` | 预缓存五档 72ms 弦响与上冲气流；同一个 Core Haptics pattern 协调音触，不支持时使用已预热播放器与单次系统触觉；重抓复用健康资源，后台/中断清理失效资源 |
 | `PixelFont.swift` | 5×7 像素字模，避免引入第三方字体 |
 
-麦克风在前台常驻，按下即可采集；未录音时只保留最近 150ms 预录。按下立即发送 `audio.start`，Mac 立刻进入「正在听」；音频仍要过 0.5 秒短按门限。每次录音最多 60 秒，音频按 20ms 切帧，并在 iPhone 本地保留完整会话日志用于补发。
+麦克风在前台常驻，按下即可采集；未录音时只保留最近 150ms 预录。按下立即发送 `audio.start`，Mac 立刻进入「正在听」；音频仍要过 0.5 秒短按门限。每次录音最多 600 秒，音频按 20ms 切帧并保留完整会话日志用于补发；达到样本或墙钟上限时明确自动提交。波形缓存的 60 秒上限独立，不截断识别音频。
 
 输入不再使用 `installTap`：即使请求较小 buffer，旧真机 tap 仍约每 100ms 批量回调。sink 直接消费硬件格式；IO 侧不创建 Swift 对象或 PCM buffer，不执行 FFT、重采样与日志，只复制到预分配的 64 个有界槽并唤醒串行 worker。worker 按序向 Speech 交付借用的原生 buffer、经复用的转换器输出 PCM。槽满、格式改变或转换失败会明确失败并取消本次录音，不静默跳帧；停止时先停引擎，再排空已接受槽与转换尾部。Swift 交付主线程使用 FIFO 队列和采集代际，旧引擎的迟到回调不能污染新会话。
 
@@ -42,6 +44,8 @@ FFT 使用最近 512 个 16 kHz 样本组成约 32ms 重叠窗，采集 hop 与�
 
 下拉释放只登记 `pendingReturn`。解析弹簧计算首次向上过中线的时刻，显示时钟抵达该点后消费待发动作，再投递回车、播放短发射声与触感；后续振荡不重发。重新触摸、后台、断线、弹窗、关闭功能或离开均作废待发动作。「减少动态效果」在一次有限时间回位后发送，不等待渐近零点。
 
+RX 文字来自独立的 `liveTranscript`，不依赖 Mac 是否开启实时输入。主页以布局锚点向根覆盖层传递弦与横条的真实坐标，不改变原布局。新增文字沿加速轨迹汇聚、压缩融合，静态技术标签保持字号，只提高亮度；载荷随下拉附着弦身，成功发送回车后弹出。比较窗口最多 2048 字符，同时最多 64 个文字颗粒；长文蓄能视觉对数增长且有上限。重复识别假设不重飞，发射后仅新增文字重新蓄能；切换/断链取消旧飞行，减少动态效果保留静态蓄能反馈。
+
 下拉越过阈值时播放轻短 `bowArmed` 扣点，并预热音效与缓存 Core Haptics player；松手只登记飞行并确认预热。过中线成功投递后，同一主线程内启动短弓声和一次强脆瞬态加 38ms 衰减尾韵。发射点不再创建 PCM、player 或启动触感引擎，音效不修改采集会话配置。两套硬件不保证采样级同步。重抓停止旧短音，后台与取消作废待发动作；不支持 Core Haptics 时保留系统反馈。
 
 `SessionModel` 仅在一次正式录音期间向 `WaveformTraceStore` 写入频段、显示响度、原始 RMS 和相对采样时间；正常松手后异步落盘，取消则丢弃。缓存最多 50Hz、60 秒、最近 3 次，读取/保存时清除超过 24 小时的数据，使用文件保护并排除备份。真实麦克风与合成测试明确区分，静音 `rmsDB = -∞` 成对编码为 `"-Infinity"`。复看使用独立 `SpectrumStore`，不启动录音、链路或文字投递；清除代际阻止迟到的异步写入恢复已删除数据。
@@ -50,7 +54,7 @@ FFT 使用最近 512 个 16 kHz 样本组成约 32ms 重叠窗，采集 hop 与�
 
 上拨松手发送一次既有 `input/delete`；超过阈值保持 0.4 秒后，每次发送一字删除，间隔在约 2.2 秒内从 180ms 降至 60ms。方向变化使用 2.5pt 净位移迟滞以过滤手指微抖动；明显下移、退回阈值内或松手即停，进入连续模式后松手不额外删除。后台、弹窗、断线、功能关闭或视图离开均取消手势，不积压补发。
 
-实时预览正常停录时先 flush 待发文字，再对本代在途音频 buffer 排空并 `endAudio()`；Apple Speech 最多继续收尾 3 秒。`audio.end` 不等待 Speech final，百炼并行完成识别。授权、识别回调、音频 buffer 与预览发送均按代际隔离，最终结果、取消、断线或新会话会立即作废旧代。
+本机识别不受 Mac 预览输入开关控制；授权在空闲时请求，拒绝或不可用不阻塞百炼。Apple Speech 每 45 秒开启新分段，旧段结束音频后继续排空并累计正文；提前 final/error 时仅按识别时间戳重放未覆盖的音频尾部，避免重放整段或按文本去重真实重复词。正常停录先 flush 待发文字，排空本代在途 buffer 后 `endAudio()`，最多继续收尾 6 秒；`audio.end` 不等待它，百炼并行识别。取消、新会话、失败与断链作废旧代；成功回传不掐断本机尾字。失败和切换保留可复制文字，旧输入不自动写入新目标。
 
 ## Mac 端
 
@@ -65,12 +69,17 @@ FFT 使用最近 512 个 16 kHz 样本组成约 32ms 重叠窗，采集 hop 与�
 | `Permissions.swift` | 辅助功能 / 事件投递权限说明与引导 |
 | `Credentials.swift` | 从 `~/.zshrc` 读取或写入 `DASHSCOPE_API_KEY` |
 
+Mac 活动条是实际接收 RMS 的 96 帧时间历史，不是 FFT。绘图始终铺满容器宽度，已有真实样本才点亮；约 −60dBFS 以下不产生能量，软门限与平方根压缩提高轻声辨识度，静音不注入最低柱高。会话更替、处理与断开清理旧历史。
+
+BLE 两端使用串行状态队列、动态 MTU 与游标队列；无响应音频持续写到系统背压，有响应控制帧的末片 ATT 完成后才报告上传结束。身份特征只筛选明确目标，安全仍依赖原密钥握手；队列有界、错误明确失败。百炼启用静音 heartbeat，总资源期限覆盖有界录音及排空；`BailianASR.completionDeadline` 先表示上传截止，finish-task 送达后切换为最终 60 秒截止，Mac watchdog 不再用松手后固定 45 秒。
+
+
 一次输入的时序：
 
 1. `audio.start`：记录 Mac 前台应用（排除 iMic 自身），清空上一轮状态。
 2. 音频帧到达：校验 `seq` 连续；发现首帧缺失或中间缺口时发送 `audio.need`，iPhone 从本地日志补发，补齐前不把尾段送进 ASR。`ShortClipGate` 攒够 0.5 秒后才创建百炼会话，之前的数据一次性补发。
-3. 百炼返回：音频持续写入 WebSocket；队列允许整段 60 秒，避免长句在握手稍慢时被截断。
-4. `audio.end`：补齐节流队列中的实时文字但不清空输入框；立即 `finish-task`，不等待服务端静音检测，继续接受当前会话的 Apple Speech 尾部预览。
+3. 百炼返回：音频持续写入 WebSocket；累计上限 600 秒，上传与最终识别分别计时，避免握手或网络积压截断长句。
+4. `audio.end`：补齐节流队列中的实时文字但不清空输入框；上传队列排空后发送 `finish-task`，不等待服务端静音检测，继续接受当前会话的 Apple Speech 尾部预览。
 5. 完整转写先差量补到输入框，再进行可选 DeepSeek 润色；此后忽略迟到的临时预览。最终文本通过 `TextRevision` 保留共同字素簇前缀，仅删除并重写变化尾部。自动输入仍要求授权有效、前台匹配；无论输入是否成功，都把 `result` 回传 iPhone。
 6. 断开：取消识别，绝不把半段文字填进输入框。
 

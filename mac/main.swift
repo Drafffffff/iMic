@@ -32,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let transcript = NSTextView()
     let resultScroll = NSScrollView()
     let emptyMark = NSImageView()
-    let meter = NSLevelIndicator()
+    let meter = AudioActivityView()
     let elapsedLabel = NSTextField(labelWithString: "0.0 s")
     let spinner = NSProgressIndicator()
     let activityHint = NSTextField(labelWithString: "")
@@ -255,7 +255,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startBLEBridge() {
         guard bleFallbackEnabled, bleBridge == nil, let port = link.localPort else { return }
-        let bridge = BLEBridge(port: port)
+        let bridge = BLEBridge(port: port, macID: store.macID)
         bridge.start()
         bleBridge = bridge
         IMicLog.write("mac.ble", "bridge started port=\(port)")
@@ -422,7 +422,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             IMicLog.write("mac.session", "audio seq=\(seq) packets=\(receivedPackets) frames=\(frames) samples=\(samples) bytes=\(packet.pcm.count)")
         }
         if samples > IMicLink.sampleRate * IMicLink.maxSessionSeconds {
-            abortSession(notifyPhone: true, message: "单次录音最长 60 秒")
+            abortSession(notifyPhone: true, message: "单次录音最长 \(IMicLink.maxSessionSeconds / 60) 分钟")
             return
         }
         do {
@@ -436,10 +436,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         var energy = 0.0
-        let bytes = [UInt8](packet.pcm)
-        for index in stride(from: 0, to: bytes.count - 1, by: 2) {
-            let value = Double(Int16(bitPattern: UInt16(bytes[index]) | UInt16(bytes[index + 1]) << 8))
-            energy += value * value
+        packet.pcm.withUnsafeBytes { bytes in
+            for index in stride(from: 0, to: bytes.count, by: 2) {
+                let value = Double(Int16(littleEndian: bytes.loadUnaligned(fromByteOffset: index, as: Int16.self)))
+                energy += value * value
+            }
         }
         let count = max(1, packet.pcm.count / 2)
         meter.doubleValue = min(1, sqrt(energy / Double(count)) / 7000)
@@ -818,7 +819,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 elapsedLabel.stringValue = String(format: "%.1f s", Double(samples) / 16000)
             }
-        } else if Date().timeIntervalSince(stopAt!) > 45 {
+        } else if let deadline = asr?.completionDeadline, Date() > deadline {
             abortSession(notifyPhone: true, message: "等待识别结果超时")
         }
         _ = session
@@ -1170,6 +1171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentSession = 1
             samples = 12_800
             frames = 40
+            meter.prepareForSession(currentSession)
             meter.doubleValue = 0.62
             elapsedLabel.stringValue = "0.8 s"
         case "processing":

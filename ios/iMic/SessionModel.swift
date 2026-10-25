@@ -19,6 +19,8 @@ final class SessionModel: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var transcript = ""
+    @Published private(set) var liveTranscript = ""
+    @Published private(set) var isUploading = false
     @Published private(set) var pasted = false
     @Published private(set) var target: String?
     @Published private(set) var message: String?
@@ -59,6 +61,9 @@ final class SessionModel: ObservableObject {
     private var pendingEnd = false
     private var timer: Timer?
     private var resultTimer: Timer?
+    private var uploadTimer: Timer?
+    private var submissionGeneration: UInt64 = 0
+    private var endInFlight = false
     private var connectionTimer: Timer?
     private var previewTimer: Timer?
     private var previewSpectrumGeneration: UInt64 = 0
@@ -151,13 +156,17 @@ final class SessionModel: ObservableObject {
         if AudioCapture.permissionGranted {
             micDenied = false
             _ = startAudioEngine()
+            if !wantsRecording { speechPreview.prepareAuthorization() }
             return
         }
         Task {
             let granted = await AudioCapture.requestPermission()
             guard !Task.isCancelled else { return }
             micDenied = !granted
-            if granted { _ = startAudioEngine() }
+            if granted {
+                _ = startAudioEngine()
+                if !wantsRecording { speechPreview.prepareAuthorization() }
+            }
         }
     }
 
@@ -289,20 +298,25 @@ final class SessionModel: ObservableObject {
     private func applyRemoteFeatures(_ features: Int) {
         remoteFeatures = features
         if !livePreviewEnabled {
-            stopLivePreview()
-        } else if phase == .listening, !speechPreview.isRunning {
-            startLivePreview()
+            previewSendTask?.cancel()
+            previewSendTask = nil
+            pendingLivePreview = ""
+            lastLivePreviewSent = ""
+        } else if phase == .listening || phase == .transcribing {
+            queueLivePreview(liveTranscript)
         }
     }
 
     private func startLivePreview() {
-        guard livePreviewEnabled, phase == .listening, let session = activeSession else { return }
+        guard phase == .listening, let session = activeSession else { return }
         livePreviewGeneration &+= 1
         let generation = livePreviewGeneration
         speechPreview.start { [weak self] text in
             guard let self = self,
                   self.livePreviewGeneration == generation,
-                  self.activeSession == session else { return }
+                  self.session == session,
+                  self.phase == .listening || self.phase == .transcribing || self.phase == .result else { return }
+            self.liveTranscript = text
             self.queueLivePreview(text)
         }
     }
@@ -364,6 +378,11 @@ final class SessionModel: ObservableObject {
         guard wantsRecording else { return }
         session = UInt16.random(in: 1...65535)
         activeSession = session
+        submissionGeneration &+= 1
+        endInFlight = false
+        isUploading = false
+        uploadTimer?.invalidate()
+        uploadTimer = nil
         frames = 0
         samples = 0
         pending.removeAll(keepingCapacity: true)
@@ -377,6 +396,7 @@ final class SessionModel: ObservableObject {
         connectionTimer?.invalidate()
         connectionTimer = nil
         transcript = ""
+        liveTranscript = ""
         pasted = false
         target = nil
         message = nil
@@ -463,10 +483,17 @@ final class SessionModel: ObservableObject {
         timer = nil
         commitTimer?.invalidate()
         commitTimer = nil
+        syntheticTimer?.invalidate()
+        syntheticTimer = nil
+        syntheticActive = false
+        syntheticData.removeAll()
         flushPending()
         elapsed = max(elapsed, Double(max(0, samples - preRollSamplesAdded)) / 16_000)
 
         if cancelled || samples - preRollSamplesAdded < IMicLink.minimumSamples {
+            if !liveTranscript.isEmpty { transcript = liveTranscript }
+            submissionGeneration &+= 1
+            isUploading = false
             waveformTrace.cancel()
             connectionTimer?.invalidate()
             connectionTimer = nil
@@ -490,6 +517,8 @@ final class SessionModel: ObservableObject {
 
         pendingEnd = true
         phase = .transcribing
+        isUploading = true
+        message = "正在上传音频…"
         stopVisualInput()
         waveformTrace.finish()
         finishLivePreview()
@@ -507,22 +536,31 @@ final class SessionModel: ObservableObject {
     private func tick() {
         guard phase == .listening else { return }
         elapsed = Date().timeIntervalSince(startedAt)
-        if samples >= IMicLink.sampleRate * IMicLink.maxSessionSeconds {
-            endListening(cancelled: false)
+        if samples >= IMicLink.sampleRate * IMicLink.maxSessionSeconds ||
+            elapsed >= Double(IMicLink.maxSessionSeconds) {
+            submitAtRecordingLimit()
         }
     }
 
     private func ingest(_ data: Data) {
         guard phase == .listening else { return }
         analyzeVisuals(data)
-        pending.append(data)
+        let remainingBytes = max(0, (IMicLink.sampleRate * IMicLink.maxSessionSeconds - samples) * 2 - pending.count)
+        pending.append(data.prefix(remainingBytes))
         processPending()
         if !streaming {
             maybeBeginStreaming()
         }
         if samples >= IMicLink.sampleRate * IMicLink.maxSessionSeconds {
-            endListening(cancelled: false)
+            submitAtRecordingLimit()
         }
+    }
+
+    private func submitAtRecordingLimit() {
+        guard phase == .listening else { return }
+        endListening(cancelled: false)
+        notice = "已达到单次录音 \(IMicLink.maxSessionSeconds / 60) 分钟上限，已自动提交"
+        IMicLog.write("iphone.session", "recording limit auto-submit session=\(session) samples=\(samples)")
     }
 
     private func flushPending() {
@@ -539,17 +577,18 @@ final class SessionModel: ObservableObject {
     /// 缓存或发送一帧；FFT 独立按麦克风回调更新。samples 表示已采集，frames 表示已发送。
     private func captureChunk(_ chunk: Data) {
         guard phase == .listening, !chunk.isEmpty, chunk.count % 2 == 0 else { return }
+        let remaining = IMicLink.sampleRate * IMicLink.maxSessionSeconds - samples
+        guard remaining > 0 else { return }
+        let chunk = chunk.count / 2 > remaining ? Data(chunk.prefix(remaining * 2)) : chunk
         samples += chunk.count / 2
         if streaming {
             sendChunk(chunk)
             return
         }
         buffered.append(chunk)
-        // 2 秒缓存上限，避免断网时无限堆积；Mac 端百炼上传队列也有 3 秒上限。
+        // 缓存与整段硬上限一致；不能丢弃开头来让计数看似仍在范围内。
         if buffered.count > maxBufferedChunks {
-            let dropped = buffered.removeFirst()
-            samples -= dropped.count / 2
-            IMicLog.write("iphone.session", "buffer overflow dropped samples=\(dropped.count / 2) remaining=\(buffered.count)")
+            failActiveSession("录音缓存已满，本次输入已停止")
         }
     }
 
@@ -642,10 +681,37 @@ final class SessionModel: ObservableObject {
     }
 
     private func finishStreaming() {
-        guard pendingEnd, activeSession != nil, streaming else { return }
-        link.endSession(session, samples: samples, frames: Int(frames))
+        guard pendingEnd, let active = activeSession, streaming, !endInFlight else { return }
         pendingEnd = false
-        startResultTimeout()
+        endInFlight = true
+        let generation = submissionGeneration
+        let uploadWait = max(30, Double(samples) / Double(IMicLink.sampleRate) * 2 + 15)
+        uploadTimer?.invalidate()
+        let timer = Timer(timeInterval: uploadWait, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.submissionGeneration == generation,
+                      self.activeSession == active, self.endInFlight else { return }
+                self.failActiveSession("音频上传超时，已保留本机识别文字，可复制后重试")
+            }
+        }
+        uploadTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+        link.endSession(active, samples: samples, frames: Int(frames)) { [weak self] sent in
+            guard let self, self.submissionGeneration == generation,
+                  self.activeSession == active, self.phase == .transcribing,
+                  self.endInFlight else { return }
+            self.endInFlight = false
+            self.isUploading = false
+            self.uploadTimer?.invalidate()
+            self.uploadTimer = nil
+            guard sent else {
+                self.failActiveSession("音频未能完整送达 Mac，已保留本机识别文字")
+                return
+            }
+            IMicLog.write("iphone.session", "audio.end drained session=\(active) samples=\(self.samples) frames=\(self.frames)")
+            self.message = "正在识别…"
+            self.startResultTimeout()
+        }
     }
 
     private func armConnectionTimeout() {
@@ -664,33 +730,52 @@ final class SessionModel: ObservableObject {
     }
 
     private func abortForConnection() {
+        failActiveSession("无法连接 Mac，请确认 Mac 上的 iMic 已打开")
+    }
+
+    /// 失败只保留可复制文字，绝不把本机临时识别自动投递到其它设备。
+    private func failActiveSession(_ reason: String, cancelRemote: Bool = true) {
+        if cancelRemote, let activeSession, announcedSession { link.cancelSession(activeSession) }
+        if !liveTranscript.isEmpty { transcript = liveTranscript }
+        submissionGeneration &+= 1
+        wantsRecording = false
         waveformTrace.cancel()
-        timer?.invalidate()
-        timer = nil
-        commitTimer?.invalidate()
-        commitTimer = nil
-        connectionTimer?.invalidate()
-        connectionTimer = nil
+        timer?.invalidate(); timer = nil
+        commitTimer?.invalidate(); commitTimer = nil
+        connectionTimer?.invalidate(); connectionTimer = nil
+        uploadTimer?.invalidate(); uploadTimer = nil
+        resultTimer?.invalidate(); resultTimer = nil
+        syntheticTimer?.invalidate(); syntheticTimer = nil
         preRoll.removeAll()
         buffered.removeAll()
         pending.removeAll()
+        syntheticData.removeAll()
+        audioJournal.removeAll(keepingCapacity: true)
         streaming = false
         pendingEnd = false
+        endInFlight = false
+        isUploading = false
         activeSession = nil
         syntheticActive = false
         announcedSession = false
-        audioJournal.removeAll(keepingCapacity: true)
         stopLivePreview()
         phase = .error
-        message = "无法连接 Mac，请确认 Mac 上的 iMic 已打开"
-        stopVisualInput(reset: true)
+        message = reason
+        stopVisualInput()
         Haptics.shared.play(.error)
     }
 
     private func startResultTimeout() {
         resultTimer?.invalidate()
-        let timer = Timer(timeInterval: 20, repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.timeout() }
+        // audio.end 在链路排空后，Mac 仍可能在向百炼上传真实积压音频。
+        // 分别留出上传、最终识别及润色余量；不把 BLE 本地积压算成模型等待。
+        let wait = max(30, Double(samples) / Double(IMicLink.sampleRate) * 2 + 15) + 90
+        let generation = submissionGeneration
+        let timer = Timer(timeInterval: wait, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.submissionGeneration == generation else { return }
+                self.timeout()
+            }
         }
         resultTimer = timer
         RunLoop.main.add(timer, forMode: .common)
@@ -759,6 +844,12 @@ final class SessionModel: ObservableObject {
         syntheticOffset = 0
         session = UInt16.random(in: 1...65535)
         activeSession = session
+        submissionGeneration &+= 1
+        endInFlight = false
+        isUploading = false
+        uploadTimer?.invalidate()
+        uploadTimer = nil
+        preRollSamplesAdded = 0
         frames = 0
         samples = 0
         pending.removeAll()
@@ -770,6 +861,7 @@ final class SessionModel: ObservableObject {
         streaming = false
         pendingEnd = false
         transcript = ""
+        liveTranscript = ""
         pasted = false
         target = nil
         message = nil
@@ -805,6 +897,8 @@ final class SessionModel: ObservableObject {
             syntheticActive = false
             pendingEnd = true
             phase = .transcribing
+            isUploading = true
+            message = "正在上传音频…"
             stopVisualInput()
             waveformTrace.finish()
             if streaming {
@@ -826,6 +920,9 @@ final class SessionModel: ObservableObject {
         analyzeVisuals(chunk)
         captureChunk(chunk)
         elapsed = Double(samples) / 16_000
+        if samples >= IMicLink.sampleRate * IMicLink.maxSessionSeconds {
+            submitAtRecordingLimit()
+        }
     }
 
     // MARK: - Link events
@@ -846,6 +943,19 @@ final class SessionModel: ObservableObject {
         }
         IMicLog.write("iphone.session", "receive \(message.t) session=\(message.session ?? -1) active=\(active) frames=\(frames) samples=\(samples)")
         if let sid = message.session, sid != Int(active) { return }
+        wantsRecording = false
+        timer?.invalidate()
+        timer = nil
+        syntheticTimer?.invalidate()
+        syntheticTimer = nil
+        uploadTimer?.invalidate()
+        uploadTimer = nil
+        submissionGeneration &+= 1
+        endInFlight = false
+        isUploading = false
+        buffered.removeAll()
+        pending.removeAll()
+        syntheticData.removeAll()
         stopVisualInput()
         activeSession = nil
         streaming = false
@@ -857,23 +967,27 @@ final class SessionModel: ObservableObject {
         resultTimer = nil
         connectionTimer?.invalidate()
         connectionTimer = nil
-        stopLivePreview()
         audioJournal.removeAll(keepingCapacity: true)
         announcedSession = false
         if message.t == "failure" {
+            stopLivePreview()
             phase = .error
+            if !liveTranscript.isEmpty { transcript = liveTranscript }
             self.message = message.message ?? "识别失败，请重试"
             Haptics.shared.play(.error)
             return
         }
         let text = (message.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
+            stopLivePreview()
             phase = .error
+            if !liveTranscript.isEmpty { transcript = liveTranscript }
             self.message = "没有听清，再试一次"
             Haptics.shared.play(.warning)
             return
         }
         transcript = text
+        self.message = nil
         pasted = message.pasted == true
         target = message.target
         phase = .result
@@ -883,44 +997,24 @@ final class SessionModel: ObservableObject {
 
     private func handleLinkLost() {
         guard phase == .listening || phase == .transcribing else { return }
-        stopVisualInput()
-        waveformTrace.cancel()
-        wantsRecording = false
-        timer?.invalidate()
-        timer = nil
-        resultTimer?.invalidate()
-        resultTimer = nil
-        connectionTimer?.invalidate()
-        connectionTimer = nil
-        activeSession = nil
-        streaming = false
-        pendingEnd = false
-        commitTimer?.invalidate()
-        commitTimer = nil
-        syntheticActive = false
-        stopLivePreview()
-        announcedSession = false
-        audioJournal.removeAll(keepingCapacity: true)
-        phase = .error
-        message = "与 Mac 的连接已断开"
-        Haptics.shared.play(.connectionLost)
+        failActiveSession("与 Mac 的连接已断开，已保留本机识别文字", cancelRemote: false)
     }
 
     private func timeout() {
         guard phase == .transcribing else { return }
-        stopVisualInput()
-        activeSession = nil
-        streaming = false
-        pendingEnd = false
-        syntheticActive = false
-        commitTimer?.invalidate()
-        commitTimer = nil
-        announcedSession = false
-        audioJournal.removeAll(keepingCapacity: true)
-        stopLivePreview()
-        phase = .error
-        message = "识别超时，请再试一次"
-        Haptics.shared.play(.error)
+        failActiveSession("识别超时，已保留本机识别文字，可复制后重试")
+    }
+
+    func cancelForDeviceSwitch() {
+        wantsRecording = false
+        guard phase == .listening || phase == .transcribing else {
+            stopLivePreview()
+            return
+        }
+        failActiveSession("已取消旧 Mac 的语音会话")
+        phase = .idle
+        message = nil
+        notice = "已保留本机识别文字"
     }
 
     // MARK: - Actions
@@ -928,6 +1022,15 @@ final class SessionModel: ObservableObject {
     func reset() {
         guard phase != .listening else { return }
         waveformTrace.cancel()
+        submissionGeneration &+= 1
+        wantsRecording = false
+        endInFlight = false
+        isUploading = false
+        uploadTimer?.invalidate()
+        uploadTimer = nil
+        syntheticTimer?.invalidate()
+        syntheticTimer = nil
+        syntheticData.removeAll()
         if streaming { link.cancelSession(session) }
         timer?.invalidate()
         timer = nil
@@ -951,6 +1054,7 @@ final class SessionModel: ObservableObject {
         message = nil
         notice = nil
         transcript = ""
+        liveTranscript = ""
         pasted = false
         target = nil
         stopVisualInput(reset: true)

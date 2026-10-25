@@ -14,7 +14,6 @@ final class Haptics {
         case recordingStarted
         case release
         case bowArmed
-        case bowRelease
         case cancelArmed
         case cancelDisarmed
         case cancelled
@@ -76,8 +75,8 @@ final class Haptics {
         startEngine()
     }
 
-    /// 飞行前只准备资源；主发射触感留到真正过中线时播放。
-    func prepareBowRelease() {
+    /// 只预热拉满提示；真正释放的音触由 BowReleaseSound 统一拥有。
+    func prepareBowArmed() {
         guard UIApplication.shared.applicationState == .active else { return }
         prepare(force: true)
         rigid.prepare()
@@ -101,8 +100,7 @@ final class Haptics {
 
     func play(_ event: Event) {
         guard UIApplication.shared.applicationState == .active else { return }
-        // 发射点只消费已准备的 player，不临时启动引擎或创建播放器。
-        if event != .bowRelease { prepare() }
+        prepare()
         let now = CACurrentMediaTime()
         if let last = lastPlayed[event], now - last < minimumInterval(event) { return }
         lastPlayed[event] = now
@@ -112,13 +110,9 @@ final class Haptics {
                 let player: CHHapticPatternPlayer
                 if let cached = players[event] {
                     player = cached
-                } else if event != .bowRelease {
+                } else {
                     player = try engine.makePlayer(with: pattern)
                     players[event] = player
-                } else {
-                    IMicLog.write("iphone.haptics", "bow release player not prepared; using system feedback")
-                    playFallback(event)
-                    return
                 }
                 try player.start(atTime: CHHapticTimeImmediate)
                 return
@@ -198,9 +192,6 @@ final class Haptics {
             if players[.bowArmed] == nil, let pattern = patterns[.bowArmed] {
                 players[.bowArmed] = try engine.makePlayer(with: pattern)
             }
-            if players[.bowRelease] == nil, let pattern = patterns[.bowRelease] {
-                players[.bowRelease] = try engine.makePlayer(with: pattern)
-            }
         } catch {
             IMicLog.write("iphone.haptics", "bow preparation failed: \(error.localizedDescription)")
             stop()
@@ -218,39 +209,6 @@ final class Haptics {
         )
         patterns[.release] = pattern([(0, 0.3, 0.25)])
         patterns[.bowArmed] = pattern([(0, 0.28, 0.78)])
-        // 一次脆冲加连续衰减，不插入第二次瞬态，避免双击或长震感。
-        do {
-            let release = CHHapticEvent(
-                eventType: .hapticTransient,
-                parameters: [
-                    CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.92),
-                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.94)
-                ],
-                relativeTime: 0
-            )
-            let tail = CHHapticEvent(
-                eventType: .hapticContinuous,
-                parameters: [
-                    CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.24),
-                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.42)
-                ],
-                relativeTime: 0,
-                duration: 0.038
-            )
-            let decay = CHHapticParameterCurve(
-                parameterID: .hapticIntensityControl,
-                controlPoints: [
-                    .init(relativeTime: 0, value: 1),
-                    .init(relativeTime: 0.006, value: 0.7),
-                    .init(relativeTime: 0.020, value: 0.22),
-                    .init(relativeTime: 0.038, value: 0)
-                ],
-                relativeTime: 0
-            )
-            patterns[.bowRelease] = try CHHapticPattern(events: [release, tail], parameterCurves: [decay])
-        } catch {
-            IMicLog.write("iphone.haptics", "bow pattern creation failed: \(error.localizedDescription)")
-        }
         patterns[.cancelArmed] = pattern([(0, 0.55, 0.8), (0.05, 0.4, 0.7)])
         patterns[.cancelDisarmed] = pattern([(0, 0.25, 0.4)])
         patterns[.cancelled] = pattern([(0, 0.6, 0.4), (0.08, 0.3, 0.2)])
@@ -326,8 +284,6 @@ final class Haptics {
             soft.impactOccurred(intensity: 0.6)
         case .bowArmed:
             rigid.impactOccurred(intensity: 0.35)
-        case .bowRelease:
-            rigid.impactOccurred(intensity: 1)
         case .cancelArmed, .cancelDisarmed:
             rigid.impactOccurred(intensity: event == .cancelArmed ? 0.8 : 0.45)
         case .cancelled, .warning, .tooShort:

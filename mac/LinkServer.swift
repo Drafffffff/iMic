@@ -221,6 +221,13 @@ final class LinkServer {
                 DispatchQueue.main.async { [weak self] in self?.onAudio?(packet) }
             case .sealedJSON:
                 let message = try LinkMessage.decode(plaintext)
+                if message.t == "audio.end" {
+                    guard let samples = message.samples, let frames = message.frames,
+                          IMicLink.isValidAudioEnd(samples: samples, frames: frames) else {
+                        sendErrorAndClose("audio", "语音结束帧数或采样数无效")
+                        return
+                    }
+                }
                 if message.t == "ping" {
                     try sendLocked(.pong(message.ts ?? 0))
                 } else {

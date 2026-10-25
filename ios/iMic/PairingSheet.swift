@@ -12,26 +12,33 @@ struct PairingSheet: View {
     @State private var showForget = false
     @State private var showWaveforms = false
     @FocusState private var codeFocused: Bool
+    var embedded = false
 
     var body: some View {
-        ZStack {
-            Theme.ink.ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 18) {
-                header
+        Group {
+            if embedded {
                 content
-                Spacer(minLength: 8)
-                footer
-            }
-            .padding(.horizontal, 22)
-            .padding(.top, 22)
-            .padding(.bottom, 18)
-            .overlay(alignment: .top) {
-                Rectangle().fill(Theme.line).frame(height: 1)
+            } else {
+                ZStack {
+                    Theme.ink.ignoresSafeArea()
+                    VStack(alignment: .leading, spacing: 18) {
+                        header
+                        content
+                        Spacer(minLength: 8)
+                        footer
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 22)
+                    .padding(.bottom, 18)
+                    .overlay(alignment: .top) {
+                        Rectangle().fill(Theme.line).frame(height: 1)
+                    }
+                }
+                .presentationDetents([.height(404), .large])
+                .presentationDragIndicator(.hidden)
+                .presentationBackground(Theme.ink)
             }
         }
-        .presentationDetents([.height(404), .large])
-        .presentationDragIndicator(.hidden)
-        .presentationBackground(Theme.ink)
         .onAppear {
             if case .needsCode = link.phase {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { codeFocused = true }
@@ -43,7 +50,7 @@ struct PairingSheet: View {
                 Haptics.shared.play(.pairingSuccess)
                 codeFocused = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                    if !showWaveforms { dismiss() }
+                    if !embedded, !showWaveforms { dismiss() }
                 }
             case .needsCode:
                 code = ""
@@ -130,6 +137,8 @@ struct PairingSheet: View {
                 Text(name)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Theme.ivory)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 Spacer()
                 MetaLabel(text: "ENCRYPTED", color: Theme.orange)
             }
@@ -168,7 +177,11 @@ struct PairingSheet: View {
 
     private func codeEntry(name: String) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            MetaLabel(text: "PAIR WITH \(name)".uppercased(), color: Theme.orange)
+            Text("配对到 \(name)")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.orange)
+                .lineLimit(2)
+                .truncationMode(.middle)
             Text("在 Mac 的 iMic 窗口里找到 6 位配对码。")
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.muted)
@@ -239,6 +252,8 @@ struct PairingSheet: View {
                 Text("正在连接 \(name)")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Theme.ivory)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
                 MetaLabel(text: "BONJOUR · CURVE25519", color: Theme.muted)
             }
         }
@@ -303,7 +318,9 @@ struct PairingSheet: View {
                                 Text(mac.name)
                                     .font(.system(size: 15, weight: .medium))
                                     .foregroundStyle(Theme.ivory)
-                                MetaLabel(text: "READY TO PAIR", color: Theme.muted)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                MetaLabel(text: link.pairedMacIDs.contains(mac.id) ? "已配对" : "需要配对", color: Theme.muted)
                             }
                             Spacer()
                             Image(systemName: "arrow.right")
