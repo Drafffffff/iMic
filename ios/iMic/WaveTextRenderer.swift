@@ -1,6 +1,66 @@
 import Metal
 import QuartzCore
 import UIKit
+import CoreText
+
+/// Immutable font data and one serial worker keep first-use CJK shaping off the display clock.
+private final class WaveGlyphRasterizer {
+    private let device: MTLDevice
+    private let side: Int
+    private let rowBytes: Int
+    private let attributes: [NSAttributedString.Key: Any]
+    private let space = CGColorSpaceCreateDeviceGray()
+    private let worker = DispatchQueue(label: "imic.visual.glyphs", qos: .userInitiated)
+    private let lock = NSLock()
+    private var generation: UInt64 = 0
+
+    init(device: MTLDevice, side: Int, rowBytes: Int, font: UIFont) {
+        self.device = device
+        self.side = side
+        self.rowBytes = rowBytes
+        attributes = [
+            NSAttributedString.Key(kCTFontAttributeName as String): font as CTFont,
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1)
+        ]
+    }
+
+    func invalidate(generation: UInt64) {
+        lock.lock()
+        self.generation = generation
+        lock.unlock()
+    }
+
+    private func isCurrent(_ generation: UInt64) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return self.generation == generation
+    }
+
+    func prepare(_ character: Character, generation: UInt64,
+                 completion: @escaping @MainActor (MTLBuffer?) -> Void) {
+        worker.async {
+            guard self.isCurrent(generation) else { return }
+            let bytes: MTLBuffer? = autoreleasepool {
+                guard let buffer = self.device.makeBuffer(length: self.rowBytes * self.side, options: .storageModeShared) else { return nil }
+                buffer.contents().initializeMemory(as: UInt8.self, repeating: 0, count: buffer.length)
+                guard let context = CGContext(data: buffer.contents(), width: self.side, height: self.side,
+                                              bitsPerComponent: 8, bytesPerRow: self.rowBytes,
+                                              space: self.space, bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return nil }
+                let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(character), attributes: self.attributes))
+                let bounds = CTLineGetImageBounds(line, context)
+                guard !bounds.isNull else { return buffer }
+                context.textPosition = CGPoint(
+                    x: (CGFloat(self.side) - bounds.width) / 2 - bounds.minX,
+                    y: (CGFloat(self.side) - bounds.height) / 2 - bounds.minY
+                )
+                CTLineDraw(line, context)
+                return buffer
+            }
+            guard self.isCurrent(generation) else { return }
+            DispatchQueue.main.async { completion(bytes) }
+        }
+    }
+}
 
 /// Manually presented from SpectrumStore's clock; no second display link.
 final class WaveTextCanvas: UIView {
@@ -60,9 +120,14 @@ final class WaveTextRenderer {
     private var pageCounts: [Int] = []
     private var pageStarts: [Int] = []
     private var pageCursors: [Int] = []
-    private let font = UIFont.systemFont(ofSize: 33, weight: .medium)
-    private static let pageSide = 1024
-    private static let cellSide = 48
+    // Alpha coverage needs one channel; high-resolution entry/exit text does not need RGBA.
+    private let rasterizer: WaveGlyphRasterizer
+    private var preparing: Set<Character> = []
+    private var prepared: [Character: MTLBuffer] = [:]
+    private var failed: Set<Character> = []
+    private var atlasGeneration: UInt64 = 0
+    private static let pageSide = 2048
+    private static let cellSide = 128
     private static let tileRowBytes = 256
     private static let columns = pageSide / cellSide
     private static let cellsPerPage = columns * columns
@@ -74,6 +139,8 @@ final class WaveTextRenderer {
         self.view = view
         self.device = device
         self.queue = queue
+        rasterizer = WaveGlyphRasterizer(device: device, side: Self.cellSide, rowBytes: Self.tileRowBytes,
+                                         font: UIFont.systemFont(ofSize: 88, weight: .medium))
         view.metalLayer.device = device
         view.metalLayer.pixelFormat = .bgra8Unorm
         view.metalLayer.framebufferOnly = true
@@ -100,14 +167,28 @@ final class WaveTextRenderer {
         try reserve(instances: 1024)
     }
 
-    func texture(for character: Character) throws -> WaveGlyphTexture {
+    func prepare(_ character: Character) {
+        guard glyphs[character] == nil, prepared[character] == nil, !failed.contains(character),
+              preparing.insert(character).inserted else { return }
+        let generation = atlasGeneration
+        rasterizer.prepare(character, generation: generation) { [weak self] bytes in
+            guard let self, self.atlasGeneration == generation else { return }
+            self.preparing.remove(character)
+            if let bytes { self.prepared[character] = bytes }
+            else { self.failed.insert(character) }
+        }
+    }
+
+    func texture(for character: Character) throws -> WaveGlyphTexture? {
         if let cached = glyphs[character] { return cached }
+        if failed.contains(character) { throw RenderError.allocation }
+        guard let bytes = prepared.removeValue(forKey: character) else { return nil }
         let ordinal = glyphs.count
         let page = ordinal / Self.cellsPerPage
         let cell = ordinal % Self.cellsPerPage
         if page == pages.count {
             let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-                pixelFormat: .rgba8Unorm, width: Self.pageSide, height: Self.pageSide, mipmapped: false)
+                pixelFormat: .r8Unorm, width: Self.pageSide, height: Self.pageSide, mipmapped: false)
             descriptor.storageMode = .private
             descriptor.usage = .shaderRead
             guard let texture = device.makeTexture(descriptor: descriptor) else { throw RenderError.allocation }
@@ -117,23 +198,6 @@ final class WaveTextRenderer {
             pageCursors.append(0)
         }
         let side = Self.cellSide
-        guard let context = CGContext(data: nil, width: side, height: side,
-                                      bitsPerComponent: 8, bytesPerRow: Self.tileRowBytes,
-                                      space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue
-                                        | CGImageAlphaInfo.premultipliedLast.rawValue),
-              let pixels = context.data else { throw RenderError.allocation }
-        context.translateBy(x: 0, y: CGFloat(side))
-        context.scaleBy(x: 1, y: -1)
-        UIGraphicsPushContext(context)
-        let text = String(character) as NSString
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
-        let size = text.size(withAttributes: attributes)
-        text.draw(at: CGPoint(x: (CGFloat(side) - size.width) / 2,
-                              y: (CGFloat(side) - size.height) / 2), withAttributes: attributes)
-        UIGraphicsPopContext()
-        guard let bytes = device.makeBuffer(bytes: pixels, length: Self.tileRowBytes * side,
-                                            options: .storageModeShared) else { throw RenderError.allocation }
         let x = cell % Self.columns * side
         let y = cell / Self.columns * side
         uploads.append(Upload(bytes: bytes, texture: pages[page], origin: MTLOrigin(x: x, y: y, z: 0)))
@@ -163,6 +227,11 @@ final class WaveTextRenderer {
     }
 
     func resetAtlas() {
+        atlasGeneration &+= 1
+        rasterizer.invalidate(generation: atlasGeneration)
+        preparing.removeAll(keepingCapacity: true)
+        prepared.removeAll(keepingCapacity: true)
+        failed.removeAll(keepingCapacity: true)
         glyphs.removeAll(keepingCapacity: true)
         pages.removeAll(keepingCapacity: true)
         uploads.removeAll(keepingCapacity: true)

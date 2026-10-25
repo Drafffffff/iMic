@@ -3,15 +3,26 @@ import Foundation
 struct ShellCredentials {
     let home:URL
     private let names:[String]
-    init(home:URL, names:[String]=["DASHSCOPE_API_KEY","BAILIAN_API_KEY"]) {
+    private let allowCustomToken:Bool
+    init(home:URL, names:[String]=["DASHSCOPE_API_KEY","BAILIAN_API_KEY"], allowCustomToken:Bool=false) {
         self.home=home
         self.names=names
+        self.allowCustomToken=allowCustomToken
     }
     var config:URL {home.appendingPathComponent(".zshrc").resolvingSymlinksInPath()}
     static func valid(_ key:String)->Bool {
         key.hasPrefix("sk-") && key.count>10 && key.unicodeScalars.allSatisfy {
             CharacterSet(charactersIn:"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_").contains($0)
         }
+    }
+    static func validToken(_ key:String)->Bool {
+        // A Bearer token is a literal shell value, never executable shell syntax.
+        !key.isEmpty && key.unicodeScalars.allSatisfy {
+            $0.value>32 && $0.value<127 && $0 != "'"
+        }
+    }
+    private func validKey(_ key:String)->Bool {
+        allowCustomToken ? Self.validToken(key):Self.valid(key)
     }
     private func assignment(_ line:String,_ name:String,fish:Bool=false)->String? {
         let pattern=fish ? "^\\s*set\\s+(?:-[gx]+\\s+)+\(name)\\s+(.*)$":"^\\s*(?:export\\s+)?\(name)\\s*=\\s*(.*)$"
@@ -36,13 +47,15 @@ struct ShellCredentials {
             for name in names {
                 // Last assignment has shell precedence, including an explicit clear.
                 if let value=text.components(separatedBy:"\n").reversed().compactMap({assignment($0,name,fish:fish)}).first,
-                   let key=literal(value),Self.valid(key) {return key}
+                   let key=literal(value) {
+                    if key.isEmpty || validKey(key) {return key}
+                }
             }
         }
-        return names.compactMap{environment[$0]}.first(where:Self.valid) ?? ""
+        return names.compactMap{environment[$0]}.first(where:validKey) ?? ""
     }
     func save(_ key:String, name:String)throws {
-        guard Self.valid(key) else{throw NSError(domain:"iMic.Credentials",code:1)}
+        guard (key.isEmpty || validKey(key)), names.contains(name) else{throw NSError(domain:"iMic.Credentials",code:1)}
         let file=config
         let existing=FileManager.default.fileExists(atPath:file.path) ? try String(contentsOf:file,encoding:.utf8):""
         var lines=existing.components(separatedBy:"\n")
@@ -70,18 +83,34 @@ enum MicCredentials {
     static func save(_ key:String)->Bool {do {try store.save(key);return true}catch{return false}}
 }
 
-enum DeepSeekCredentials {
-    private static let store = ShellCredentials(
-        home: FileManager.default.homeDirectoryForCurrentUser,
-        names: ["DEEPSEEK_API_KEY"]
-    )
-    static func load() -> String { store.load() }
-    static func save(_ key: String) -> Bool {
+enum PolishCredentials {
+    static func valid(_ key: String, for provider: PolishProvider) -> Bool {
+        provider == .custom ? ShellCredentials.validToken(key) : ShellCredentials.valid(key)
+    }
+    static func load(
+        for provider: PolishProvider,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> String {
+        store(for: provider, home: home).load(environment: environment)
+    }
+    static func save(
+        _ key: String, for provider: PolishProvider,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> Bool {
         do {
-            try store.save(key, name: "DEEPSEEK_API_KEY")
+            try store(for: provider, home: home).save(key, name: names(for: provider)[0])
             return true
-        } catch {
-            return false
+        } catch { return false }
+    }
+    private static func names(for provider: PolishProvider) -> [String] {
+        switch provider {
+        case .deepseek: return ["DEEPSEEK_API_KEY"]
+        case .bailian: return ["DASHSCOPE_API_KEY", "BAILIAN_API_KEY"]
+        case .custom: return ["IMIC_CUSTOM_POLISH_API_KEY"]
         }
+    }
+    private static func store(for provider: PolishProvider, home: URL) -> ShellCredentials {
+        ShellCredentials(home: home, names: names(for: provider), allowCustomToken: provider == .custom)
     }
 }

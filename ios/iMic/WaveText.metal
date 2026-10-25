@@ -38,6 +38,6 @@ vertex WaveGlyphVertex waveGlyphVertex(uint vertexID [[vertex_id]], uint instanc
 fragment float4 waveGlyphFragment(WaveGlyphVertex in [[stage_in]],
                                  texture2d<float> atlas [[texture(0)]]) {
     constexpr sampler sampling(filter::linear, address::clamp_to_edge);
-    float alpha = atlas.sample(sampling, in.uv).a * in.color.a;
+    float alpha = atlas.sample(sampling, in.uv).r * in.color.a;
     return float4(in.color.rgb * alpha, alpha);
 }

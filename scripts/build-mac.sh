@@ -6,7 +6,7 @@ VERSION=$(cat "$ROOT/VERSION")
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
 SDK=$(xcrun --sdk macosx --show-sdk-path)
 ARCH=${IMIC_ARCH:-$(uname -m)}
-OUT=${IMIC_BUILD_DIR:-"$ROOT/build/mac"}
+OUT=${IMIC_BUILD_DIR:-"$ROOT/build/mac.noindex"}
 APP="$OUT/iMic.app"
 TOOLS="$ROOT/build/tools"
 
@@ -39,6 +39,7 @@ build_binary() {
     "$ROOT/mac/ShortClipGate.swift" \
     "$ROOT/mac/SingleInstance.swift" \
     "$ROOT/mac/Permissions.swift" \
+    "$ROOT/mac/InputTarget.swift" \
     "$ROOT/mac/Brand.swift" \
     "$ROOT/mac/StatusBar.swift" \
     "$ROOT/mac/Interface.swift" \

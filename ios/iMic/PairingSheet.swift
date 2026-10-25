@@ -2,6 +2,12 @@ import SwiftUI
 import UIKit
 
 struct PairingSheet: View {
+    private enum UtilitySheet: String, Identifiable {
+        case waveforms, polishPreferences
+
+        var id: String { rawValue }
+    }
+
     @EnvironmentObject private var link: LinkClient
     @EnvironmentObject private var session: SessionModel
     @Environment(\.dismiss) private var dismiss
@@ -10,7 +16,7 @@ struct PairingSheet: View {
     @State private var code = ""
     @State private var submittedCode = ""
     @State private var showForget = false
-    @State private var showWaveforms = false
+    @State private var utilitySheet: UtilitySheet?
     @FocusState private var codeFocused: Bool
     var embedded = false
 
@@ -34,14 +40,16 @@ struct PairingSheet: View {
                         Rectangle().fill(Theme.line).frame(height: 1)
                     }
                 }
-                .presentationDetents([.height(404), .large])
+                .presentationDetents([.height(466), .large])
                 .presentationDragIndicator(.hidden)
                 .presentationBackground(Theme.ink)
             }
         }
         .onAppear {
             if case .needsCode = link.phase {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { codeFocused = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    if utilitySheet == nil { codeFocused = true }
+                }
             }
         }
         .onChange(of: link.phase) { _, phase in
@@ -50,12 +58,14 @@ struct PairingSheet: View {
                 Haptics.shared.play(.pairingSuccess)
                 codeFocused = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                    if !embedded, !showWaveforms { dismiss() }
+                    if !embedded, utilitySheet == nil { dismiss() }
                 }
             case .needsCode:
                 code = ""
                 submittedCode = ""
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { codeFocused = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    if utilitySheet == nil { codeFocused = true }
+                }
             default:
                 break
             }
@@ -76,7 +86,9 @@ struct PairingSheet: View {
             Haptics.shared.play(.pairingFailed)
             code = ""
             submittedCode = ""
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { codeFocused = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                if utilitySheet == nil { codeFocused = true }
+            }
         }
         .confirmationDialog("断开并忘记这台 Mac？", isPresented: $showForget, titleVisibility: .visible) {
             Button("断开并忘记", role: .destructive) {
@@ -90,8 +102,13 @@ struct PairingSheet: View {
         } message: {
             Text("下次连接需要重新输入配对码。")
         }
-        .sheet(isPresented: $showWaveforms) {
-            WaveformLibraryView()
+        .sheet(item: $utilitySheet) { sheet in
+            switch sheet {
+            case .waveforms:
+                WaveformLibraryView()
+            case .polishPreferences:
+                PolishPreferencesView()
+            }
         }
     }
 
@@ -341,8 +358,27 @@ struct PairingSheet: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
+                Haptics.shared.play(.tap)
                 codeFocused = false
-                showWaveforms = true
+                utilitySheet = .polishPreferences
+            } label: {
+                HStack(spacing: 12) {
+                    Text("AI 润色偏好")
+                        .font(.system(size: 12, weight: .medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    MetaLabel(text: "ON MAC", color: Theme.muted)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .accessibilityHidden(true)
+                }
+                .foregroundStyle(Theme.orange)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            Button {
+                codeFocused = false
+                utilitySheet = .waveforms
             } label: {
                 HStack {
                     Text("波形复看").font(.system(size: 12, weight: .medium))

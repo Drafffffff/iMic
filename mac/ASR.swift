@@ -88,9 +88,10 @@ private final class ASRWebSocketTransport:ASRMessageTransport {
 }
 
 final class BailianASR {
-    // The Message model produces sentence results internally. Only onFinal
-    // exposes the complete utterance after the user releases A and task-finished.
+    // Interim hypotheses and confirmed prefixes are separate callbacks; the caller
+    // chooses its preview/input policy. onFinal represents the complete utterance.
     var onPreview: ((String)->Void)?
+    var onConfirmed: ((String)->Void)?
     var previewEnabled = false
     var onFinal: ((String,Double)->Void)?
     var onError: ((String)->Void)?
@@ -114,6 +115,9 @@ final class BailianASR {
     private var finishSent=false
     private var endAt:Date?
     private var results:[Int:String]=[:]
+    private var confirmedThrough = 0
+    private var confirmedText = ""
+    private var previewCount = 0
     private var timer:Timer?
     private var startupTimer:Timer?
     private var totalBytes=0
@@ -262,11 +266,29 @@ final class BailianASR {
             if ended {
                 guard let id=sentence["sentence_id"] as? Int,id>0 else{return}
                 guard id<=4096,text.count<=24000 else{fail("识别结果过长，请缩短本次录音");return}
+                guard results[id] != text else { return }
+                let previous = confirmedText
                 results[id]=text
-                if results.values.reduce(0,{$0+$1.count})>24000{fail("识别结果过长，请缩短本次录音")}
+                guard results.values.reduce(0,{$0+$1.count})<=24000 else{fail("识别结果过长，请缩短本次录音");return}
+                if id <= confirmedThrough {
+                    confirmedText = (1...confirmedThrough).compactMap { results[$0] }.joined()
+                }
+                while let next = results[confirmedThrough + 1] {
+                    confirmedThrough += 1
+                    confirmedText += next
+                }
+                if !confirmedText.isEmpty, confirmedText != previous {
+                    onConfirmed?(confirmedText.trimmingCharacters(in:.whitespacesAndNewlines))
+                    guard !cancelled else { return }
+                    if previewEnabled {
+                        previewCount += 1
+                        onPreview?(confirmedText.trimmingCharacters(in:.whitespacesAndNewlines))
+                    }
+                }
             } else if previewEnabled {
-                let prefix=results.keys.sorted().compactMap{results[$0]}.joined()
-                onPreview?((prefix+text).trimmingCharacters(in:.whitespacesAndNewlines))
+                if let id = sentence["sentence_id"] as? Int, id != confirmedThrough + 1 { return }
+                previewCount += 1
+                onPreview?((confirmedText+text).trimmingCharacters(in:.whitespacesAndNewlines))
             }
         case "task-finished":
             guard finishSent else{fail("识别任务提前结束，请重试");return}
@@ -275,7 +297,7 @@ final class BailianASR {
             let latency=endAt.map{now.timeIntervalSince($0)*1000} ?? 0
             onMetrics?(ASRMetrics(connectionMS:readyAt.map{$0.timeIntervalSince(startedAt)*1000} ?? 0,
                 queuedAtEndMS:queuedAtEndMS,uploadTailMS:finishAt.flatMap{finish in endAt.map{finish.timeIntervalSince($0)*1000}} ?? 0,
-                serverFinalMS:finishAt.map{now.timeIntervalSince($0)*1000} ?? 0,endToFinalMS:latency,previews:0))
+                serverFinalMS:finishAt.map{now.timeIntervalSince($0)*1000} ?? 0,endToFinalMS:latency,previews:previewCount))
             cancel();onFinal?(text,latency)
         case "task-failed":
             // Display bounded code identifiers only; never echo error_message

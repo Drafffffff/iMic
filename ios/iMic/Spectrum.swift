@@ -263,13 +263,35 @@ final class WaveformInkStore {
         var angle: CGFloat = 0
         var age: CGFloat = WaveformInkStore.impactLifetime
         var amplitude: CGFloat = 0
+        var unit = CGVector(dx: 1, dy: 0)
 
         var intensity: CGFloat {
             let remaining = max(0, 1 - age / WaveformInkStore.impactLifetime)
             return amplitude * remaining * remaining
         }
 
-        var halfWidth: CGFloat { 0.16 + 0.12 * min(1, age / WaveformInkStore.impactLifetime) }
+        var halfWidth: CGFloat { 0.14 + 0.24 * min(1, age / WaveformInkStore.impactLifetime) }
+    }
+
+    /// Exact, persistent landing geometry. Unit coordinates are prepared only on ingestion.
+    /// A quadratic short arc follows the same transformed ellipse as its attached glyph.
+    struct Contact {
+        let angle: CGFloat
+        let start: CGPoint
+        let control: CGPoint
+        let end: CGPoint
+
+        init(angle: CGFloat) {
+            let turn = 2 * CGFloat.pi
+            let normalizedAngle = (angle.truncatingRemainder(dividingBy: turn) + turn)
+                .truncatingRemainder(dividingBy: turn)
+            self.angle = normalizedAngle
+            let halfWidth: CGFloat = 0.16
+            start = CGPoint(x: cos(normalizedAngle - halfWidth), y: sin(normalizedAngle - halfWidth))
+            end = CGPoint(x: cos(normalizedAngle + halfWidth), y: sin(normalizedAngle + halfWidth))
+            let controlRadius = 2 - cos(halfWidth)
+            control = CGPoint(x: cos(normalizedAngle) * controlRadius, y: sin(normalizedAngle) * controlRadius)
+        }
     }
 
     private struct Slot {
@@ -285,6 +307,11 @@ final class WaveformInkStore {
     private var nextArrival = [CGFloat](repeating: 0, count: TorusGeometry.ringCount)
     private var impacts = [Impact](repeating: Impact(),
                                   count: TorusGeometry.ringCount * impactSlotsPerRing)
+    private var contacts = [[Contact]](repeating: [], count: TorusGeometry.ringCount)
+    private var chargePhase: Double = 0
+    private var smoothedTension: CGFloat = 0
+    private(set) var chargeTension: CGFloat = 0
+    private(set) var chargeGlow: CGFloat = 0
     private var releasing = false
     var reduceMotion = false
     private(set) var releaseFlash: CGFloat = 0
@@ -295,15 +322,17 @@ final class WaveformInkStore {
         releasing = false
         // 饱和叠加：再长的文字也只趋近上限，不积出无限亮度。
         slots[ring].charge += (1 - slots[ring].charge) * weight * 0.24
+        contacts[ring].append(Contact(angle: angle))
         if !reduceMotion {
-            slots[ring].arrivalTarget += (1 - slots[ring].arrivalTarget) * weight * 0.64
+            slots[ring].arrivalTarget += (1 - slots[ring].arrivalTarget) * weight * 0.92
             let first = ring * Self.impactSlotsPerRing
             var weakest = first
             for index in first..<(first + Self.impactSlotsPerRing) {
                 if impacts[index].intensity < impacts[weakest].intensity { weakest = index }
             }
             impacts[weakest] = Impact(angle: angle.truncatingRemainder(dividingBy: 2 * .pi),
-                                     age: 0, amplitude: 0.55 + 0.45 * weight)
+                                     age: 0, amplitude: 0.55 + 0.45 * weight,
+                                     unit: CGVector(dx: cos(angle), dy: sin(angle)))
         }
     }
 
@@ -311,6 +340,8 @@ final class WaveformInkStore {
         let strength = min(1, max(0, strength))
         releasing = true
         releaseFlash = 0
+        clearCharge()
+        for index in contacts.indices { contacts[index].removeAll(keepingCapacity: true) }
         for index in impacts.indices { impacts[index].amplitude = 0 }
         for index in slots.indices {
             let local = max(slots[index].value, slots[index].charge)
@@ -328,9 +359,52 @@ final class WaveformInkStore {
             nextCharge[index] = 0
             nextArrival[index] = 0
         }
+        clearCharge()
+        for index in contacts.indices { contacts[index].removeAll(keepingCapacity: true) }
         releasing = false
         releaseFlash = 0
         for index in impacts.indices { impacts[index] = Impact() }
+    }
+
+    /// Only a live downward touch charges the load; spring overshoot cannot relight it.
+    /// Stop immediately on release/cancel, but retain landing positions until the load fires.
+    func updateCharge(tension: CGFloat, dt: Double) {
+        let tension = tension.isFinite ? min(1, max(0, tension)) : 0
+        guard tension > 0 else {
+            clearCharge()
+            return
+        }
+        chargeTension = tension
+        if reduceMotion {
+            smoothedTension = tension
+            chargePhase = 0
+            chargeGlow = tension
+            return
+        }
+        let step = dt.isFinite ? min(0.05, max(0, dt)) : 0
+        smoothedTension += (tension - smoothedTension) * CGFloat(1 - exp(-step / 0.045))
+        let frequency = 0.65 + Double(smoothedTension) * 0.70
+        chargePhase = (chargePhase + step * 2 * .pi * frequency).truncatingRemainder(dividingBy: 2 * .pi)
+        let depth = 0.06 + 0.08 * smoothedTension
+        // Increasing pressure quickens the pulse, never beyond 1.35 Hz or into a strobe.
+        chargeGlow = smoothedTension * (1 - depth + depth * CGFloat(cos(chargePhase)))
+    }
+
+    private func clearCharge() {
+        chargeTension = 0
+        chargeGlow = 0
+        smoothedTension = 0
+        chargePhase = 0
+    }
+
+    func contactCount(at ring: Int) -> Int {
+        guard contacts.indices.contains(ring) else { return 0 }
+        return contacts[ring].count
+    }
+
+    func contact(at ring: Int, slot: Int) -> Contact? {
+        guard contacts.indices.contains(ring), contacts[ring].indices.contains(slot) else { return nil }
+        return contacts[ring][slot]
     }
 
     func tick(dt: Double) {
@@ -523,6 +597,7 @@ final class SpectrumStore: ObservableObject {
             peak: displayPeak
         )
         ink.reduceMotion = stringMotion.reduceMotion
+        ink.updateCharge(tension: stringMotion.chargeTension, dt: elapsed)
         ink.tick(dt: elapsed)
         // 渲染器在弦 tick 的 defer 中读取几何，此时必须已拿到当前声帧。
         stringMotion.tick(now: now, dt: elapsed)
@@ -549,9 +624,9 @@ struct StringSpring {
     private(set) var position: CGFloat = 0
     private(set) var velocity: CGFloat = 0
     private var origin: CGFloat = 0
-    private static let dragGain: CGFloat = 0.80
-    private static let damping: CGFloat = 6.0
-    private static let frequency: CGFloat = 21
+    private static let dragGain: CGFloat = 0.72
+    private static let damping: CGFloat = 7.0
+    private static let frequency: CGFloat = 27.5
 
     static func travelLimit(height: CGFloat) -> CGFloat { max(12, height * 0.21) }
     static func threshold(height: CGFloat) -> CGFloat { travelLimit(height: height) * 0.52 }
@@ -689,6 +764,12 @@ final class StringMotionStore: ObservableObject {
     private var previousTranslation: CGFloat = 0
     private var returnEnabled = false
     private var deleteEnabled = false
+
+    /// Normalized live pull, independent of arming, return flight and spring rebound.
+    var chargeTension: CGFloat {
+        guard dragging, !cancelled, returnEnabled else { return 0 }
+        return min(1, max(0, pull / StringSpring.travelLimit(height: height)))
+    }
 
     func begin(anchor: CGFloat, height: CGFloat) {
         cancelPendingReturn()

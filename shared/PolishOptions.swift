@@ -1,6 +1,6 @@
 import Foundation
 
-enum PolishStrength: String, CaseIterable, Codable {
+public enum PolishStrength: String, CaseIterable, Codable, Sendable {
     case light, medium, heavy
 
     var title: String {
@@ -23,7 +23,7 @@ enum PolishStrength: String, CaseIterable, Codable {
     }
 }
 
-enum PolishScenario: String, CaseIterable, Codable {
+public enum PolishScenario: String, CaseIterable, Codable, Sendable {
     case general, chat, email, notes, agent
 
     var title: String {
@@ -52,11 +52,11 @@ enum PolishScenario: String, CaseIterable, Codable {
     }
 }
 
-struct PolishOptions: Equatable, Codable {
-    var strength: PolishStrength
-    var scenario: PolishScenario
+public struct PolishOptions: Equatable, Codable, Sendable {
+    public var strength: PolishStrength
+    public var scenario: PolishScenario
 
-    init(strength: PolishStrength = .medium, scenario: PolishScenario = .agent) {
+    public init(strength: PolishStrength = .medium, scenario: PolishScenario = .agent) {
         self.strength = strength
         self.scenario = scenario
     }

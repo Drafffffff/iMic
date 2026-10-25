@@ -80,7 +80,8 @@ struct DeviceSelectionView: View {
 
     private var currentTarget: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionTitle("当前目标", suffix: link.phase.isReady ? "已连接 · 加密" : "")
+            sectionTitle("当前目标", suffix: link.phase.isReady
+                         ? (link.transport == .bluetooth ? "蓝牙 · 加密" : "局域网 · 加密") : "")
             HStack(alignment: .top, spacing: 12) {
                 Rectangle().fill(Theme.orange).frame(width: 3, height: 38)
                 VStack(alignment: .leading, spacing: 6) {
@@ -108,13 +109,26 @@ struct DeviceSelectionView: View {
                 .foregroundStyle(Theme.orange)
                 .frame(minHeight: 36)
             }
+            if link.phase.isReady, link.transport == .bluetooth,
+               session.phase != .listening, session.phase != .transcribing {
+                Button("改用局域网") {
+                    Haptics.shared.play(.tap)
+                    link.reconnectUsingNetwork()
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Theme.orange)
+                .frame(minHeight: 36)
+            }
             Hairline()
         }
     }
 
     private var connectionStatus: String {
         switch link.phase {
-        case .ready: return "语音和按键将发送到这台 Mac"
+        case .ready:
+            return link.transport == .bluetooth
+                ? "蓝牙带宽有限，长录音松手后仍需补传。建议在同一 Wi-Fi 下改用局域网。"
+                : "语音和按键通过局域网发送到这台 Mac"
         case .connecting: return "正在连接所选 Mac，可稍后重试或选择其他电脑"
         case .needsCode: return "首次连接需要输入 Mac 窗口中的 6 位配对码"
         case .failed(let message): return message

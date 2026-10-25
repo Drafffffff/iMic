@@ -4,17 +4,17 @@
 
 - **iPhone 端**：SwiftUI，黑色 + 橙色像素界面，按住说话、上滑取消、触感反馈。
 - **Mac 端**：菜单栏应用。保留 Brick Mic 的百炼 ASR、辅助功能输入与权限处理，传输层改为 Apple 原生 Bonjour + Network.framework。
-- **链路**：优先局域网 Bonjour + TCP；复杂网络下可启用蓝牙 GATT 字节隧道。Curve25519 交换临时密钥，六位配对码建立信任，之后用设备令牌派生 AES-256-GCM 会话密钥。语音不经过 iMic 服务器，只在你自己的 Mac、阿里云百炼和 DeepSeek 之间传输。
+- **链路**：优先局域网 Bonjour + TCP；复杂网络下可启用蓝牙 GATT 字节隧道。Curve25519 交换临时密钥，六位配对码建立信任，之后用设备令牌派生 AES-256-GCM 会话密钥。音频由自己的 Mac 发送至百炼识别；仅在开启润色时，完整文字才发送至选定服务，不经过 iMic 服务器。
 - **中心弦**：44 个圆环由频段峰谷主导形状，低频居中、向两侧对称展开，避免人声能量长期偏在左侧。声音通过连续速度的惯性包络起落，不靠整体缩放或降低采集频率制造缓动。两端固定；下拉时弦身光滑弯曲，圆环随切线倾斜、轻微拉伸，上下轨道一起弯曲而非整块平移。松手后，弦首次向上穿过中线时才发送回车，并同步播放短弓弦释放声；重新抓住可取消待发动作。上拨删除、保持上拉加速连删、左右滑动移动光标。
-- **实时文字与波形**：iPhone 用 Apple Speech 提供本机实时文字；新增字形从录音横条分散融入真实圆环，在实际落点亮起短促暖白高光，约 160ms 内衰减，留下有上限的局部光能，随弦一起下拉蓄力。首次向上过中线成功投递回车后，已融合文字继承弦速，以高初速度整批飞出屏幕顶部；波形留在原位回弹，RX01 只作静态标记。Metal 字形图集与批量实例绘制复用弦的显示时钟，不为每个字创建视图；到达中的文字归下一轮，旧正文不重放。减少动态效果时保留静态亮度反馈，不显示落点闪光。视效不修改识别正文；Mac 的实时输入开关仅控制是否投递临时文字，不关闭本机识别。
-- **DeepSeek 润色**：可选使用 DeepSeek 官方 `deepseek-flash`，提供轻度 / 中度 / 重度和通用 / 日常聊天 / 工作邮件 / 会议笔记 / Agent 指令场景；失败自动回退原始结果，不代答、不执行口述请求。
+- **实时文字与波形**：iPhone 用 Apple Speech 提供本机实时文字；大字从横条上方出现，沿飞行过程缩小，到波形时为整个生命周期的最小尺寸。落点有约 160ms 的暖白短弧与短促火花；下拉时，所有附着文字和接触位置随张力一起提亮、呼吸。首次向上过中线排队发送回车后，文字整批加速弹射，沿上升距离持续放大并从屏幕顶部离开；波形原位回弹，RX01 保持静态。字形在后台串行生成，使用单通道 Metal 图集和按页批量绘制，复用弦的显示时钟，不逐字创建视图。减少动态效果时保留静态文字和拉力亮度，不飞入、不旋转、不循环闪烁。视效不改识别正文，也不依赖 Mac 是否显示实时预览。
+- **文字润色**：可选 DeepSeek 官方、百炼 DeepSeek 或自定义 OpenAI-compatible 服务，来源默认 DeepSeek 官方；提供三级强度与五种场景。iPhone 可修改当前 Mac 的润色开关、强度和场景，收到 Mac 明确确认才表示保存。来源、API Key、模型和地址仍在 Mac 配置；配置无效、超时或服务失败时保留完整原文，不代答、不执行口述请求。
 
 ## 下载与安装
 
 从 [GitHub Releases](https://github.com/Drafffffff/iMic/releases/latest) 下载：
 
-- `iMic-1.1.0-macOS-universal.dmg`：macOS 13+，同时支持 Apple Silicon 与 Intel。打开镜像，把 `iMic.app` 拖入「Applications」，再从应用程序中启动。
-- `iMic-1.1.0-iOS-unsigned.ipa`：iOS 17+ 的 iPhone 真机包，**未签名，不能直接点击安装**。需通过 AltStore、SideStore、Sideloadly 等工具，用自己的 Apple ID/开发团队重新签名；也可以按下方步骤从源码安装。个人团队通常需要每 7 天续签。
+- `iMic-1.2.0-macOS-universal.dmg`：macOS 13+，同时支持 Apple Silicon 与 Intel。打开镜像，把 `iMic.app` 拖入「Applications」，再从应用程序中启动。
+- `iMic-1.2.0-iOS-unsigned.ipa`：iOS 17+ 的 iPhone 真机包，**未签名，不能直接点击安装**。需通过 AltStore、SideStore、Sideloadly 等工具，用自己的 Apple ID/开发团队重新签名；也可以按下方步骤从源码安装。个人团队通常需要每 7 天续签。
 - `SHA256SUMS.txt`：下载两个安装包和此文件到同一目录后，运行 `shasum -a 256 -c SHA256SUMS.txt` 校验完整性。
 
 Mac 公开包使用 ad-hoc 签名，尚未做 Apple 公证。首次打开若被 Gatekeeper 阻止，请确认下载来源与校验和，再到「系统设置 → 隐私与安全性」中允许这一次打开；不需要关闭系统安全保护。辅助功能、本地网络与蓝牙权限仍需自行授权。
@@ -36,6 +36,8 @@ iOS Release 不是免签包，也不是 TestFlight/App Store 分发；不包含�
 ./scripts/build-mac.sh
 ./scripts/install-mac.sh
 ```
+
+开发产物默认位于 `build/mac.noindex/`，模拟器与真机派生目录分别为 `build/ios.noindex/`、`build/ios-device.noindex/`，避免被 Spotlight 当作额外应用收录。正式入口只使用 `/Applications/iMic.app`；安装脚本把旧版本备份为 `~/Library/Application Support/iMic/backups/时间戳/iMic.app.zip`，不再留下可启动的备份副本。
 
 首次启动后：
 
@@ -69,18 +71,18 @@ iOS Release 不是免签包，也不是 TestFlight/App Store 分发；不包含�
 
 ### 3. 配对
 
-Mac 窗口显示六位配对码。iPhone 点击顶部电脑名称进入「连接电脑」二级页面，查看当前目标、附近电脑与已记住的 Mac；首次选择后输入六位码。右上角天线图标仍打开配对与波形复看。各台令牌分别保存在 iPhone 钥匙串与 Mac 的 `~/Library/Application Support/iMic/paired.json`；切换不会删除旧配对，且只重连明确选定的电脑。录音或识别中切换须先确认取消，旧会话不会交给新 Mac，已识别文字仍可复制。
+Mac 窗口显示六位配对码。iPhone 点击顶部电脑名称进入「连接电脑」二级页面，查看当前目标、附近电脑与已记住的 Mac；首次选择后输入六位码。右上角天线图标打开配对、AI 润色偏好与波形复看。各台令牌分别保存在 iPhone 钥匙串与 Mac 的 `~/Library/Application Support/iMic/paired.json`；切换不会删除旧配对，且只重连明确选定的电脑。录音或识别中切换须先确认取消，旧会话不会交给新 Mac，已识别文字仍可复制。
 
 ### 4. 使用
 
 在 Mac 上点进任意输入框，按住 iPhone 底部橙色横条说话：
 
-- 松开：结束录音并识别，文字自动填入录音开始时 Mac 的前台应用。
+- 松开：结束录音并完成识别；开启实时预览后，支持范围核验或键盘兼容模式的目标可在录音期间逐字输入，完整识别和润色再差量更新本轮内容。
 - 上滑后松开：取消本次输入。
 - 少于 0.5 秒的误触会被忽略。
 - 单次最长 10 分钟，到达上限会提示并自动提交；音频补发日志与队列跟随同一上限，波形复看仍只保留每次前 60 秒。
 - 中心弦：下拉松手只启动回弹，首次向上穿过中线时才发送回车并播放发射声；上拨超过阈值后松手删除一字，保持上拉约 0.4 秒开始连删，之后约 2.2 秒内从每字 180ms 加速至 60ms；松手、明显下移或回到阈值以内停止。左右滑动移动光标。
-- Mac 设置页可以开关蓝牙兜底、三个弦手势、实时预览和 DeepSeek 润色，并可保存 DeepSeek Key。
+- Mac 设置页可开关蓝牙兜底、三个弦手势、实时预览与文字润色，并配置润色来源、Key、模型与完整地址。iPhone 的「右上角天线 → AI 润色偏好」可设置润色开关、强度、场景。开启实时预览后，支持范围验证的目标应用可边说边输入临时文字，最终识别和润色只修订本轮内容。
 
 ## 设计
 
@@ -98,7 +100,7 @@ shared/          iMic Link 协议（分帧、消息、ECDH、AES-GCM、配对码
 mac/             AppKit 菜单栏应用、Bonjour 服务、ASR、权限、文字输入
 ios/             SwiftUI iPhone 应用、XcodeGen 工程配置
 tools/           图标生成、端到端联调客户端
-tests/           协议单元测试
+tests/           协议、ASR 流式边界与润色来源行为测试
 scripts/         构建、安装、联调脚本
 docs/            协议与架构说明
 ```
@@ -109,11 +111,20 @@ docs/            协议与架构说明
 # 协议单元测试
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 
+# ASR 临时/确认句子、乱序补齐、修订、取消与会话隔离（不联网）
+./scripts/test-asr.sh
+
+# 目标输入范围、终端换行、Unicode 坐标与原稿保护（不发送按键）
+./scripts/test-input.sh
+
+# 润色来源、凭据隔离、地址安全和错误回退
+./scripts/test-polish.sh
+
 # Mac 端无界面 + 真实 ASR 的端到端测试（使用 Mac 默认音频）
 ./scripts/test-link.sh
 
 # App 界面预览
-open build/mac/iMic.app --args --ui-preview=ready
+open build/mac.noindex/iMic.app --args --ui-preview=ready
 xcrun simctl launch booted com.drafffffff.imic --ui-preview=result
 ```
 
@@ -136,16 +147,27 @@ xcrun simctl launch booted com.drafffffff.imic --ui-preview=result
 - Mac 作为 BLE 外设，iPhone 作为 BLE 中心；音频与握手字节通过 GATT 隧道转发到 Mac 的 LinkServer，协议与加密不变。
 - 首次使用需要允许 Mac 和 iPhone 使用蓝牙；macOS 若没有弹出授权，请在「系统设置 → 隐私与安全性 → 蓝牙」中允许 iMic。
 - PCM16 加帧头与 AES-GCM 至少约需 34,050 字节/秒持续上行（不含 ATT 开销）；蓝牙性能受环境影响，不保证总能实时。发送按动态 MTU 持续排空，遇系统背压等待 ready，控制帧等待最后 ATT 确认；两端都有 64 MiB 队列上限，超限明确失败，不丢掉开头继续识别尾段。
-- iPhone 在 TCP 约 3 秒内不可用时自动扫描已选择 Mac 的蓝牙身份特征；不连接任意扫描结果。Mac 和 iPhone 需同时更新；首次先在同一 Wi-Fi 选择目标并配对。
+- iPhone 在 TCP 约 3 秒内仍未建立时扫描已选择 Mac 的蓝牙身份特征；TCP 一旦建立立即取消该兜底定时器，等待用户输入配对码不再触发误降级。不会连接任意扫描结果。Mac 和 iPhone 需同时更新；首次先在同一 Wi-Fi 选择目标并配对。
 - 2026-10-25 的 iPhone 16 Pro → Mac 纯 BLE 实测：ATT 上限 512 字节，有效上行约 18–22 KB/s，低于实时所需速率；5 秒、250 帧、80,000 样本最终完整到达并确认结束。该结果说明必须保留缓存和上传状态，不能把 BLE 当成低延迟主链路；它不是所有设备/环境的速度保证。
+- 蓝牙队列只合并尚未开始发送的旧 `preview`，不替换已分片发送的加密帧，不跨越开始、结束或取消等控制屏障；音频逐帧保留，不通过丢帧缩短等待。
+- 「连接电脑」页面明确显示当前是局域网还是蓝牙。蓝牙下长录音可能在松手后继续补传；空闲时可点「改用局域网」，只重连当前选定的 Mac，不在录音或上传期间换链路。手机区分蓝牙补传与局域网剩余音频，真实排空 `audio.end` 后才进入识别等待。
 
 ## 实时预览与润色
 
-- Mac 实时输入默认关闭；本机 Apple Speech 在用户允许后独立运行，拒绝授权或不可用时不阻塞百炼最终识别。每 45 秒切换新识别分段，保留之前正文，旧分段继续排空；松手关闭音频入口并最多收尾 6 秒，不阻塞 `audio.end`。百炼完整正文就绪后先补齐输入框，再继续可选润色；迟到临时结果不覆盖完整正文。前台不匹配时不删除、不输入，结果仍可复制。
-- DeepSeek 润色默认关闭。填入 DeepSeek 官方 API Key、打开开关后，最终识别结果会先经过 `deepseek-flash` 整理；失败不会阻塞输入，直接使用原始结果。
-- 所有开关都在 Mac 设置页；iPhone 通过加密的 `settings` 消息同步功能位。
+- 实时预览在新安装中默认开启，已有开关选择保留。一旦收到 iPhone 的 Apple Speech 增量预览，本次录音持续使用手机预览；停顿产生的百炼确认句不抢占手机来源，没有手机预览时才使用百炼流式结果。完整百炼正文在录音结束后统一校正，再可选润色。
+- **范围校验模式**：保留 Chrome、苹果终端等范围接口可靠目标的原有路径；核对前台应用、输入框、光标和本轮文字后，只修订变化尾部，不全选、不设置整框 `AXValue`。键盘投递后异步确认，等待期间合并最新预览。最终结果有独立的确认时间，不继承润色前的旧期限。
+- **键盘兼容模式**：用户已授权用于 Otty、缺少范围接口的自定义编辑器，以及范围持续 1.5 秒无法同步的目标。Otty 的画面范围不代表 TUI 编辑光标，直接选择兼容模式；ChatGPT、Zed/VS Code 等缺少所需接口时自动选择。按本轮已投递文字计算退格与追加，不等待 AX 光标；界面显示「已投递」，日志记录 `mode=keyboard_compatibility`，不冒充已核验目标正文。
+- 两种模式都监视手动按键、点击及应用切换；用户接管后冻结本轮，最终回写也不能绕过。iMic 自己的按键带独立来源标记，不读取或记录按键正文。兼容模式不能独立核验目标程序自行改稿或丢弃按键，仍有重复文字或误删原稿的风险；录音期间避免在目标编辑器中混合编辑。取消、失败与新会话取消旧任务，撤回本轮未确认尾部；兼容模式依据投递记录而非 AX 内容执行。
+- 没有可用接管监视且范围不可核验时，只在结束后通过 Unicode 键盘事件投递最终结果。初次输入收起已知选区；选区不可读时使用无修饰右方向键，避免直接替换选中原稿，但光标原本位于正文中间时可能向右移动一字符。
+- iPhone 的 Apple Speech 在用户允许后独立运行；拒绝授权或不可用不阻塞百炼。每 45 秒滚动分段，保留之前正文；松手最多收尾 6 秒，但不阻塞 `audio.end`。Mac 收到完整百炼正文后忽略迟到临时预览。
+- 润色默认关闭，来源默认「DeepSeek 官方」。在设置的 `TEXT POLISH` 中选择来源并保存；切换来源只修改草稿，保存后才生效，每个来源分别记住模型与地址。
+  - **DeepSeek 官方**：独立的 `DEEPSEEK_API_KEY`，默认 `deepseek-flash`，请求使用 `thinking.type=disabled`，参见[官方 Chat Completions 文档](https://api-docs.deepseek.com/api/create-chat-completion/)。
+  - **百炼 DeepSeek**：复用顶部识别所用的百炼 Key（`DASHSCOPE_API_KEY` / `BAILIAN_API_KEY`），默认 `deepseek-v4.1-flash`，请求使用顶层 `enable_thinking=false`。默认地址为北京 DashScope 兼容端点；其他地域或工作空间需在「模型与地址」填入对应的完整 Chat Completions URL，Key 与地域须匹配，参见[百炼 DeepSeek 文档](https://help.aliyun.com/zh/model-studio/deepseek-api)。
+  - **自定义兼容服务**：独立的 `IMIC_CUSTOM_POLISH_API_KEY`，自行填写模型与以 `/chat/completions` 结尾的完整 URL。远程地址必须使用 HTTPS；只有本机 `127.0.0.1` / `[::1]` 可使用 HTTP。不跟随重定向，避免把 Key 转发到其他地址。
+  - Mac 的三类 Key 保存于 `~/.zshrc`，不互相代用；不执行该文件中的命令。无效配置或请求失败回退完整识别原文，日志不记录 Key、请求地址或正文。
+- iPhone 通过加密 `settings` 接收当前 Mac 的功能位与完整润色偏好；修改时发送 `polish.settings`，等待 `polish.saved` 明确确认。保存中禁用编辑，不把发送成功当成保存成功；离线或旧 Mac 不支持时不能修改。切换 Mac 或重连后重新读取权威状态，不自动重发旧目标的修改；手机不持久化第二套偏好，Mac 本地修改也会同步回显。Key 与服务地址不进入这些消息。
 - 上传与最终识别分别计时；iPhone 的 `audio.end` 排空后才启动结果等待，Mac 从百炼 `finish-task` 送达后计算最终识别期限。失败或断线保留本机已识别文字，可从底部「查看结果」复制，不自动投递给新电脑。
-- 润色选项直接显示为两行横排单选按钮：第一行轻度 / 中度 / 重度，第二行五种使用场景；每项都有图标和文字，选中项橙色高亮。选择后立即保存、同步说明，重新打开保持选择。轻度尽量保留原句，只修标点与同音错字；中度去口头语、重复并整理语序；重度可重组结构，但仍须保留原意、事实、问题和请求。场景只调整排版与语气，不允许新增内容或代答。
+- Mac 的润色选项为两行单选按钮：轻度 / 中度 / 重度及五种场景；手机使用对应选择项，等待 Mac 确认后更新选中值。轻度尽量保留原句，只修标点与同音错字；中度去口头语、重复并整理语序；重度可重组结构，但仍须保留原意、事实、问题和请求。场景只调整排版与语气，不允许新增内容或代答。
 
 ## 波形复看
 
@@ -161,7 +183,7 @@ xcrun simctl launch booted com.drafffffff.imic --ui-preview=result
 
 - Mac：`~/Library/Logs/iMic/iMic.log`（超过 2 MB 自动轮换到 `iMic.1.log`）。
 - iPhone：运行 `./scripts/pull-ios-log.sh`，日志会拉到 `build/logs/ios-iMic.log`。
-- BLE 日志记录 MTU、`queued`、`bytesPerSecond`，用于区分采集不足、链路积压与云端等待；不记录音频内容。
+- BLE 日志记录 MTU、`queued`、`bytesPerSecond` 与合并的预览数；TCP 日志记录建立时间、接口和配对阶段；润色日志记录来源、模型、安全的状态码与耗时，用于区分链路积压、识别和润色，不记录正文或凭据。
 - 日志包含链路状态、会话号、音频序号、缺口/补发请求、ASR 阶段和字数；不记录令牌、音频内容或识别正文。
 
 ## 音频可靠性

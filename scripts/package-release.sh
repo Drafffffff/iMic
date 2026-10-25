@@ -13,9 +13,9 @@ if [ "$#" -gt 1 ]; then
   exit 2
 fi
 OUT=${1:-$ROOT/build/release}
-mkdir -p "$OUT" "$ROOT/build"
+mkdir -p "$OUT" "$ROOT/build/release-work.noindex"
 OUT=$(cd "$OUT" && pwd -P)
-WORK=$(mktemp -d "$ROOT/build/release-work.XXXXXX")
+WORK=$(mktemp -d "$ROOT/build/release-work.noindex/run.XXXXXX")
 cleanup() {
   local status=$?
   trap - EXIT

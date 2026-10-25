@@ -56,14 +56,14 @@ xcodebuild \
   -scheme iMic \
   -configuration Release \
   -destination "id=$UDID" \
-  -derivedDataPath "$ROOT/build/ios-device" \
+  -derivedDataPath "$ROOT/build/ios-device.noindex" \
   -allowProvisioningUpdates \
   CODE_SIGN_STYLE=Automatic \
   DEVELOPMENT_TEAM="$TEAM" \
   PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
   build | tail -4
 
-APP="$ROOT/build/ios-device/Build/Products/Release-iphoneos/iMic.app"
+APP="$ROOT/build/ios-device.noindex/Build/Products/Release-iphoneos/iMic.app"
 if [ ! -d "$APP" ]; then
   echo "构建产物不存在: $APP" >&2
   exit 1

@@ -40,14 +40,14 @@ mkdir -p "$ROOT/build/tools"
 swiftc -swift-version 5 -O -target arm64-apple-macosx13.0 \
   -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
   -framework Network -framework CryptoKit \
-  "$ROOT/shared/iMicLink.swift" "$ROOT/tools/imic-client/main.swift" \
+  "$ROOT/shared/iMicLink.swift" "$ROOT/shared/PolishOptions.swift" "$ROOT/tools/imic-client/main.swift" \
   -o "$CLIENT"
 
 # 避免模拟器里的 iPhone 应用自动重连并抢走测试连接。
 xcrun simctl terminate booted com.drafffffff.imic 2>/dev/null || true
 
 echo "==> 3/4 启动无界面 Mac（端口 ${PORT}，配对码 ${CODE}）"
-"$ROOT/build/mac/iMic.app/Contents/MacOS/iMic" \
+"${IMIC_BUILD_DIR:-$ROOT/build/mac.noindex}/iMic.app/Contents/MacOS/iMic" \
   --headless --pair-code="$CODE" --no-input --port="$PORT" > "$LOG" 2>&1 &
 MAC_PID=$!
 for _ in $(seq 1 40); do

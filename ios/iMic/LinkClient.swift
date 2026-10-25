@@ -59,6 +59,12 @@ final class LinkClient: ObservableObject {
         }
     }
 
+    enum Transport: String {
+        case network
+        case bluetooth
+    }
+
+    @Published private(set) var transport: Transport?
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var macs: [DiscoveredMac] = []
     @Published private(set) var pairingError: String?
@@ -68,6 +74,10 @@ final class LinkClient: ObservableObject {
     @Published private(set) var selectedMacName: String?
     @Published private(set) var rememberedMacs: [RememberedMac] = []
     @Published private(set) var pairedMacIDs: Set<String> = []
+    @Published private(set) var polishPreferences: LinkPolishPreferences?
+    @Published private(set) var polishPreferencesSupported = false
+    @Published private(set) var polishPreferencesSaving = false
+    @Published private(set) var polishPreferencesError: String?
 
     var onReady: ((String) -> Void)?
     var onLost: (() -> Void)?
@@ -89,6 +99,8 @@ final class LinkClient: ObservableObject {
     private var ready = false
     private var running = false
     private var lastMac: DiscoveredMac?
+    private var discoveredMacs: [DiscoveredMac] = []
+    private var activeLinkSession: Int?
     private var currentMacID: String?
     private var currentMacName: String?
     private var preferredMacID: String?
@@ -107,6 +119,9 @@ final class LinkClient: ObservableObject {
     private let epochLock = NSLock()
     private var transportEpoch: UInt64 = 0
     private var pendingWrites: [UUID: (Bool) -> Void] = [:]
+    private var supportsPolishPreferences = false
+    private var pendingPolishPreferences: LinkPolishPreferences?
+    private var polishSaveGeneration: UInt64 = 0
     private var knownNames: [String: String] = [:]
 
     private let deviceID: String
@@ -242,6 +257,27 @@ final class LinkClient: ObservableObject {
         }
     }
 
+    /// 仅在空闲时主动离开蓝牙；绝不打断录音、补传或等待结果的会话。
+    func reconnectUsingNetwork() {
+        guard !isPreview else { return }
+        queue.async {
+            guard self.running, self.ready, self.usingBLE, !self.forceBLE,
+                  self.activeLinkSession == nil else { return }
+            let candidate = self.discoveredMacs.first { $0.id == self.preferredMacID }
+            IMicLog.write("iphone.link", "prefer network selected=\(self.preferredMacID ?? "-") discovered=\(candidate != nil)")
+            self.closeConnectionLocked()
+            self.reconnectAttempts = 0
+            self.needsCode = false
+            if let candidate {
+                self.connectLocked(to: candidate)
+            } else {
+                self.lastMac = nil
+                self.startBrowserLocked()
+            }
+            self.scheduleBLEFallback(after: 3)
+        }
+    }
+
     /// 调用前由 SessionModel 停止当前会话；换设备不删除任何配对令牌。
     func connect(to mac: DiscoveredMac) {
         guard !isPreview else { return }
@@ -368,6 +404,8 @@ final class LinkClient: ObservableObject {
                 return DiscoveredMac(id: id, name: name ?? "Mac", endpoint: result.endpoint)
             }
             let macs = DiscoveredMac.coalesced(candidates, preferredEndpoint: self.lastMac?.endpoint)
+            self.discoveredMacs = macs
+            IMicLog.write("iphone.link", "discovered macs=\(macs.count) selectedAvailable=\(macs.contains { $0.id == self.preferredMacID })")
             self.autoConnect(macs)
             self.publish {
                 self.macs = macs
@@ -413,7 +451,10 @@ final class LinkClient: ObservableObject {
         forcePair = false
         connectionGeneration += 1
         let generation = connectionGeneration
-        publish { self.phase = .connecting(mac.name) }
+        publish {
+            self.phase = .connecting(mac.name)
+            self.transport = nil
+        }
 
         let parameters = NWParameters.tcp
         parameters.includePeerToPeer = true
@@ -425,9 +466,14 @@ final class LinkClient: ObservableObject {
             case .ready:
                 self.waitingWork?.cancel()
                 self.waitingWork = nil
+                // TCP 已通，等待用户配对不等于网络不可用，不能再被 3 秒兜底抢走。
+                self.bleFallbackWork?.cancel()
+                self.bleFallbackWork = nil
+                IMicLog.write("iphone.link", "TCP connected endpoint=\(mac.endpoint) interfaces=\(String(describing: connection.currentPath?.availableInterfaces))")
                 self.sendHello()
                 self.receive()
             case .waiting(let error):
+                IMicLog.write("iphone.link", "TCP waiting reason=\(Self.readable(error))")
                 self.publish { self.phase = .connecting("\(mac.name) · \(Self.readable(error))") }
                 // NWConnection 在 localhost 上可能长期停在 waiting；主动关闭重连，
                 // 让「Mac 稍后才启动」也能在录音超时前接上。
@@ -549,6 +595,7 @@ final class LinkClient: ObservableObject {
             sendSealed(.auth())
             publish { self.phase = .connecting(name) }
         case "pair_required":
+            IMicLog.write("iphone.link", "waiting for pair code transport=\(usingBLE ? "ble" : "tcp")")
             if let code = autoPairCode, code.count == 6 {
                 publish { self.phase = .connecting(name) }
                 submit(code)
@@ -597,12 +644,14 @@ final class LinkClient: ObservableObject {
             needsCode = false
             bleFallbackWork?.cancel()
             bleFallbackWork = nil
-            IMicLog.write("iphone.link", "ready mac=\(currentMacName ?? "-")")
+            IMicLog.write("iphone.link", "ready mac=\(currentMacName ?? "-") transport=\(usingBLE ? "ble" : "tcp")")
             handshakeWork?.cancel()
             reconnectAttempts = 0
             let name = currentMacName ?? "Mac"
+            let transport: Transport = usingBLE ? .bluetooth : .network
             publish {
                 self.phase = .ready(name)
+                self.transport = transport
                 self.pairing = false
                 self.pairingError = nil
                 self.hasPairedMac = true
@@ -613,9 +662,30 @@ final class LinkClient: ObservableObject {
             if let phase = message.phase {
                 deliver { self.onRemoteState?(phase) }
             }
-        case "settings":
+        case "settings", "polish.saved":
+            guard ready else { return }
             let features = message.features ?? 0
-            IMicLog.write("iphone.link", "settings features=\(features)")
+            let supported = features & IMicLink.polishPreferencesFeature != 0
+            supportsPolishPreferences = supported
+            let preferences = supported ? message.polish : nil
+            let pending = pendingPolishPreferences
+            let confirmed = message.t == "polish.saved" && pending != nil
+            if confirmed || !supported { pendingPolishPreferences = nil }
+            let stillSaving = pendingPolishPreferences != nil
+            publish {
+                self.polishPreferencesSupported = supported
+                self.polishPreferences = preferences
+                if confirmed || !supported { self.polishPreferencesSaving = false }
+                if confirmed {
+                    self.polishPreferencesError = preferences == pending
+                        ? nil : "Mac 确认的值与请求不同，已显示 Mac 当前实际保存的偏好。"
+                } else if !supported, pending != nil {
+                    self.polishPreferencesError = "当前 Mac 不再支持手机修改润色偏好，请更新 Mac 端。"
+                } else if !stillSaving {
+                    self.polishPreferencesError = nil
+                }
+            }
+            IMicLog.write("iphone.link", "settings features=\(features) polishSaved=\(confirmed)")
             deliver { self.onSettings?(features) }
         case "audio.need":
             if let rawSession = message.session, let rawFrom = message.seq,
@@ -629,6 +699,7 @@ final class LinkClient: ObservableObject {
             }
         case "result", "failure":
             IMicLog.write("iphone.link", "\(message.t) session=\(message.session ?? -1) chars=\(message.text?.count ?? 0) code=\(message.code ?? "-")")
+            if message.session == activeLinkSession { activeLinkSession = nil }
             deliver { self.onResult?(message) }
         case "ping":
             sendSealed(.pong(message.ts ?? 0))
@@ -704,15 +775,25 @@ final class LinkClient: ObservableObject {
             scheduleReconnect(reason: reason)
             return
         }
-        publish { self.phase = .searching }
+        publish {
+            self.phase = .searching
+            self.transport = nil
+        }
         scheduleReconnect(reason: reason)
     }
 
+    private var hasConnectedNetwork: Bool {
+        guard let connection else { return false }
+        if case .ready = connection.state { return true }
+        return false
+    }
+
     private func scheduleBLEFallback(after delay: TimeInterval) {
-        guard running, !usingBLE else { return }
+        guard running, !usingBLE, !hasConnectedNetwork else { return }
         bleFallbackWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self = self, self.running, !self.ready, !self.usingBLE else { return }
+            guard let self = self, self.running, !self.ready, !self.usingBLE,
+                  !self.hasConnectedNetwork else { return }
             self.startBLELocked()
         }
         bleFallbackWork = work
@@ -737,6 +818,7 @@ final class LinkClient: ObservableObject {
         connection?.cancel()
         connection = nil
         ready = false
+        publish { self.transport = nil }
         decoder.reset()
         cipher = nil
         pairingCipher = nil
@@ -813,6 +895,7 @@ final class LinkClient: ObservableObject {
         pairingCipher = nil
         pendingToken = nil
         publish { self.phase = .searching }
+        publish { self.transport = nil }
         if wasReady { deliver { self.onLost?() } }
         if running {
             scheduleReconnect(reason: "蓝牙断开")
@@ -853,6 +936,7 @@ final class LinkClient: ObservableObject {
         connection?.cancel()
         connection = nil
         ready = false
+        activeLinkSession = nil
         decoder.reset()
         cipher = nil
         pairingCipher = nil
@@ -973,6 +1057,41 @@ final class LinkClient: ObservableObject {
         enqueue(.preview(text))
     }
 
+    @MainActor
+    @discardableResult
+    func updatePolishPreferences(_ preferences: LinkPolishPreferences) -> Bool {
+        guard phase.isReady, polishPreferencesSupported, polishPreferences != nil,
+              !polishPreferencesSaving else {
+            polishPreferencesError = "请先连接支持润色偏好设置的 Mac，并等待当前保存完成。"
+            return false
+        }
+        let epoch = currentEpoch()
+        polishPreferencesSaving = true
+        polishPreferencesError = nil
+        queue.async {
+            guard epoch == self.currentEpoch(), self.ready, self.supportsPolishPreferences else {
+                self.publish {
+                    self.polishPreferencesSaving = false
+                    self.polishPreferencesError = "连接已变化，保存状态待重新连接确认。"
+                }
+                return
+            }
+            self.polishSaveGeneration &+= 1
+            let generation = self.polishSaveGeneration
+            self.pendingPolishPreferences = preferences
+            self.sendSealed(.polishSettings(preferences)) { [weak self] success in
+                guard let self, !success, epoch == self.currentEpoch(),
+                      generation == self.polishSaveGeneration, self.pendingPolishPreferences != nil else { return }
+                self.pendingPolishPreferences = nil
+                self.publish {
+                    self.polishPreferencesSaving = false
+                    self.polishPreferencesError = "发送未完成，保存状态待重新连接确认。"
+                }
+            }
+        }
+        return true
+    }
+
     private func enqueue(_ message: LinkMessage, completion: ((Bool) -> Void)? = nil) {
         let epoch = currentEpoch()
         queue.async {
@@ -980,6 +1099,11 @@ final class LinkClient: ObservableObject {
                 IMicLog.write("iphone.link", "drop \(message.t) ready=false or stale target")
                 completion?(false)
                 return
+            }
+            if message.t == "audio.start" {
+                self.activeLinkSession = message.session
+            } else if message.t == "audio.cancel", message.session == self.activeLinkSession {
+                self.activeLinkSession = nil
             }
             self.sendSealed(message, completion: completion)
         }
@@ -996,10 +1120,11 @@ final class LinkClient: ObservableObject {
             completion?(false)
             return
         }
-        sendFrame(LinkFrame(kind: .sealedJSON, payload: sealed), completion: completion)
+        sendFrame(LinkFrame(kind: .sealedJSON, payload: sealed),
+                  replacingPreview: message.t == "preview", completion: completion)
     }
 
-    private func sendFrame(_ frame: LinkFrame, completion: ((Bool) -> Void)? = nil) {
+    private func sendFrame(_ frame: LinkFrame, replacingPreview: Bool = false, completion: ((Bool) -> Void)? = nil) {
         let epoch = currentEpoch()
         let generation = connectionGeneration
         let writeID = completion.map { _ in UUID() }
@@ -1012,7 +1137,8 @@ final class LinkClient: ObservableObject {
             }
         }
         if usingBLE, let ble = bleClient {
-            ble.send(LinkWire.encode(frame), completion: completion == nil ? nil : finish)
+            ble.send(LinkWire.encode(frame), replacingPreview: replacingPreview,
+                     completion: completion == nil ? nil : finish)
             return
         }
         guard let connection = connection else {
@@ -1044,6 +1170,15 @@ final class LinkClient: ObservableObject {
         epochLock.lock()
         transportEpoch &+= 1
         epochLock.unlock()
+        let hadPendingSave = pendingPolishPreferences != nil
+        pendingPolishPreferences = nil
+        supportsPolishPreferences = false
+        publish {
+            self.polishPreferences = nil
+            self.polishPreferencesSupported = false
+            self.polishPreferencesSaving = false
+            self.polishPreferencesError = hadPendingSave ? "连接已断开，保存状态待重新连接确认。" : nil
+        }
     }
 
     private func failPendingWrites() {

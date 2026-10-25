@@ -280,6 +280,7 @@ struct TorusView: View {
         let rulerTop = layout.rulerTop
         let rulerBottom = layout.rulerBottom
         let color = dimmed ? Theme.muted : Theme.orange
+        let charge = dimmed ? 0 : store.ink.chargeGlow
 
         // 左右标尺，不再画中间横线；横线由真正的弦代替。
         var ruler = Path()
@@ -333,6 +334,24 @@ struct TorusView: View {
                     highlight, with: .color(Theme.ivory.opacity(accent * 0.68)), lineWidth: 1.3)
             }
 
+            // Reawaken every retained landing, not the three short-lived impact slots.
+            // One batched path per ring keeps dense transcripts from stacking white flashes.
+            if charge > 0.001, store.ink.contactCount(at: index) > 0 {
+                var chargedContacts = Path()
+                for slot in 0..<store.ink.contactCount(at: index) {
+                    guard let contact = store.ink.contact(at: index, slot: slot) else { continue }
+                    chargedContacts.move(to: CGPoint(
+                        x: contact.start.x * ring.radiusX, y: contact.start.y * ring.radiusY))
+                    chargedContacts.addQuadCurve(
+                        to: CGPoint(x: contact.end.x * ring.radiusX, y: contact.end.y * ring.radiusY),
+                        control: CGPoint(x: contact.control.x * ring.radiusX, y: contact.control.y * ring.radiusY))
+                }
+                ringContext.stroke(chargedContacts, with: .color(Theme.orange.opacity(charge * 0.18)),
+                                   style: StrokeStyle(lineWidth: 3.2, lineCap: .round))
+                ringContext.stroke(chargedContacts, with: .color(Theme.ivory.opacity(charge * 0.62)),
+                                   style: StrokeStyle(lineWidth: 1.45, lineCap: .round))
+            }
+
             if !reduceMotion, !dimmed {
                 for slot in 0..<WaveformInkStore.impactSlotsPerRing {
                     guard let impact = store.ink.impact(at: index, slot: slot) else { continue }
@@ -348,6 +367,21 @@ struct TorusView: View {
                                        style: StrokeStyle(lineWidth: 4, lineCap: .round))
                     ringContext.stroke(contact, with: .color(Theme.ivory.opacity(intensity * 0.95)),
                                        style: StrokeStyle(lineWidth: 1.9, lineCap: .round))
+                    let progress = min(1, impact.age / WaveformInkStore.impactLifetime)
+                    let reach = 3 + 10 * progress * (2 - progress)
+                    let center = CGPoint(x: impact.unit.dx * ring.radiusX, y: impact.unit.dy * ring.radiusY)
+                    var sparks = Path()
+                    for side in 0..<2 {
+                        let direction: CGFloat = side == 0 ? -1 : 1
+                        sparks.move(to: CGPoint(
+                            x: center.x + impact.unit.dx * direction * (2 + progress * 4),
+                            y: center.y + impact.unit.dy * direction * (2 + progress * 4)))
+                        sparks.addLine(to: CGPoint(
+                            x: center.x + impact.unit.dx * direction * reach,
+                            y: center.y + impact.unit.dy * direction * reach))
+                    }
+                    ringContext.stroke(sparks, with: .color(Theme.ivory.opacity(intensity * 0.8)),
+                                       style: StrokeStyle(lineWidth: 1, lineCap: .round))
                 }
             }
         }

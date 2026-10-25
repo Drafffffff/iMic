@@ -20,6 +20,7 @@ public enum IMicLink {
     public static let minimumSamples = 8_000
     public static let handshakeTimeout: TimeInterval = 12
     public static let pairingCodeLifetime: TimeInterval = 600
+    public static let polishPreferencesFeature = 1 << 4
     public static let bleServiceUUID = "7E570000-7F4A-4C7E-9A2B-1C0D5E6F7A80"
     public static let bleUplinkUUID = "7E570001-7F4A-4C7E-9A2B-1C0D5E6F7A80"
     public static let bleDownlinkUUID = "7E570002-7F4A-4C7E-9A2B-1C0D5E6F7A80"
@@ -169,6 +170,16 @@ public struct AudioPacket: Equatable {
     }
 }
 
+public struct LinkPolishPreferences: Codable, Equatable, Sendable {
+    public var enabled: Bool
+    public var options: PolishOptions
+
+    public init(enabled: Bool, options: PolishOptions) {
+        self.enabled = enabled
+        self.options = options
+    }
+}
+
 public struct LinkMessage: Codable, Equatable {
     public var t: String
     public var v: Int?
@@ -193,6 +204,7 @@ public struct LinkMessage: Codable, Equatable {
     public var phase: String?
     public var action: String?
     public var features: Int?
+    public var polish: LinkPolishPreferences?
     public var ts: Double?
 
     public init(t: String) { self.t = t }
@@ -204,7 +216,51 @@ public struct LinkMessage: Codable, Equatable {
         case publicKey = "public_key"
         case hasToken = "has_token"
         case macID = "mac_id"
-        case name, status, token, session, seq, samples, frames, text, latency, pasted, target, code, message, phase, action, features, ts
+        case name, status, token, session, seq, samples, frames, text, latency, pasted, target, code, message, phase, action, features, polish, ts
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        t = try container.decode(String.self, forKey: .t)
+        v = try container.decodeIfPresent(Int.self, forKey: .v)
+        deviceID = try container.decodeIfPresent(String.self, forKey: .deviceID)
+        deviceName = try container.decodeIfPresent(String.self, forKey: .deviceName)
+        publicKey = try container.decodeIfPresent(String.self, forKey: .publicKey)
+        hasToken = try container.decodeIfPresent(Bool.self, forKey: .hasToken)
+        macID = try container.decodeIfPresent(String.self, forKey: .macID)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        token = try container.decodeIfPresent(String.self, forKey: .token)
+        session = try container.decodeIfPresent(Int.self, forKey: .session)
+        seq = try container.decodeIfPresent(Int.self, forKey: .seq)
+        samples = try container.decodeIfPresent(Int.self, forKey: .samples)
+        frames = try container.decodeIfPresent(Int.self, forKey: .frames)
+        text = try container.decodeIfPresent(String.self, forKey: .text)
+        latency = try container.decodeIfPresent(Double.self, forKey: .latency)
+        pasted = try container.decodeIfPresent(Bool.self, forKey: .pasted)
+        target = try container.decodeIfPresent(String.self, forKey: .target)
+        code = try container.decodeIfPresent(String.self, forKey: .code)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        phase = try container.decodeIfPresent(String.self, forKey: .phase)
+        action = try container.decodeIfPresent(String.self, forKey: .action)
+        features = try container.decodeIfPresent(Int.self, forKey: .features)
+        polish = try container.decodeIfPresent(LinkPolishPreferences.self, forKey: .polish)
+        ts = try container.decodeIfPresent(Double.self, forKey: .ts)
+
+        if t == "polish.settings" || t == "polish.saved"
+            || (t == "settings" && (features ?? 0) & IMicLink.polishPreferencesFeature != 0) {
+            guard polish != nil else {
+                throw DecodingError.keyNotFound(
+                    CodingKeys.polish,
+                    DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "润色偏好必须完整提供")
+                )
+            }
+        }
+        if t == "polish.saved", (features ?? 0) & IMicLink.polishPreferencesFeature == 0 {
+            throw DecodingError.dataCorruptedError(
+                forKey: .features, in: container, debugDescription: "保存确认必须声明润色偏好能力"
+            )
+        }
     }
 
     public static func hello(deviceID: String, deviceName: String, publicKey: String, hasToken: Bool) -> LinkMessage {
@@ -294,10 +350,25 @@ public struct LinkMessage: Codable, Equatable {
         return m
     }
 
-    /// Mac → iPhone：功能开关位。bit0 实时预览，bit1 回车，bit2 删除，bit3 光标。
-    public static func settings(features: Int) -> LinkMessage {
+    /// Mac → iPhone：功能位与当前 Mac 保存的完整润色偏好。
+    public static func settings(features: Int, polish: LinkPolishPreferences) -> LinkMessage {
         var m = LinkMessage(t: "settings")
         m.features = features
+        m.polish = polish
+        return m
+    }
+
+    /// iPhone → Mac：请求保存完整润色偏好，仅用于认证后的加密链路。
+    public static func polishSettings(_ preferences: LinkPolishPreferences) -> LinkMessage {
+        var m = LinkMessage(t: "polish.settings")
+        m.polish = preferences
+        return m
+    }
+
+    /// Mac → iPhone：本次保存请求的明确确认，不与普通状态广播混淆。
+    public static func polishSaved(features: Int, polish: LinkPolishPreferences) -> LinkMessage {
+        var m = settings(features: features, polish: polish)
+        m.t = "polish.saved"
         return m
     }
 
@@ -345,7 +416,7 @@ public struct LinkMessage: Codable, Equatable {
 
     public static func decode(_ data: Data) throws -> LinkMessage {
         do { return try JSONDecoder().decode(LinkMessage.self, from: data) }
-        catch { throw LinkError.encodingFailed }
+        catch { throw LinkError.decodingFailed }
     }
 }
 

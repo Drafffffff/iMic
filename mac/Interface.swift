@@ -619,7 +619,7 @@ extension AppDelegate {
 
         let connectionFallbackTitle = overline("BLUETOOTH FALLBACK")
         bleFallbackCheck = checkbox("局域网不可用时启用蓝牙 GATT 兜底", #selector(toggleBLEFallback), key: "bleFallback", defaultValue: true)
-        let connectionFallbackHint = label("蓝牙链路只做加密字节隧道，音频质量低于局域网。若没有弹出授权，请在系统设置 → 隐私与安全性 → 蓝牙中允许 iMic。", size: 10, color: .imicMuted)
+        let connectionFallbackHint = label("蓝牙不降低音质，但带宽较低，长录音可能需要补传。若没有弹出授权，请在系统设置 → 隐私与安全性 → 蓝牙中允许 iMic。", size: 10, color: .imicMuted)
         connectionFallbackHint.maximumNumberOfLines = 3
         let bluetoothSettings = linkButton("打开蓝牙设置…", #selector(openBluetoothSettings))
 
@@ -631,21 +631,50 @@ extension AppDelegate {
         swipeCursorCheck = checkbox("左右滑动移动光标", #selector(toggleSwipeCursor), key: "swipeCursor", defaultValue: true)
         let gestureChecks = column([snapReturnCheck, pullDeleteCheck, swipeCursorCheck], spacing: 8)
 
-        let deepseekTitle = overline("DEEPSEEK POLISH")
+        let deepseekTitle = overline("TEXT POLISH")
         deepseekCheck = checkbox("识别后润色文本", #selector(toggleDeepSeek), key: "deepseekEnabled", defaultValue: false)
-        deepseekKey.placeholderString = "DeepSeek API Key"
+        polishProviderPicker.addItems(withTitles: PolishProvider.allCases.map(\.title))
+        polishProviderPicker.selectItem(at: PolishProvider.allCases.firstIndex(of: editingPolishProvider)!)
+        polishProviderPicker.target = self
+        polishProviderPicker.action = #selector(changePolishProvider)
+        polishProviderPicker.setAccessibilityLabel("润色来源")
         deepseekKey.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         deepseekKey.bezelStyle = .roundedBezel
-        deepseekKey.setAccessibilityLabel("DeepSeek API Key")
         deepseekKey.heightAnchor.constraint(equalToConstant: 30).isActive = true
-        deepseekKey.stringValue = DeepSeekCredentials.load()
-        deepseekModel.placeholderString = DeepSeekConfiguration.model
-        deepseekModel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        deepseekModel.bezelStyle = .roundedBezel
-        deepseekModel.heightAnchor.constraint(equalToConstant: 26).isActive = true
-        deepseekModel.setAccessibilityLabel("DeepSeek 润色模型")
-        deepseekHint = label("Key 保存到 ~/.zshrc；润色失败会自动回退原始识别结果。", size: 10, color: .imicMuted)
-        deepseekHint.maximumNumberOfLines = 2
+        for field in [deepseekModel, polishEndpoint] {
+            field.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+            field.bezelStyle = .roundedBezel
+            field.heightAnchor.constraint(equalToConstant: 26).isActive = true
+            field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            field.cell?.isScrollable = true
+        }
+        deepseekModel.setAccessibilityLabel("当前来源润色模型")
+        polishEndpoint.setAccessibilityLabel("当前来源完整 Chat Completions 地址")
+        deepseekHint = label("", size: 10, color: .imicMuted)
+        deepseekHint.maximumNumberOfLines = 0
+        polishAddressHint = label("", size: 10, color: .imicMuted)
+        polishAddressHint.maximumNumberOfLines = 0
+        for hint in [deepseekHint!, polishAddressHint!] {
+            hint.usesSingleLineMode = false
+            hint.cell?.wraps = true
+            hint.cell?.isScrollable = false
+            hint.preferredMaxLayoutWidth = 448
+            hint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
+        polishAdvanced = column([
+            label("当前来源模型", size: 10, color: .imicMuted, mono: true), deepseekModel,
+            label("完整 Chat Completions 地址", size: 10, color: .imicMuted, mono: true), polishEndpoint,
+            polishAddressHint!
+        ], spacing: 6)
+        for view in polishAdvanced.arrangedSubviews { fullWidth(view, in: polishAdvanced) }
+        polishAdvancedButton = NSButton(title: "模型与地址", target: self, action: #selector(togglePolishAdvanced))
+        polishAdvancedButton.isBordered = false
+        polishAdvancedButton.imagePosition = .imageLeading
+        polishAdvancedButton.contentTintColor = .imicMuted
+        polishAdvancedButton.font = .systemFont(ofSize: 11, weight: .medium)
+        polishAdvancedButton.setButtonType(.pushOnPushOff)
+        polishAdvancedButton.alignment = .left
+        loadPolishProviderFields()
         let polishOptions = DeepSeekConfiguration.options
         polishStrengthButtons = NSSegmentedControl(
             labels: PolishStrength.allCases.map(\.title), trackingMode: .selectOne,
@@ -694,7 +723,8 @@ extension AppDelegate {
         polishOptionsHint.maximumNumberOfLines = 0
         polishOptionsHint.setAccessibilityLabel("当前润色选项说明")
         let deepseekFields = column([
-            deepseekKey, deepseekModel, deepseekHint,
+            label("润色来源", size: 10, color: .imicMuted, mono: true), polishProviderPicker,
+            deepseekKey, deepseekHint, polishAdvancedButton!, polishAdvanced!,
             label("润色强度", size: 10, color: .imicMuted, mono: true),
             polishStrengthButtons!,
             label("使用场景", size: 10, color: .imicMuted, mono: true),
@@ -705,8 +735,8 @@ extension AppDelegate {
         }
 
         let previewTitle = overline("LIVE PREVIEW")
-        livePreviewCheck = checkbox("说话时实时输入，松手后保留并差量更新", #selector(toggleLivePreview), key: "livePreview", defaultValue: false)
-        let previewHint = label("实时文本只写入录音开始时聚焦的应用；松手后保留已有内容，最终结果仅差量更新变化部分。", size: 10, color: .imicMuted)
+        livePreviewCheck = checkbox("实时预览与逐字输入", #selector(toggleLivePreview), key: "livePreview", defaultValue: true)
+        let previewHint = label("边说边输入。范围可靠时精确修订；其他编辑器使用键盘兼容模式，按本轮投递记录修订尾部。按键、点击或切换应用即停止。目标自行改稿或丢弃按键时，兼容模式仍有重复或误删风险。", size: 10, color: .imicMuted)
         previewHint.maximumNumberOfLines = 0
 
         let permissionTitle = overline("INPUT PERMISSION")

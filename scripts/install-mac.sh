@@ -2,14 +2,14 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
-SOURCE="$ROOT/build/mac/iMic.app"
+SOURCE="${IMIC_BUILD_DIR:-$ROOT/build/mac.noindex}/iMic.app"
 TARGET="/Applications/iMic.app"
 SUPPORT="$HOME/Library/Application Support/iMic"
 DRY_RUN=false
 if [ "${1:-}" = "--dry-run" ]; then DRY_RUN=true; fi
 
 if [ ! -d "$SOURCE" ]; then
-  echo "build/mac/iMic.app 不存在，请先运行 ./scripts/build-mac.sh" >&2
+  echo "$SOURCE 不存在，请先运行 ./scripts/build-mac.sh" >&2
   exit 1
 fi
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$SOURCE/Contents/Info.plist")
@@ -29,9 +29,10 @@ fi
 mkdir -p "$SUPPORT"
 if [ -d "$TARGET" ]; then
   STAMP=$(date +%Y%m%d-%H%M%S)
-  BACKUP="$SUPPORT/backups/$STAMP/iMic.app"
+  BACKUP="$SUPPORT/backups/$STAMP/iMic.app.zip"
   mkdir -p "$(dirname "$BACKUP")"
-  ditto "$TARGET" "$BACKUP"
+  ditto -c -k --sequesterRsrc --keepParent "$TARGET" "$BACKUP"
+  unzip -t -q "$BACKUP"
   echo "已备份旧版本: $BACKUP"
 fi
 

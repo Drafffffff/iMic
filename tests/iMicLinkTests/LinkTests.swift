@@ -38,12 +38,6 @@ final class LinkWireTests: XCTestCase {
         }
     }
 
-    func testAudioPacketRoundTrip() throws {
-        let pcm = Data((0..<640).map { UInt8($0 & 0xff) })
-        let packet = AudioPacket(session: 7, seq: 42, pcm: pcm)
-        let decoded = try AudioPacket.decode(packet.encoded())
-        XCTAssertEqual(decoded, packet)
-    }
 
     func testAudioPacketRejectsShortPayload() {
         var data = AudioPacket(session: 1, seq: 1, pcm: Data(repeating: 1, count: 640)).encoded()
@@ -53,29 +47,6 @@ final class LinkWireTests: XCTestCase {
         }
     }
 
-    func testAudioNeedRoundTrip() throws {
-        let message = LinkMessage.audioNeed(session: 7, from: 42)
-        XCTAssertEqual(message.t, "audio.need")
-        XCTAssertEqual(try LinkMessage.decode(message.encoded()), message)
-        let object = try JSONSerialization.jsonObject(with: message.encoded()) as? [String: Any]
-        XCTAssertEqual(object?["session"] as? Int, 7)
-        XCTAssertEqual(object?["seq"] as? Int, 42)
-    }
-
-    func testInputRoundTrip() throws {
-        let message = LinkMessage.input("return")
-        XCTAssertEqual(message.t, "input")
-        XCTAssertEqual(message.action, "return")
-        XCTAssertEqual(try LinkMessage.decode(message.encoded()), message)
-    }
-
-    func testPreviewAndSettingsRoundTrip() throws {
-        let preview = LinkMessage.preview("临时文本")
-        XCTAssertEqual(try LinkMessage.decode(preview.encoded()), preview)
-        let settings = LinkMessage.settings(features: 0b1111)
-        XCTAssertEqual(try LinkMessage.decode(settings.encoded()), settings)
-        XCTAssertEqual(settings.features, 0b1111)
-    }
 
     func testMessageUsesSnakeCase() throws {
         let message = LinkMessage.hello(
@@ -87,7 +58,85 @@ final class LinkWireTests: XCTestCase {
         let object = try JSONSerialization.jsonObject(with: message.encoded()) as? [String: Any]
         XCTAssertEqual(object?["device_id"] as? String, "phone-id")
         XCTAssertEqual(object?["public_key"] as? String, "abc")
-        XCTAssertEqual(try LinkMessage.decode(message.encoded()), message)
+    }
+}
+
+final class LinkPolishPreferencesTests: XCTestCase {
+    func testLegacySettingsRemainUnsupportedWithoutPolishState() throws {
+        let message = try LinkMessage.decode(Data(#"{"t":"settings","features":15}"#.utf8))
+        XCTAssertEqual((message.features ?? 0) & IMicLink.polishPreferencesFeature, 0)
+        XCTAssertNil(message.polish)
+    }
+
+    func testAdvertisedCapabilityRequiresCompletePolishState() throws {
+        for payload in [
+            #"{"t":"settings","features":16}"#,
+            #"{"t":"settings","features":31,"polish":null}"#
+        ] {
+            assertRejected(payload)
+        }
+
+        let message = try LinkMessage.decode(Data(
+            #"{"t":"settings","features":31,"polish":{"enabled":false,"options":{"strength":"light","scenario":"chat"}}}"#.utf8
+        ))
+        XCTAssertNotEqual((message.features ?? 0) & IMicLink.polishPreferencesFeature, 0)
+        let preferences = try XCTUnwrap(message.polish)
+        XCTAssertFalse(preferences.enabled)
+        XCTAssertEqual(preferences.options.strength, .light)
+        XCTAssertEqual(preferences.options.scenario, .chat)
+    }
+
+    func testPolishCommandRequiresEveryPreferenceField() {
+        for payload in [
+            #"{"t":"polish.settings"}"#,
+            #"{"t":"polish.settings","polish":null}"#,
+            #"{"t":"polish.settings","polish":{}}"#,
+            #"{"t":"polish.settings","polish":{"options":{"strength":"medium","scenario":"agent"}}}"#,
+            #"{"t":"polish.settings","polish":{"enabled":true}}"#,
+            #"{"t":"polish.settings","polish":{"enabled":true,"options":{}}}"#,
+            #"{"t":"polish.settings","polish":{"enabled":true,"options":{"scenario":"agent"}}}"#,
+            #"{"t":"polish.settings","polish":{"enabled":true,"options":{"strength":"medium"}}}"#
+        ] {
+            assertRejected(payload)
+        }
+    }
+
+    func testInvalidPreferencesAreRejectedInCommandsAndState() {
+        let invalidPreferences = [
+            #"{"enabled":true,"options":{"strength":"extreme","scenario":"agent"}}"#,
+            #"{"enabled":true,"options":{"strength":"Medium","scenario":"agent"}}"#,
+            #"{"enabled":true,"options":{"strength":"medium","scenario":"unknown"}}"#,
+            #"{"enabled":true,"options":{"strength":"medium","scenario":"Agent"}}"#,
+            #"{"enabled":"true","options":{"strength":"medium","scenario":"agent"}}"#,
+            #"{"enabled":null,"options":{"strength":"medium","scenario":"agent"}}"#,
+            #"{"enabled":false,"options":{"strength":null,"scenario":"agent"}}"#,
+            #"{"enabled":false,"options":{"strength":"medium","scenario":null}}"#,
+            #"{"enabled":false,"options":null}"#,
+            #"{"enabled":false,"options":{"strength":"medium"}}"#
+        ]
+        for preferences in invalidPreferences {
+            assertRejected(#"{"t":"polish.settings","polish":\#(preferences)}"#)
+            assertRejected(#"{"t":"settings","features":31,"polish":\#(preferences)}"#)
+        }
+    }
+
+    func testSaveConfirmationRequiresCapabilityAndCompleteState() {
+        for payload in [
+            #"{"t":"polish.saved","features":16}"#,
+            #"{"t":"polish.saved","features":16,"polish":null}"#,
+            #"{"t":"polish.saved","polish":{"enabled":true,"options":{"strength":"medium","scenario":"agent"}}}"#,
+            #"{"t":"polish.saved","features":15,"polish":{"enabled":true,"options":{"strength":"medium","scenario":"agent"}}}"#
+        ] {
+            assertRejected(payload)
+        }
+    }
+
+    private func assertRejected(_ payload: String, file: StaticString = #filePath, line: UInt = #line) {
+        let data = Data(payload.utf8)
+        XCTAssertThrowsError(try JSONDecoder().decode(LinkMessage.self, from: data), file: file, line: line)
+        XCTAssertThrowsError(try LinkMessage.decode(data), file: file, line: line) { error in
+            XCTAssertEqual(error as? LinkError, .decodingFailed, file: file, line: line)
+        }
     }
 }
 

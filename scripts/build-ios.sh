@@ -20,11 +20,11 @@ xcodebuild \
   -configuration Debug \
   -sdk iphonesimulator \
   -destination "$DESTINATION" \
-  -derivedDataPath "$ROOT/build/ios" \
+  -derivedDataPath "$ROOT/build/ios.noindex" \
   CODE_SIGNING_ALLOWED=NO \
   build
 
-APP="$ROOT/build/ios/Build/Products/Debug-iphonesimulator/iMic.app"
+APP="$ROOT/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app"
 echo "Built: $APP"
 
 if [ "$RUN" = true ]; then

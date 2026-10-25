@@ -41,6 +41,7 @@ final class LinkServer {
 
     var onState: ((State) -> Void)?
     var onMessage: ((LinkMessage) -> Void)?
+    var onPolishPreferences: ((LinkPolishPreferences) -> Void)?
     var onAudio: ((AudioPacket) -> Void)?
     var onPairRequest: (() -> Void)?
     var onDisconnect: (() -> Void)?
@@ -135,7 +136,7 @@ final class LinkServer {
     }
 
     private func accept(_ newConnection: NWConnection) {
-        IMicLog.write("mac.link", "accept new connection; replacing current")
+        IMicLog.write("mac.link", "accept new connection peer=\(newConnection.endpoint); replacing current")
         // 同一时间只保留最新连接；旧连接立即释放，避免僵尸链路占用识别通道。
         closeConnectionLocked(notify: true)
         connection = newConnection
@@ -228,7 +229,15 @@ final class LinkServer {
                         return
                     }
                 }
-                if message.t == "ping" {
+                if message.t == "polish.settings", let preferences = message.polish {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self,
+                              self.queue.sync(execute: { self.connection === connection && self.phase == .ready }) else { return }
+                        self.onPolishPreferences?(preferences)
+                    }
+                } else if message.t == "polish.saved" || message.t == "settings" {
+                    sendErrorAndClose("protocol", "iPhone 不能发送 Mac 的设置状态")
+                } else if message.t == "ping" {
                     try sendLocked(.pong(message.ts ?? 0))
                 } else {
                     DispatchQueue.main.async { [weak self] in self?.onMessage?(message) }

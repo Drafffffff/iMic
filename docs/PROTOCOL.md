@@ -71,12 +71,29 @@ payload[length]
 | `audio.cancel` | iPhone → Mac | `session` | 取消 |
 | `audio.need` | Mac → iPhone | `session, seq` | 请求从 `seq` 开始补发本会话音频 |
 | `input` | iPhone → Mac | `action` | 中心弦手势：`return` / `delete` / `left` / `right` |
-| `preview` | iPhone → Mac | `text` | Apple Speech 的临时转写，用于实时输入预览 |
-| `settings` | Mac → iPhone | `features` | 功能位：bit0 预览、bit1 回车、bit2 删除、bit3 光标 |
+| `preview` | iPhone → Mac | `text` | Apple Speech 的临时转写；Mac 实时预览开启且可用范围核验或已授权的键盘兼容模式时逐字投递目标应用，否则仅在 Mac 窗口显示。此为 Mac 本地输入策略，不改变消息字段与加密格式 |
+| `settings` | Mac → iPhone | `features, polish` | 完整功能状态；bit0 预览、bit1 回车、bit2 删除、bit3 光标、bit4 润色偏好设置 |
+| `polish.settings` | iPhone → Mac | `polish` | 请求当前 Mac 保存完整润色偏好；仅认证完成后的加密链路可用 |
+| `polish.saved` | Mac → iPhone | `features, polish` | 本次保存请求的明确确认，携带实际保存值；不以普通状态广播代替确认 |
 | `state` | Mac → iPhone | `session, phase` | `listening` / `transcribing` |
-| `result` | Mac → iPhone | `session, text, latency, pasted, target` | 最终文字 |
+| `result` | Mac → iPhone | `session, text, latency, pasted, target` | 最终文字；`pasted` 表示所选输入通路已完成，键盘兼容模式仅确认事件投递，不表示目标正文经独立核验 |
 | `failure` | Mac → iPhone | `session, code, message` | 识别失败 |
 | `ping` / `pong` | 双向 | `ts` | 10 秒心跳，40 秒无数据断开 |
+
+### 润色偏好与能力协商
+
+协议版本仍为 `1`，不改变握手、密钥派生或帧格式。Mac 在 `ready` 后通过加密 `settings` 发送当前功能位与已保存的完整润色偏好：
+
+```json
+{"t":"settings","features":31,"polish":{"enabled":true,"options":{"strength":"medium","scenario":"agent"}}}
+```
+
+- `IMicLink.polishPreferencesFeature = 1 << 4`：声明支持手机设置润色偏好。声明 bit4 的 `settings` 必须携带非空、完整且合法的 `polish`，否则拒绝解码；旧 Mac 不声明 bit4 且省略 `polish` 的 `settings` 仍可解码，手机明确显示不支持，不推断默认值。
+- `polish.enabled` 为必填布尔值。`polish.options` 必填，其 `strength` 只允许 `light` / `medium` / `heavy`，`scenario` 只允许 `general` / `chat` / `email` / `notes` / `agent`。即使关闭润色也必须提供完整选项；缺失、`null`、类型错误或非法枚举均拒绝，不做静默降级。
+- iPhone 仅在链路已 `ready`、Mac 声明 bit4 且没有在途保存时发送 `{"t":"polish.settings","polish":{...}}`。命令必须包含完整 `polish`，不支持局部更新。保存期间禁用控件；Mac 保存后回传完整 `polish.saved`，且值与请求一致，才表示保存成功，不能仅凭发送成功或普通 `settings` 广播显示已保存。确认必须携带 bit4 与完整偏好；若实际保存值不同，手机显示 Mac 的实际值并明确提示。断线则等待重连读取状态，不自动重发旧 Mac 的修改。
+- 偏好归当前连接的 Mac 所有。手机不持久化第二套偏好，切换 Mac 后以新 Mac 的状态为准；Mac 本地更改也通过完整 `settings` 回显。
+- 手机只接触开关、强度与场景。API Key、AI 服务来源和地址不进入这些消息。命令必须经过原有六位码或令牌认证，使用会话密钥下的 AES-GCM combined 帧及逐帧随机 nonce；明文或未认证连接不能设置偏好。
+
 
 ## 音频帧
 

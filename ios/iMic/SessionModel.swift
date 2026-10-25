@@ -518,7 +518,9 @@ final class SessionModel: ObservableObject {
         pendingEnd = true
         phase = .transcribing
         isUploading = true
-        message = "正在上传音频…"
+        message = link.transport == .bluetooth
+            ? "正在通过蓝牙补传音频，同一 Wi-Fi 下会更快…"
+            : "正在发送剩余音频…"
         stopVisualInput()
         waveformTrace.finish()
         finishLivePreview()
