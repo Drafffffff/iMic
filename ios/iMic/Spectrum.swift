@@ -256,6 +256,22 @@ enum BreathingNoise {
 /// 文字到达留下的局部光能；独立于音频 bands，不向 Home 发布逐帧状态。
 @MainActor
 final class WaveformInkStore {
+    nonisolated static let impactSlotsPerRing = 3
+    nonisolated static let impactLifetime: CGFloat = 0.16
+
+    struct Impact {
+        var angle: CGFloat = 0
+        var age: CGFloat = WaveformInkStore.impactLifetime
+        var amplitude: CGFloat = 0
+
+        var intensity: CGFloat {
+            let remaining = max(0, 1 - age / WaveformInkStore.impactLifetime)
+            return amplitude * remaining * remaining
+        }
+
+        var halfWidth: CGFloat { 0.16 + 0.12 * min(1, age / WaveformInkStore.impactLifetime) }
+    }
+
     private struct Slot {
         var charge: CGFloat = 0
         var value: CGFloat = 0
@@ -267,18 +283,27 @@ final class WaveformInkStore {
     private var slots = [Slot](repeating: Slot(), count: TorusGeometry.ringCount)
     private var nextCharge = [CGFloat](repeating: 0, count: TorusGeometry.ringCount)
     private var nextArrival = [CGFloat](repeating: 0, count: TorusGeometry.ringCount)
+    private var impacts = [Impact](repeating: Impact(),
+                                  count: TorusGeometry.ringCount * impactSlotsPerRing)
     private var releasing = false
     var reduceMotion = false
     private(set) var releaseFlash: CGFloat = 0
 
-    func deposit(at ring: Int, weight: CGFloat) {
-        guard slots.indices.contains(ring), weight.isFinite, weight > 0 else { return }
+    func deposit(at ring: Int, angle: CGFloat, weight: CGFloat) {
+        guard slots.indices.contains(ring), angle.isFinite, weight.isFinite, weight > 0 else { return }
         let weight = min(1, weight)
         releasing = false
         // 饱和叠加：再长的文字也只趋近上限，不积出无限亮度。
         slots[ring].charge += (1 - slots[ring].charge) * weight * 0.24
         if !reduceMotion {
             slots[ring].arrivalTarget += (1 - slots[ring].arrivalTarget) * weight * 0.64
+            let first = ring * Self.impactSlotsPerRing
+            var weakest = first
+            for index in first..<(first + Self.impactSlotsPerRing) {
+                if impacts[index].intensity < impacts[weakest].intensity { weakest = index }
+            }
+            impacts[weakest] = Impact(angle: angle.truncatingRemainder(dividingBy: 2 * .pi),
+                                     age: 0, amplitude: 0.55 + 0.45 * weight)
         }
     }
 
@@ -286,6 +311,7 @@ final class WaveformInkStore {
         let strength = min(1, max(0, strength))
         releasing = true
         releaseFlash = 0
+        for index in impacts.indices { impacts[index].amplitude = 0 }
         for index in slots.indices {
             let local = max(slots[index].value, slots[index].charge)
             let peak = reduceMotion ? 0 : local * (0.38 + 0.62 * strength)
@@ -304,10 +330,16 @@ final class WaveformInkStore {
         }
         releasing = false
         releaseFlash = 0
+        for index in impacts.indices { impacts[index] = Impact() }
     }
 
     func tick(dt: Double) {
         guard dt.isFinite, dt > 0 else { return }
+        let impactStep = CGFloat(min(Double(Self.impactLifetime), dt))
+        for index in impacts.indices {
+            impacts[index].age = min(Self.impactLifetime, impacts[index].age + impactStep)
+            if reduceMotion { impacts[index].amplitude = 0 }
+        }
         let dt = CGFloat(min(0.05, dt))
         let chargeSpread = min(0.20, dt * 0.7)
         let arrivalSpread = min(0.24, dt * 5)
@@ -346,10 +378,17 @@ final class WaveformInkStore {
         return min(1, slot.value * 0.78 + slot.arrival * 0.28 + slot.releasePeak * 0.70)
     }
 
-    /// 只有短弧消费到达/释放峰；累计能量仍保持橙色。
+    /// 释放余光与文字到达脉冲独立，避免把任意落点错误地画到圆环顶部。
     func accent(at ring: Int) -> CGFloat {
         guard !reduceMotion, slots.indices.contains(ring) else { return 0 }
-        return min(1, slots[ring].arrival * 0.45 + slots[ring].releasePeak)
+        return min(1, slots[ring].releasePeak)
+    }
+
+    func impact(at ring: Int, slot: Int) -> Impact? {
+        guard !reduceMotion, slots.indices.contains(ring),
+              slot >= 0, slot < Self.impactSlotsPerRing else { return nil }
+        let impact = impacts[ring * Self.impactSlotsPerRing + slot]
+        return impact.intensity > 0.01 ? impact : nil
     }
 }
 
@@ -484,7 +523,7 @@ final class SpectrumStore: ObservableObject {
             peak: displayPeak
         )
         ink.reduceMotion = stringMotion.reduceMotion
-        ink.tick(dt: dt)
+        ink.tick(dt: elapsed)
         // 渲染器在弦 tick 的 defer 中读取几何，此时必须已拿到当前声帧。
         stringMotion.tick(now: now, dt: elapsed)
     }

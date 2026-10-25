@@ -261,7 +261,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
                 ordinal &+= 1
                 let ring = Int((ordinal &* 17) % UInt64(TorusGeometry.ringCount))
                 if reduced {
-                    spectrum.ink.deposit(at: ring, weight: 0.65)
+                    spectrum.ink.deposit(at: ring, angle: CGFloat(ordinal) * 2.399963229728653, weight: 0.65)
                     continue
                 }
                 let glyph = try drawing.texture(for: character)
@@ -322,7 +322,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
                 particle.rotation = rings[particle.ring].rotation * fusion
                 if t >= 1 {
                     particle.phase = .attached
-                    spectrum.ink.deposit(at: particle.ring, weight: 0.65)
+                    spectrum.ink.deposit(at: particle.ring, angle: particle.angle, weight: 0.65)
                 }
                 append(particle)
             } else {

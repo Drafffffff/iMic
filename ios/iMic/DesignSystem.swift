@@ -332,6 +332,24 @@ struct TorusView: View {
                 ringContext.stroke(
                     highlight, with: .color(Theme.ivory.opacity(accent * 0.68)), lineWidth: 1.3)
             }
+
+            if !reduceMotion, !dimmed {
+                for slot in 0..<WaveformInkStore.impactSlotsPerRing {
+                    guard let impact = store.ink.impact(at: index, slot: slot) else { continue }
+                    let intensity = impact.intensity
+                    var contact = Path()
+                    for sample in 0...8 {
+                        let angle = impact.angle - impact.halfWidth
+                            + CGFloat(sample) * impact.halfWidth / 4
+                        let point = CGPoint(x: cos(angle) * ring.radiusX, y: sin(angle) * ring.radiusY)
+                        if sample == 0 { contact.move(to: point) } else { contact.addLine(to: point) }
+                    }
+                    ringContext.stroke(contact, with: .color(Theme.orange.opacity(intensity * 0.32)),
+                                       style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    ringContext.stroke(contact, with: .color(Theme.ivory.opacity(intensity * 0.95)),
+                                       style: StrokeStyle(lineWidth: 1.9, lineCap: .round))
+                }
+            }
         }
 
         // A fine structural spine; the rings, not a glowing travelling wave, are the hero.
