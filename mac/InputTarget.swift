@@ -31,9 +31,52 @@ enum InputRangeMatcher {
     }
 }
 
+enum InputTailTransaction {
+    enum Outcome { case applied, needsConfirmation, keyboard, blocked }
+
+    /// Selection can be recovered before a text write. Once a write was attempted,
+    /// a failure is ambiguous: never replay it through a second delivery channel.
+    static func perform(
+        select: () -> Bool, verify: () -> Bool, restoreOriginal: () -> Bool,
+        write: () -> Bool, restoreFinal: () -> Bool
+    ) -> Outcome {
+        guard select(), verify() else { return restoreOriginal() ? .keyboard : .blocked }
+        guard write() else { return .needsConfirmation }
+        return restoreFinal() ? .applied : .needsConfirmation
+    }
+}
+
 /// Prefer verified AX ranges; keyboard compatibility is explicitly authorized for
 /// unreadable/unreliable targets and stops on any external input or app switch.
 final class InputTarget {
+    /// Explicit whole-field clear, separate from streaming tail revisions. Never
+    /// issue a blind Select All against an unreadable editor, page or terminal.
+    static func clearFocusedText(pid: pid_t, completion: @escaping (Bool) -> Void) {
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+              let element = focusedElement(pid: pid) else { completion(false); return }
+        var role: CFTypeRef?
+        _ = AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
+        guard clearRoleAllowed(role as? String, valueSettable: isSettable(kAXValueAttribute, on: element)),
+              focusedElement(pid: pid).map({ CFEqual($0, element) }) == true,
+              AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, "" as CFString) == .success else {
+            completion(false); return
+        }
+        let deadline = Date().addingTimeInterval(0.35)
+        func verify() {
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+                  focusedElement(pid: pid).map({ CFEqual($0, element) }) == true else { completion(false); return }
+            var value: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value) == .success,
+               let text = value as? String, text.isEmpty { completion(true); return }
+            guard Date() < deadline else { completion(false); return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: verify)
+        }
+        verify()
+    }
+
+    static func clearRoleAllowed(_ role: String?, valueSettable: Bool) -> Bool {
+        valueSettable && [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole].contains(role ?? "")
+    }
     enum InitialPreparation { case ready, collapseSelection, changed }
     enum Validation {
         case ready
@@ -44,6 +87,25 @@ final class InputTarget {
         case verifiedRange = "verified_range"
         case keyboard = "keyboard_compatibility"
         case finalOnly = "final_only"
+    }
+    enum Replacement { case applied, pending, blocked }
+    enum PendingResolution { case none, waiting, applied(String), blocked }
+    private struct PendingReplacement {
+        let next: String
+        let deadline: Date
+        var attemptedCaretRecovery = false
+    }
+    private var pendingReplacement: PendingReplacement?
+
+    static func initialMode(bundleIdentifier: String?, canObserveRange: Bool) -> Mode {
+        // Otty exposes a rendered screen, not the TUI editor cursor. Codex's
+        // rich-text composer advertises range support but AX tail selection can
+        // leave a visible selection/formatting popover when replacement fails.
+        // Choose compatibility before any range mutation, not after a timeout.
+        switch bundleIdentifier {
+        case "io.appmakes.otty", "com.openai.codex": return .keyboard
+        default: return canObserveRange ? .verifiedRange : .keyboard
+        }
     }
 
     private let pid: pid_t
@@ -56,6 +118,8 @@ final class InputTarget {
     private(set) var mode: Mode
     var allowsStreaming: Bool { mode != .finalOnly }
     var requiresConfirmation: Bool { mode == .verifiedRange }
+    var visualElement: AXUIElement? { element }
+    var permitsVisualEffect: Bool { !userIntervened && compatibilityFocusMatches() }
     private let replacesSelectionDirectly: Bool
     private var inputMonitor: Any?
     private var applicationMonitor: NSObjectProtocol?
@@ -73,11 +137,9 @@ final class InputTarget {
             canReplace = canObserve && isSettable(kAXSelectedTextRangeAttribute, on: element)
                 && isSettable(kAXSelectedTextAttribute, on: element)
         }
-        // Otty exposes its rendered terminal screen, not the TUI editor cursor.
-        // Its advertised range interface cannot establish an editable owned tail.
-        let presentationOnly = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier == "io.appmakes.otty"
+        let bundleIdentifier = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
         return InputTarget(pid: pid, element: element, initialSelection: selection,
-                           mode: canObserve && !presentationOnly ? .verifiedRange : .keyboard,
+                           mode: initialMode(bundleIdentifier: bundleIdentifier, canObserveRange: canObserve),
                            replacesSelectionDirectly: canReplace)
     }
 
@@ -178,32 +240,90 @@ final class InputTarget {
     func replaceTail(
         previous: String, next: String, revision: TextRevision,
         keyboardRevision: (Int, String) -> Bool
-    ) -> Bool {
+    ) -> Replacement {
         guard revision.deleteCount > 0, revision.deleteCount <= previous.count,
-              case .ready = validate(previous) else { return false }
+              pendingReplacement == nil,
+              case .ready = validate(previous) else { return .blocked }
         if mode == .keyboard {
-            return keyboardRevision(revision.deleteCount, revision.insertion)
+            return keyboardRevision(revision.deleteCount, revision.insertion) ? .applied : .blocked
         }
-        guard let element, let start = ownedStart else { return false }
+        guard let element, let start = ownedStart else { return .blocked }
         if !replacesSelectionDirectly {
-            return keyboardRevision(revision.deleteCount, revision.insertion)
+            return keyboardRevision(revision.deleteCount, revision.insertion) ? .applied : .blocked
         }
         let tail = previous.suffix(revision.deleteCount)
         let range = CFRange(location: start + previous.utf16.count - tail.utf16.count, length: tail.utf16.count)
-        guard Self.setRange(range, on: element),
-              let selected = Self.text(in: range, on: element), selected.utf16.elementsEqual(tail.utf16),
-              let current = Self.selectedRange(element), Self.equal(current, range), isFocused(element) else { return false }
-        // AXSelectedText replaces exactly the verified selection, not AXValue/the complete draft.
-        guard AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, revision.insertion as CFString) == .success else { return false }
-        var caret = CFRange(location: start + next.utf16.count, length: 0)
-        guard let value = AXValueCreate(.cfRange, &caret) else { return false }
-        // A successful setter is not delivery confirmation: the caller waits for
-        // validate(next) on subsequent run-loop turns before sending another edit.
-        return AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, value) == .success
+        let outcome = InputTailTransaction.perform(
+            select: { Self.setRange(range, on: element) },
+            verify: {
+                guard self.isFocused(element),
+                      let selected = Self.text(in: range, on: element), selected.utf16.elementsEqual(tail.utf16),
+                      let current = Self.selectedRange(element) else { return false }
+                return Self.equal(current, range)
+            },
+            restoreOriginal: {
+                let caret = CFRange(location: start + previous.utf16.count, length: 0)
+                guard self.isFocused(element),
+                      Self.text(in: CFRange(location: start, length: previous.utf16.count), on: element) == previous,
+                      let current = Self.selectedRange(element),
+                      Self.equal(current, range) || Self.equal(current, caret) else { return false }
+                return (Self.equal(current, caret) || Self.setRange(caret, on: element))
+                    && self.enableKeyboardCompatibility()
+            },
+            write: {
+                guard self.isFocused(element), let current = Self.selectedRange(element),
+                      Self.equal(current, range) else { return false }
+                return AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString,
+                                                   revision.insertion as CFString) == .success
+            },
+            restoreFinal: {
+                self.isFocused(element)
+                    && Self.setRange(CFRange(location: start + next.utf16.count, length: 0), on: element)
+            }
+        )
+        switch outcome {
+        case .applied:
+            // Even a successful AX setter is not an editor acceptance receipt.
+            // Keep ownership of reconciliation so a timeout cannot replay it.
+            pendingReplacement = PendingReplacement(next: next, deadline: Date().addingTimeInterval(1.5))
+            return .pending
+        case .keyboard:
+            IMicLog.write("mac.input", "mode=keyboard_compatibility reason=ax_selection_recovered")
+            return keyboardRevision(revision.deleteCount, revision.insertion) ? .applied : .blocked
+        case .needsConfirmation:
+            pendingReplacement = PendingReplacement(next: next, deadline: Date().addingTimeInterval(0.3))
+            IMicLog.write("mac.input", "AX write outcome uncertain; reconciling without replay")
+            return .pending
+        case .blocked: return .blocked
+        }
+    }
+
+    func settlePendingReplacement() -> PendingResolution {
+        guard var pending = pendingReplacement else { return .none }
+        if case .ready = validate(pending.next) {
+            pendingReplacement = nil
+            return .applied(pending.next)
+        }
+        guard !userIntervened, let element, isFocused(element), let start = ownedStart,
+              Date() < pending.deadline else {
+            pendingReplacement = nil
+            return .blocked
+        }
+        // Recover a stranded selection only after the complete NEW span is visible
+        // and the selection is entirely inside it. Never restore a stale old caret.
+        if !pending.attemptedCaretRecovery,
+           Self.text(in: CFRange(location: start, length: pending.next.utf16.count), on: element) == pending.next,
+           let selection = Self.selectedRange(element), selection.location >= start,
+           selection.location + selection.length <= start + pending.next.utf16.count {
+            pending.attemptedCaretRecovery = true
+            pendingReplacement = pending
+            _ = Self.setRange(CFRange(location: start + pending.next.utf16.count, length: 0), on: element)
+        }
+        return .waiting
     }
 
     func enableKeyboardCompatibility() -> Bool {
-        guard inputMonitor != nil, !userIntervened, compatibilityFocusMatches() else { return false }
+        guard pendingReplacement == nil, inputMonitor != nil, !userIntervened, compatibilityFocusMatches() else { return false }
         mode = .keyboard
         return true
     }
@@ -215,7 +335,8 @@ final class InputTarget {
     }
 
     private func isFocused(_ element: AXUIElement) -> Bool {
-        guard !userIntervened, let focused = Self.focusedElement(pid: pid) else { return false }
+        guard !userIntervened, compatibilityFocusMatches(),
+              let focused = Self.focusedElement(pid: pid) else { return false }
         return CFEqual(focused, element)
     }
 

@@ -24,12 +24,13 @@ iconutil -c icns "$OUT/iMic.iconset" -o "$APP/Contents/Resources/iMic.icns"
 
 build_binary() {
   swiftc -swift-version 5 -O -target "${1}-apple-macosx13.0" -sdk "$SDK" \
-    -framework AppKit -framework Network -framework CryptoKit -framework ApplicationServices \
+    -framework AppKit -framework Network -framework CryptoKit -framework ApplicationServices -framework Vision -framework ScreenCaptureKit \
     "$ROOT/shared/iMicLink.swift" \
     "$ROOT/shared/IMicLog.swift" \
     "$ROOT/shared/DeepSeekPolicy.swift" \
     "$ROOT/shared/TextRevision.swift" \
     "$ROOT/shared/PolishOptions.swift" \
+    "$ROOT/shared/GestureControl.swift" \
     "$ROOT/mac/DeepSeek.swift" \
     "$ROOT/mac/BLEBridge.swift" \
     "$ROOT/mac/PairingStore.swift" \
@@ -40,6 +41,8 @@ build_binary() {
     "$ROOT/mac/SingleInstance.swift" \
     "$ROOT/mac/Permissions.swift" \
     "$ROOT/mac/InputTarget.swift" \
+    "$ROOT/mac/PolishPresentation.swift" \
+    "$ROOT/mac/TextPolishEffect.swift" \
     "$ROOT/mac/Brand.swift" \
     "$ROOT/mac/StatusBar.swift" \
     "$ROOT/mac/Interface.swift" \
@@ -76,6 +79,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>NSHighResolutionCapable</key><true/>
 <key>NSLocalNetworkUsageDescription</key><string>iMic 通过本地网络或点对点链路与你的 iPhone 建立加密语音连接。</string>
 <key>NSBluetoothAlwaysUsageDescription</key><string>iMic 在局域网不可用时通过蓝牙点对点连接 iPhone。</string>
+<key>NSScreenCaptureUsageDescription</key><string>iMic 仅在本机识别目标输入框的文字位置，用于润色完成时的扫光效果，不保存或上传截图。</string>
 <key>NSBonjourServices</key><array><string>_imic._tcp</string></array>
 <key>NSHumanReadableCopyright</key><string>iMic · 语音输入，少一步。</string>
 </dict></plist>
@@ -86,7 +90,7 @@ ditto "$ROOT/licenses" "$APP/Contents/Resources/Legal/licenses"
 
 
 # 使用开发者证书可以保持辅助功能授权在重新编译后继续有效。
-IDENTITY=${IMIC_SIGNING_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development/ {print $2; exit}')}
+IDENTITY=${IMIC_SIGNING_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | awk '/Apple Development/ {print $2; exit}')}
 if [ -z "$IDENTITY" ]; then
   echo "warning: no Apple Development identity found; signing ad hoc (permissions may need re-approval after rebuild)" >&2
   IDENTITY="-"

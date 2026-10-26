@@ -162,17 +162,18 @@ enum DeepSeekClient {
         return request
     }
 
+    @discardableResult
     static func polish(
         text: String, key: String, model: String, endpoint: String,
         provider: PolishProvider, options: PolishOptions,
         session: URLSession? = nil,
         completion: @escaping (String?) -> Void
-    ) {
+    ) -> URLSessionDataTask? {
         guard !text.isEmpty,
               let request = try? request(text: text, key: key, model: model, endpoint: endpoint, provider: provider, options: options) else {
             IMicLog.write("mac.polish", "skipped provider=\(provider.rawValue) reason=invalid_configuration")
             DispatchQueue.main.async { completion(nil) }
-            return
+            return nil
         }
         let started = Date()
         let modelIsSafe = model.count <= 80 && model != key && !model.hasPrefix("sk-")
@@ -181,7 +182,7 @@ enum DeepSeekClient {
                     || $0 == 45 || $0 == 46 || $0 == 47 || $0 == 58 || $0 == 95
             }
         let diagnosticModel = modelIsSafe ? model : "redacted"
-        (session ?? Self.session).dataTask(with: request) { data, response, error in
+        let task = (session ?? Self.session).dataTask(with: request) { data, response, error in
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             let result = error == nil ? acceptedContent(data: data, status: status, raw: text) : nil
             let milliseconds = Int(Date().timeIntervalSince(started) * 1000)
@@ -189,7 +190,9 @@ enum DeepSeekClient {
             let code = (error as NSError?)?.code ?? 0
             IMicLog.write("mac.polish", "\(result == nil ? "fallback" : "ok") provider=\(provider.rawValue) model=\(diagnosticModel) status=\(status) code=\(code) in=\(text.count) out=\(result?.count ?? 0) ms=\(milliseconds)")
             DispatchQueue.main.async { completion(result) }
-        }.resume()
+        }
+        task.resume()
+        return task
     }
 
     static func acceptedContent(data: Data?, status: Int, raw: String) -> String? {

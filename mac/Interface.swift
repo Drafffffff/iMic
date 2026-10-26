@@ -739,6 +739,12 @@ extension AppDelegate {
         let previewHint = label("边说边输入。范围可靠时精确修订；其他编辑器使用键盘兼容模式，按本轮投递记录修订尾部。按键、点击或切换应用即停止。目标自行改稿或丢弃按键时，兼容模式仍有重复或误删风险。", size: 10, color: .imicMuted)
         previewHint.maximumNumberOfLines = 0
 
+        let sweepTitle = overline("POLISH SWEEP · TEST")
+        polishSweepCheck = checkbox("润色完成时扫光", #selector(togglePolishSweep), key: "polishSweep", defaultValue: true)
+        polishSweepHint = label("先逐行扫光，等待时保持蓄能，结果写入后释放。仅本机 OCR，不保存截图；定位失败直接输入。需要 macOS 14+ 和屏幕录制权限。", size: 10, color: .imicMuted)
+        polishSweepHint.maximumNumberOfLines = 0
+        let sweepPermission = linkButton("允许屏幕录制…", #selector(requestSweepPermission))
+
         let permissionTitle = overline("INPUT PERMISSION")
         settingsPermissionLabel.font = .systemFont(ofSize: 11)
         settingsPermissionLabel.maximumNumberOfLines = 2
@@ -767,6 +773,8 @@ extension AppDelegate {
             divider(),
             previewTitle, livePreviewCheck, previewHint,
             divider(),
+            sweepTitle, polishSweepCheck, polishSweepHint, sweepPermission,
+            divider(),
             permissionTitle, settingsPermissionLabel, permissionActions,
             footer
         ], spacing: 14)
@@ -775,6 +783,7 @@ extension AppDelegate {
                      gestureTitle, gestureHint, gestureChecks,
                      deepseekTitle, deepseekCheck, deepseekFields,
                      previewTitle, livePreviewCheck, previewHint,
+                     sweepTitle, polishSweepCheck, polishSweepHint, sweepPermission,
                      permissionTitle, settingsPermissionLabel, permissionActions, footer] as [NSView] {
             fullWidth(view, in: scrollContent)
         }

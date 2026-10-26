@@ -14,6 +14,9 @@ final class Haptics {
         case recordingStarted
         case release
         case bowArmed
+        case stringNotchLow
+        case stringNotchHigh
+        case stringSnap
         case cancelArmed
         case cancelDisarmed
         case cancelled
@@ -129,6 +132,7 @@ final class Haptics {
         case .codeDigit: return 0.03
         case .connected, .pairingSuccess, .result: return 0.4
         case .recordingStarted: return 0.15
+        case .stringNotchLow, .stringNotchHigh: return 0.045
         default: return 0.06
         }
     }
@@ -139,7 +143,7 @@ final class Haptics {
         do {
             let engine = try CHHapticEngine()
             engine.playsHapticsOnly = true
-            engine.isAutoShutdownEnabled = false
+            engine.isAutoShutdownEnabled = true
             engine.stoppedHandler = { [weak self] reason in
                 Task { @MainActor in
                     guard let self, self.engineGeneration == generation else { return }
@@ -209,6 +213,9 @@ final class Haptics {
         )
         patterns[.release] = pattern([(0, 0.3, 0.25)])
         patterns[.bowArmed] = pattern([(0, 0.28, 0.78)])
+        patterns[.stringNotchLow] = pattern([(0, 0.48, 0.83)], continuous: (0, 0.018, 0.12, 0.6))
+        patterns[.stringNotchHigh] = pattern([(0, 0.80, 0.98)], continuous: (0, 0.022, 0.22, 0.75))
+        patterns[.stringSnap] = pattern([(0, 1, 0.92), (0.075, 0.38, 0.7)], continuous: (0, 0.045, 0.45, 0.45))
         patterns[.cancelArmed] = pattern([(0, 0.55, 0.8), (0.05, 0.4, 0.7)])
         patterns[.cancelDisarmed] = pattern([(0, 0.25, 0.4)])
         patterns[.cancelled] = pattern([(0, 0.6, 0.4), (0.08, 0.3, 0.2)])
@@ -284,6 +291,10 @@ final class Haptics {
             soft.impactOccurred(intensity: 0.6)
         case .bowArmed:
             rigid.impactOccurred(intensity: 0.35)
+        case .stringNotchLow, .stringNotchHigh:
+            rigid.impactOccurred(intensity: event == .stringNotchHigh ? 0.9 : 0.55)
+        case .stringSnap:
+            heavy.impactOccurred(intensity: 1)
         case .cancelArmed, .cancelDisarmed:
             rigid.impactOccurred(intensity: event == .cancelArmed ? 0.8 : 0.45)
         case .cancelled, .warning, .tooShort:

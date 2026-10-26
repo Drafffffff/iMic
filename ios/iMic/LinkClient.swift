@@ -2,7 +2,10 @@ import Foundation
 import Network
 import CryptoKit
 import Security
+import Combine
+#if canImport(UIKit)
 import UIKit
+#endif
 
 struct DiscoveredMac: Identifiable {
     let id: String
@@ -79,6 +82,15 @@ final class LinkClient: ObservableObject {
     @Published private(set) var polishPreferencesSaving = false
     @Published private(set) var polishPreferencesError: String?
 
+    @Published private(set) var gestureReady = false
+    @Published private(set) var gestureSupported = false
+    @Published private(set) var clearPending = false
+    private var gestureRevision: Int?
+    private var remoteGestureRevision: Int?
+    private var remoteGestureReady = false
+    private var pendingClearRevision: Int?
+    var onInputResult: ((LinkMessage) -> Void)?
+
     var onReady: ((String) -> Void)?
     var onLost: (() -> Void)?
     var onResult: ((LinkMessage) -> Void)?
@@ -111,6 +123,10 @@ final class LinkClient: ObservableObject {
     private var handshakeWork: DispatchWorkItem?
     private var waitingWork: DispatchWorkItem?
     private var reconnectAttempts = 0
+    private var backgroundAt: TimeInterval?
+    private var foregroundProbe: (stamp: Double, started: TimeInterval)?
+    private var foregroundProbeWork: DispatchWorkItem?
+    private var foregroundRestartEpoch: UInt64?
     private var connectionGeneration = 0
     private var bleClient: BLELinkClient?
     private var usingBLE = false
@@ -139,7 +155,11 @@ final class LinkClient: ObservableObject {
             UserDefaults.standard.set(value, forKey: "imic.deviceID")
             deviceID = value
         }
+        #if canImport(UIKit)
         deviceName = UIDevice.current.name.isEmpty ? "iPhone" : String(UIDevice.current.name.prefix(48))
+        #else
+        deviceName = "iMic reconnect test"
+        #endif
         preferredMacID = UserDefaults.standard.string(forKey: "imic.preferredMacID")
 
         #if DEBUG
@@ -200,6 +220,18 @@ final class LinkClient: ObservableObject {
             default: phase = .ready(name)
             }
             hasPairedMac = phase.isReady
+            gestureReady = phase.isReady
+            gestureSupported = true
+            gestureRevision = 1
+            remoteGestureRevision = 1
+            remoteGestureReady = true
+            #if DEBUG
+            // 仅为设置页静态排版预览提供示例；真实链路仍只接受 Mac 回显。
+            if mode == "settings" {
+                polishPreferencesSupported = true
+                polishPreferences = LinkPolishPreferences(enabled: true, options: .default)
+            }
+            #endif
         }
     }
 
@@ -229,8 +261,80 @@ final class LinkClient: ObservableObject {
             return
         }
         queue.async {
-            if self.connection == nil, !self.usingBLE, let mac = self.lastMac {
-                self.connectLocked(to: mac)
+            guard self.foregroundRestartEpoch == nil else { return }
+            let returning = self.backgroundAt != nil
+            self.backgroundAt = nil
+            self.reconnectAttempts = 0
+            self.reconnectWork?.cancel()
+            self.reconnectWork = nil
+            if self.ready, returning {
+                self.probeForegroundLocked()
+            } else if !self.ready, !self.needsCode,
+                      returning || (self.connection == nil && !self.usingBLE) {
+                self.restartForegroundLocked(reason: "返回前台")
+            }
+        }
+    }
+
+    /// Keep a live session available for final results; foreground will verify it afresh.
+    func enterBackground() {
+        guard !isPreview else { return }
+        queue.async {
+            self.backgroundAt = ProcessInfo.processInfo.systemUptime
+            self.foregroundProbeWork?.cancel()
+            self.foregroundProbeWork = nil
+            self.foregroundProbe = nil
+        }
+    }
+
+    private func probeForegroundLocked() {
+        guard foregroundProbe == nil else { return }
+        let stamp = Date().timeIntervalSince1970
+        let started = ProcessInfo.processInfo.systemUptime
+        foregroundProbe = (stamp, started)
+        let epoch = currentEpoch()
+        let name = currentMacName ?? "Mac"
+        publish { self.phase = .connecting(name); self.gestureReady = false }
+        IMicLog.write("iphone.link", "foreground probe transport=\(usingBLE ? "ble" : "tcp")")
+        sendSealed(.ping(stamp))
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.currentEpoch() == epoch,
+                  self.foregroundProbe?.stamp == stamp else { return }
+            self.restartForegroundLocked(reason: "前台存活检查超时")
+        }
+        foregroundProbeWork = work
+        queue.asyncAfter(deadline: .now() + (usingBLE ? 1.5 : 0.8), execute: work)
+    }
+
+    /// Publish the loss before a new epoch starts, so a pending voice session cannot
+    /// silently survive on a replacement socket. No reconnect backoff on foreground.
+    private func restartForegroundLocked(reason: String) {
+        // A new recording buffered during this probe never used the old socket.
+        // Only an announced old session must be failed on replacement.
+        let notifyLoss = activeLinkSession != nil
+        let name = currentMacName ?? "Mac"
+        let mac = discoveredMacs.first(where: { $0.id == preferredMacID }) ?? lastMac ?? directMac
+        closeConnectionLocked()
+        let epoch = currentEpoch()
+        foregroundRestartEpoch = epoch
+        reconnectAttempts = 0
+        IMicLog.write("iphone.link", "foreground reconnect reason=\(reason)")
+        publish {
+            self.phase = mac == nil ? .searching : .connecting(name)
+            self.transport = nil
+            if notifyLoss { self.onLost?() }
+            self.queue.async {
+                guard self.running, self.currentEpoch() == epoch else { return }
+                self.foregroundRestartEpoch = nil
+                if self.forceBLE {
+                    self.startBLELocked()
+                } else {
+                    if self.directMac == nil { self.startBrowserLocked() }
+                    if let mac {
+                        self.connectLocked(to: mac)
+                    }
+                    self.scheduleBLEFallback(after: 3)
+                }
             }
         }
     }
@@ -657,6 +761,17 @@ final class LinkClient: ObservableObject {
                 self.hasPairedMac = true
             }
             deliver { self.onReady?(name) }
+        case "input.state":
+            guard ready, let revision = message.seq else { return }
+            remoteGestureRevision = revision
+            remoteGestureReady = message.status == "ready"
+            let available = remoteGestureReady
+            publish { self.gestureReady = available; self.gestureRevision = revision }
+        case "input.result":
+            guard let revision = message.seq, revision == pendingClearRevision else { return }
+            pendingClearRevision = nil
+            publish { self.clearPending = false }
+            deliver { self.onInputResult?(message) }
         case "state":
             IMicLog.write("iphone.link", "state=\(message.phase ?? "?") session=\(message.session ?? -1)")
             if let phase = message.phase {
@@ -673,6 +788,8 @@ final class LinkClient: ObservableObject {
             if confirmed || !supported { pendingPolishPreferences = nil }
             let stillSaving = pendingPolishPreferences != nil
             publish {
+                self.gestureSupported = features & IMicLink.gestureControlFeature != 0
+                if !self.gestureSupported { self.gestureReady = false }
                 self.polishPreferencesSupported = supported
                 self.polishPreferences = preferences
                 if confirmed || !supported { self.polishPreferencesSaving = false }
@@ -703,6 +820,17 @@ final class LinkClient: ObservableObject {
             deliver { self.onResult?(message) }
         case "ping":
             sendSealed(.pong(message.ts ?? 0))
+        case "pong":
+            guard let probe = foregroundProbe, message.ts == probe.stamp else { return }
+            foregroundProbeWork?.cancel()
+            foregroundProbeWork = nil
+            foregroundProbe = nil
+            let elapsed = ProcessInfo.processInfo.systemUptime - probe.started
+            let name = currentMacName ?? "Mac"
+            let gestures = remoteGestureReady
+            IMicLog.write("iphone.link", "foreground alive latency_ms=\(Int(elapsed * 1000))")
+            publish { self.phase = .ready(name); self.gestureReady = gestures }
+            deliver { self.onReady?(name) }
         default:
             break
         }
@@ -747,6 +875,7 @@ final class LinkClient: ObservableObject {
 
     private func connectionLost(generation: Int, reason: String) {
         guard generation == connectionGeneration else { return }
+        if foregroundProbe != nil { restartForegroundLocked(reason: reason); return }
         invalidateEpoch()
         failPendingWrites()
         let wasReady = ready
@@ -789,6 +918,9 @@ final class LinkClient: ObservableObject {
     }
 
     private func scheduleBLEFallback(after delay: TimeInterval) {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--debug-no-ble-fallback") { return }
+        #endif
         guard running, !usingBLE, !hasConnectedNetwork else { return }
         bleFallbackWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -882,6 +1014,7 @@ final class LinkClient: ObservableObject {
 
     private func bleLost(_ ble: BLELinkClient) {
         guard usingBLE, bleClient === ble else { return }
+        if foregroundProbe != nil { restartForegroundLocked(reason: "蓝牙前台连接失效"); return }
         IMicLog.write("iphone.link", "BLE lost")
         let wasReady = ready
         invalidateEpoch()
@@ -924,6 +1057,10 @@ final class LinkClient: ObservableObject {
     }
 
     private func closeConnectionLocked() {
+        foregroundRestartEpoch = nil
+        foregroundProbeWork?.cancel()
+        foregroundProbeWork = nil
+        foregroundProbe = nil
         invalidateEpoch()
         failPendingWrites()
         reconnectWork?.cancel()
@@ -1048,9 +1185,23 @@ final class LinkClient: ObservableObject {
         enqueue(.audioCancel(session: Int(session)))
     }
 
-    func sendInput(_ action: String) {
-        IMicLog.write("iphone.link", "send input=\(action)")
-        enqueue(.input(action))
+    @discardableResult
+    func sendInput(_ action: String) -> Bool {
+        guard phase.isReady, gestureSupported, gestureReady, !clearPending,
+              let revision = gestureRevision else { return false }
+        if action == "clear" { clearPending = true }
+        if isPreview {
+            if action == "clear" {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    self.clearPending = false
+                    self.onInputResult?(.inputResult(revision: revision, applied: true))
+                }
+            }
+            return true
+        }
+        IMicLog.write("iphone.link", "send input=\(action) revision=\(revision)")
+        enqueue(.input(action, revision: revision))
+        return true
     }
 
     func sendPreview(_ text: String) {
@@ -1068,6 +1219,23 @@ final class LinkClient: ObservableObject {
         let epoch = currentEpoch()
         polishPreferencesSaving = true
         polishPreferencesError = nil
+        #if DEBUG
+        if isPreview {
+            // Isolated UI fixture: no network command and no persistent settings.
+            let arguments = ProcessInfo.processInfo.arguments
+            let delay = arguments.contains("--debug-polish-save-slow") ? 5.0 : 0.8
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, epoch == self.currentEpoch() else { return }
+                if arguments.contains("--debug-polish-save-failure") {
+                    self.polishPreferencesError = "预览：Mac 未确认，本次选择未保存。"
+                } else {
+                    self.polishPreferences = preferences
+                }
+                self.polishPreferencesSaving = false
+            }
+            return true
+        }
+        #endif
         queue.async {
             guard epoch == self.currentEpoch(), self.ready, self.supportsPolishPreferences else {
                 self.publish {
@@ -1098,7 +1266,22 @@ final class LinkClient: ObservableObject {
             guard epoch == self.currentEpoch(), self.ready else {
                 IMicLog.write("iphone.link", "drop \(message.t) ready=false or stale target")
                 completion?(false)
+                if message.t == "input", message.action == "clear", let revision = message.seq {
+                    self.publish { self.clearPending = false }
+                    self.deliver { self.onInputResult?(.inputResult(revision: revision, applied: false, message: "连接已变化，清空未执行")) }
+                }
                 return
+            }
+            if message.t == "input" {
+                guard self.remoteGestureReady, self.remoteGestureRevision == message.seq,
+                      self.activeLinkSession == nil else {
+                    if message.action == "clear", let revision = message.seq {
+                        self.publish { self.clearPending = false }
+                        self.deliver { self.onInputResult?(.inputResult(revision: revision, applied: false, message: "Mac 仍在处理中，请稍后重试")) }
+                    }
+                    return
+                }
+                if message.action == "clear" { self.pendingClearRevision = message.seq }
             }
             if message.t == "audio.start" {
                 self.activeLinkSession = message.session
@@ -1173,7 +1356,14 @@ final class LinkClient: ObservableObject {
         let hadPendingSave = pendingPolishPreferences != nil
         pendingPolishPreferences = nil
         supportsPolishPreferences = false
+        remoteGestureRevision = nil
+        remoteGestureReady = false
+        pendingClearRevision = nil
         publish {
+            self.gestureRevision = nil
+            self.gestureReady = false
+            self.gestureSupported = false
+            self.clearPending = false
             self.polishPreferences = nil
             self.polishPreferencesSupported = false
             self.polishPreferencesSaving = false

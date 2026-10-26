@@ -228,6 +228,33 @@ struct SpectrumFrame {
     var level: CGFloat
     /// 带保持时间的峰值包络（0…1），用于外层余辉。
     var peak: CGFloat
+    /// Only decorative motion fades; live audio, spring physics and text keep real time.
+    var ambientIntensity: CGFloat = 1
+}
+
+/// No separate timer: the shared display clock evaluates a forty-second hold,
+/// then a four-second smooth fade. A fresh interaction ramps the decoration back in.
+struct AmbientMotionEnvelope {
+    static let holdDuration: Double = 40
+    static let fadeDuration: Double = 4
+    private(set) var lastActivity: Double = 0
+    private(set) var intensity: CGFloat = 1
+
+    mutating func noteActivity(at time: Double) { lastActivity = time }
+
+    func target(at time: Double) -> CGFloat {
+        let progress = min(1, max(0, (time - lastActivity - Self.holdDuration) / Self.fadeDuration))
+        return CGFloat(1 - progress * progress * (3 - 2 * progress))
+    }
+
+    mutating func advance(at time: Double, dt: Double) -> CGFloat {
+        let next = target(at: time)
+        if next > intensity {
+            intensity += (next - intensity) * CGFloat(1 - exp(-max(0, dt) / 0.18))
+            if intensity > 0.999 { intensity = 1 }
+        } else { intensity = next }
+        return intensity
+    }
 }
 
 /// 一维平滑值噪声，供呼吸纹理和全局呼吸共用。
@@ -315,9 +342,11 @@ final class WaveformInkStore {
     private var releasing = false
     var reduceMotion = false
     private(set) var releaseFlash: CGFloat = 0
+    var onActivity: (() -> Void)?
 
     func deposit(at ring: Int, angle: CGFloat, weight: CGFloat) {
         guard slots.indices.contains(ring), angle.isFinite, weight.isFinite, weight > 0 else { return }
+        onActivity?()
         let weight = min(1, weight)
         releasing = false
         // 饱和叠加：再长的文字也只趋近上限，不积出无限亮度。
@@ -337,6 +366,7 @@ final class WaveformInkStore {
     }
 
     func release(strength: CGFloat) {
+        onActivity?()
         let strength = min(1, max(0, strength))
         releasing = true
         releaseFlash = 0
@@ -482,6 +512,16 @@ final class SpectrumStore: ObservableObject {
     private var noiseTime: Double = 0
     private var lastTick: CFTimeInterval = 0
     private var displayLink: CADisplayLink?
+    private var visible = false
+    private var activeUntil: CFTimeInterval = 0
+    private var ambientMotion = AmbientMotionEnvelope()
+    private var ambientEnabled = false
+    private var ambientReduced = false
+    private var highRefresh = true
+    #if DEBUG
+    private(set) var renderedTicks: UInt64 = 0
+    var ambientIdleDuration: Double { CACurrentMediaTime() - ambientMotion.lastActivity }
+    #endif
     private let proxy = DisplayLinkProxy()
     let stringMotion = StringMotionStore()
     let ink = WaveformInkStore()
@@ -495,21 +535,58 @@ final class SpectrumStore: ObservableObject {
         proxy.store = self
         let link = CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.tick(_:)))
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        link.isPaused = true
         link.add(to: .main, forMode: .common)
         displayLink = link
-        lastTick = CACurrentMediaTime()
+        stringMotion.onActivity = { [weak self] in self?.wake() }
+        ink.onActivity = { [weak self] in self?.wake() }
     }
 
     deinit {
         displayLink?.invalidate()
     }
 
+    var isClockRunning: Bool { displayLink?.isPaused == false }
+
+    func configureAmbientMotion(enabled: Bool, reducedMotion: Bool) {
+        guard enabled != ambientEnabled || reducedMotion != ambientReduced else { return }
+        ambientEnabled = enabled
+        ambientReduced = reducedMotion
+        wake()
+    }
+
+    func setVisible(_ visible: Bool) {
+        self.visible = visible
+        if visible {
+            wake()
+        } else {
+            displayLink?.isPaused = true
+            lastTick = 0
+        }
+    }
+
+    /// The main HUD keeps its ambient motion for forty seconds after activity.
+    /// Replay and Reduce Motion keep the short finite-effect tail.
+    /// Reset the timestamp after a pause, so standby time never becomes spring/flight dt.
+    func wake() {
+        let now = CACurrentMediaTime()
+        activeUntil = now + 1.2
+        ambientMotion.noteActivity(at: now)
+        setHighRefresh(true)
+        guard visible, displayLink?.isPaused == true else { return }
+        lastTick = CACurrentMediaTime()
+        displayLink?.isPaused = false
+        IMicLog.write("iphone.power", "visual clock resumed")
+    }
+
     func update(_ incoming: [CGFloat], level: CGFloat) {
+        wake()
         target = displayTargets(incoming)
         targetLevel = min(1, max(0, level))
     }
 
     func set(_ values: [CGFloat], level: CGFloat = 0) {
+        wake()
         let next = displayTargets(values)
         let clamped = min(1, max(0, level))
         target = next
@@ -525,11 +602,13 @@ final class SpectrumStore: ObservableObject {
             breath: frame.breath,
             time: frame.time,
             level: clamped,
-            peak: clamped
+            peak: clamped,
+            ambientIntensity: frame.ambientIntensity
         )
     }
 
     func reset() {
+        wake()
         let zeros = [CGFloat](repeating: 0, count: target.count)
         target = zeros
         displayBands = zeros
@@ -544,16 +623,24 @@ final class SpectrumStore: ObservableObject {
             breath: frame.breath,
             time: frame.time,
             level: 0,
-            peak: 0
+            peak: 0,
+            ambientIntensity: frame.ambientIntensity
         )
     }
 
     fileprivate func tick() {
+        #if DEBUG
+        renderedTicks &+= 1
+        #endif
         let now = CACurrentMediaTime()
         let elapsed = lastTick == 0 ? 1.0 / 60.0 : max(0, now - lastTick)
         let dt = min(0.05, elapsed)
         lastTick = now
-        noiseTime += dt
+        let ambient = ambientEnabled && !ambientReduced
+            ? ambientMotion.advance(at: now, dt: dt) : 0
+        // Slowing the decorative phase to zero prevents a frozen-frame jump.
+        // Physical springs/flight continue to receive unmodified elapsed time below.
+        noiseTime += dt * Double(ambientEnabled ? ambient : 1)
 
         // 两段低频平滑噪声叠加，输出完整的 0…1，呼吸幅度不再被压扁。
         let value = 0.7 * BreathingNoise.value(noiseTime * 0.13)
@@ -594,17 +681,38 @@ final class SpectrumStore: ObservableObject {
             breath: breath,
             time: noiseTime,
             level: displayLevel,
-            peak: displayPeak
+            peak: displayPeak,
+            ambientIntensity: ambient
         )
         ink.reduceMotion = stringMotion.reduceMotion
         ink.updateCharge(tension: stringMotion.chargeTension, dt: elapsed)
         ink.tick(dt: elapsed)
         // 渲染器在弦 tick 的 defer 中读取几何，此时必须已拿到当前声帧。
         stringMotion.tick(now: now, dt: elapsed)
+        let effectActive = stringMotion.needsAnimation
+            || stringMotion.renderer?.needsStringMotionFrames == true
+        if effectActive {
+            ambientMotion.noteActivity(at: now)
+        }
+        setHighRefresh(now < activeUntil || effectActive)
+        if now >= activeUntil, ambient == 0, !stringMotion.needsAnimation,
+           stringMotion.renderer?.needsStringMotionFrames != true {
+            displayLink?.isPaused = true
+            lastTick = 0
+            IMicLog.write("iphone.power", "visual clock paused")
+        }
     }
 
     private func displayTargets(_ values: [CGFloat]) -> [CGFloat] {
         SpectrumPresentation.balancedBands(values, count: target.count)
+    }
+
+    private func setHighRefresh(_ active: Bool) {
+        guard highRefresh != active else { return }
+        highRefresh = active
+        displayLink?.preferredFrameRateRange = active
+            ? CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+            : CAFrameRateRange(minimum: 30, maximum: 30, preferred: 30)
     }
 
 }
@@ -636,11 +744,20 @@ struct StringSpring {
         origin = position
     }
 
-    mutating func drag(translation: CGFloat, velocity: CGFloat, limit: CGFloat) {
+    mutating func drag(translation: CGFloat, velocity: CGFloat, limit: CGFloat,
+                       clearStretch: StringClearStretch? = nil) {
         let normalized = translation * Self.dragGain / limit
         let resistance = tanh(normalized)
         position = origin + limit * resistance
         self.velocity = velocity * Self.dragGain * (1 - resistance * resistance)
+        if let clearStretch, translation < 0 {
+            let normal = limit * resistance
+            position = origin + clearStretch.pull(normal: normal, translation: translation, limit: limit, origin: origin)
+            let delta: CGFloat = 0.1
+            let nextNormal = limit * tanh((translation + delta) * Self.dragGain / limit)
+            let next = clearStretch.pull(normal: nextNormal, translation: translation + delta, limit: limit, origin: origin)
+            self.velocity = velocity * (next - (position - origin)) / delta
+        }
     }
 
     /// First future zero with upward velocity, for a positively stretched string.
@@ -726,8 +843,8 @@ struct StringDeleteHold {
         guard let armedAt, now >= nextDeleteAt else { return false }
         repeating = true
         repeatedInGesture = true
-        let acceleration = min(1, max(0, (now - armedAt - 0.4) / 2.2))
-        let interval = 0.18 + (0.06 - 0.18) * acceleration
+        let acceleration = min(1, max(0, (now - armedAt - 0.4) / 1.8))
+        let interval = 0.18 + (0.05 - 0.18) * acceleration
         nextDeleteAt = now + interval
         return true
     }
@@ -738,6 +855,7 @@ struct StringDeleteHold {
 /// The receiver shares the string's display clock without publishing animation frames to SwiftUI.
 @MainActor
 protocol StringMotionRendering: AnyObject {
+    var needsStringMotionFrames: Bool { get }
     func renderStringMotion(_ motion: StringMotionStore, now: Double, dt: Double)
 }
 
@@ -748,22 +866,36 @@ final class StringMotionStore: ObservableObject {
     @Published private(set) var anchor: CGFloat = 0.5
     @Published private(set) var armed = false
     @Published private(set) var hint: String?
+    @Published private(set) var clearOpacity: Double = 1
+    @Published private(set) var clearZone: Double = 0
+    @Published private(set) var isClearing = false
+    private var clearFeedback: StringClearFeedback?
+    private var clearElapsed: Double = 0
     var onRepeatDelete: (() -> Bool)?
     var onFireReturn: (() -> Bool)?
     weak var renderer: (any StringMotionRendering)?
     var velocity: CGFloat { spring.velocity }
+    var upwardTravel: CGFloat? { clearStretch?.depth }
+    var clearLoadOpacity: Double { isClearing ? (clearElapsed < 0.22 ? clearOpacity : 0) : 1 }
     private(set) var releaseStrength: CGFloat = 0
     private(set) var pendingReturn = false
     private var returnRemaining: Double = 0
     var reduceMotion = false
     private var spring = StringSpring()
     private var deleteHold = StringDeleteHold()
+    private var pullRatchet = StringPullRatchet()
+    private var clearSnapPlayed = false
     private var dragging = false
     private var cancelled = false
     private var height: CGFloat = 1
+    private var clearStretch: StringClearStretch?
     private var previousTranslation: CGFloat = 0
     private var returnEnabled = false
     private var deleteEnabled = false
+    var onActivity: (() -> Void)?
+    var needsAnimation: Bool {
+        isClearing || dragging || pendingReturn || abs(spring.position) >= 0.08 || abs(spring.velocity) >= 0.4
+    }
 
     /// Normalized live pull, independent of arming, return flight and spring rebound.
     var chargeTension: CGFloat {
@@ -771,7 +903,10 @@ final class StringMotionStore: ObservableObject {
         return min(1, max(0, pull / StringSpring.travelLimit(height: height)))
     }
 
-    func begin(anchor: CGFloat, height: CGFloat) {
+    func begin(anchor: CGFloat, height: CGFloat, clearStretch: StringClearStretch? = nil) {
+        guard !isClearing else { return }
+        self.clearStretch = clearStretch
+        onActivity?()
         cancelPendingReturn()
         BowReleaseSound.shared.stop()
         self.anchor = min(1, max(0, anchor))
@@ -779,6 +914,7 @@ final class StringMotionStore: ObservableObject {
         spring.begin()
         deleteHold.reset()
         previousTranslation = 0
+        pullRatchet = StringPullRatchet()
         dragging = true
         cancelled = false
     }
@@ -786,11 +922,16 @@ final class StringMotionStore: ObservableObject {
     func drag(translation: CGFloat, velocity: CGFloat, returnEnabled: Bool, deleteEnabled: Bool,
               now: Double = CACurrentMediaTime()) {
         guard dragging, !cancelled else { return }
+        onActivity?()
         self.returnEnabled = returnEnabled
         self.deleteEnabled = deleteEnabled
         spring.drag(translation: translation, velocity: velocity,
-                    limit: StringSpring.travelLimit(height: height))
+                    limit: StringSpring.travelLimit(height: height), clearStretch: clearStretch)
         pull = spring.position
+        if deleteEnabled, translation < 0, pullRatchet.advance(distance: -translation, now: now) {
+            let progress = -translation / max(1, clearStretch?.distance ?? height)
+            Haptics.shared.play(progress > 0.55 ? .stringNotchHigh : .stringNotchLow)
+        }
         let threshold = StringSpring.threshold(height: height)
         let enabled = pull > 0 ? returnEnabled : deleteEnabled
         let nextArmed = abs(pull) >= threshold && enabled
@@ -812,6 +953,8 @@ final class StringMotionStore: ObservableObject {
     /// Upward release deletes immediately; downward release only arms the flight.
     func finish(translation: CGFloat, velocity: CGFloat,
                 returnEnabled: Bool, deleteEnabled: Bool) -> String? {
+        guard !isClearing else { return nil }
+        onActivity?()
         defer {
             dragging = false
             cancelled = false
@@ -821,7 +964,7 @@ final class StringMotionStore: ObservableObject {
         }
         guard dragging, !cancelled else { return nil }
         spring.drag(translation: translation, velocity: velocity,
-                    limit: StringSpring.travelLimit(height: height))
+                    limit: StringSpring.travelLimit(height: height), clearStretch: clearStretch)
         pull = spring.position
         let threshold = StringSpring.threshold(height: height)
         if spring.position >= threshold && returnEnabled {
@@ -845,7 +988,13 @@ final class StringMotionStore: ObservableObject {
     }
 
     /// Cancels the current touch as well as repeat state; it cannot rearm until lift.
-    func cancel() {
+    func cancel(preserveClear: Bool = false) {
+        if preserveClear, isClearing { return }
+        onActivity?()
+        clearFeedback = nil
+        isClearing = false
+        clearOpacity = 1
+        clearZone = 0
         cancelPendingReturn()
         cancelled = true
         BowReleaseSound.shared.stop()
@@ -857,8 +1006,43 @@ final class StringMotionStore: ObservableObject {
         hint = nil
     }
 
+    func completeClearContact() {
+        guard !isClearing else { return }
+        onActivity?()
+        cancelPendingReturn()
+        BowReleaseSound.shared.stop()
+        dragging = false
+        cancelled = false
+        deleteHold.reset()
+        armed = false
+        hint = nil
+        clearFeedback = StringClearFeedback(initialPull: pull, depth: clearStretch?.depth ?? abs(pull))
+        clearElapsed = 0
+        clearSnapPlayed = false
+        clearOpacity = 1
+        clearZone = 1
+        isClearing = true
+    }
+
     func tick(now: Double, dt: Double) {
         defer { renderer?.renderStringMotion(self, now: now, dt: dt) }
+        if let feedback = clearFeedback {
+            clearElapsed += max(0, dt)
+            if clearElapsed >= 0.22, !clearSnapPlayed {
+                clearSnapPlayed = true
+                Haptics.shared.play(.stringSnap)
+            }
+            let frame = feedback.frame(at: clearElapsed, reducedMotion: reduceMotion)
+            pull = frame.pull
+            clearOpacity = frame.opacity
+            clearZone = frame.zone
+            if frame.finished {
+                clearFeedback = nil
+                spring.reset()
+                isClearing = false
+            }
+            return
+        }
         if dragging, !cancelled {
             if deleteHold.advance(now: now) {
                 guard onRepeatDelete?() == true else {
@@ -901,7 +1085,7 @@ final class StringMotionStore: ObservableObject {
         if abs(pull) < StringSpring.threshold(height: height) {
             next = nil
         } else if pull > 0 {
-            next = returnEnabled ? "松手回弹 · 过中线发送回车" : "回车已在 Mac 关闭"
+            next = returnEnabled ? "松手回弹 · 过中线发射文字" : "发射已在 Mac 关闭"
         } else if !deleteEnabled {
             next = "删除已在 Mac 关闭"
         } else if deleteHold.repeating {

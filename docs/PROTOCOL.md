@@ -70,9 +70,11 @@ payload[length]
 | `audio.end` | iPhone → Mac | `session, samples, frames` | 结束并提交识别 |
 | `audio.cancel` | iPhone → Mac | `session` | 取消 |
 | `audio.need` | Mac → iPhone | `session, seq` | 请求从 `seq` 开始补发本会话音频 |
-| `input` | iPhone → Mac | `action` | 中心弦手势：`return` / `delete` / `left` / `right` |
+| `input` | iPhone → Mac | `action` | 中心弦手势：`return` / `delete` / `left` / `right`；新端可带 `seq` 就绪代际，`clear` 必须带代际 |
+| `input.state` | Mac → iPhone | `seq, status` | bit5 能力：`ready` / `busy`，权威手势就绪租约 |
+| `input.result` | Mac → iPhone | `seq, action, status, message` | 清空确认：`action=clear`，`applied` / `rejected` |
 | `preview` | iPhone → Mac | `text` | Apple Speech 的临时转写；Mac 实时预览开启且可用范围核验或已授权的键盘兼容模式时逐字投递目标应用，否则仅在 Mac 窗口显示。此为 Mac 本地输入策略，不改变消息字段与加密格式 |
-| `settings` | Mac → iPhone | `features, polish` | 完整功能状态；bit0 预览、bit1 回车、bit2 删除、bit3 光标、bit4 润色偏好设置 |
+| `settings` | Mac → iPhone | `features, polish` | 完整功能状态；bit0 预览、bit1 回车、bit2 删除、bit3 光标、bit4 润色偏好设置、bit5 手势就绪与清空 |
 | `polish.settings` | iPhone → Mac | `polish` | 请求当前 Mac 保存完整润色偏好；仅认证完成后的加密链路可用 |
 | `polish.saved` | Mac → iPhone | `features, polish` | 本次保存请求的明确确认，携带实际保存值；不以普通状态广播代替确认 |
 | `state` | Mac → iPhone | `session, phase` | `listening` / `transcribing` |
@@ -93,6 +95,15 @@ payload[length]
 - iPhone 仅在链路已 `ready`、Mac 声明 bit4 且没有在途保存时发送 `{"t":"polish.settings","polish":{...}}`。命令必须包含完整 `polish`，不支持局部更新。保存期间禁用控件；Mac 保存后回传完整 `polish.saved`，且值与请求一致，才表示保存成功，不能仅凭发送成功或普通 `settings` 广播显示已保存。确认必须携带 bit4 与完整偏好；若实际保存值不同，手机显示 Mac 的实际值并明确提示。断线则等待重连读取状态，不自动重发旧 Mac 的修改。
 - 偏好归当前连接的 Mac 所有。手机不持久化第二套偏好，切换 Mac 后以新 Mac 的状态为准；Mac 本地更改也通过完整 `settings` 回显。
 - 手机只接触开关、强度与场景。API Key、AI 服务来源和地址不进入这些消息。命令必须经过原有六位码或令牌认证，使用会话密钥下的 AES-GCM combined 帧及逐帧随机 nonce；明文或未认证连接不能设置偏好。
+
+
+### 手势就绪与清空（bit5）
+
+- `IMicLink.gestureControlFeature = 1 << 5`。声明后 Mac 在连接完成、会话开始及最终结束/取消时发送加密 `input.state(seq, status)`；每次发布状态都推进 `seq`，租约仅在 `ready` 时有效。手机还要求本地不在录音/上传/识别中，才接受拉弦。旧 Mac 不声明 bit5 时手机停用弦控制并提示更新，不用计时猜测已完成。
+- Mac 的 `busy` 覆盖录音、百炼、润色、OCR 定位、扫光动画、最终输入/确认以及写后释放收尾动画。只有这些处理清理完成、`result` 或 `failure` 已发送后才发布 `ready`；清空在执行期间也撤销租约。两端均拦截忙碌、旧代际及跨连接的手势；处理期间开始的触摸必须抬手后重新开始，不能等解锁后自动续拉。
+- 新手机的全部 `input` 带当前 `seq`；`clear` 缺少非负 `seq` 拒绝解码。旧手机的四种单键命令仍可解码，但 Mac 忙碌时同样拒绝。`input.state` 缺少代际、代际为负或状态非法均拒绝；`input.result` 只接受 `clear`、非负 `seq` 和 `applied/rejected`。iPhone 不得伪造 Mac 的状态和确认。
+- 用户上拉进入屏幕顶部清空区后，一次触摸只发送一次 `input(action=clear, seq)`。Mac 先撤销旧租约，再只对当前前台、焦点未变化且 AXValue 可写的文本输入控件执行整框清空；这是用户明确请求的手动全框操作，与实时预览的尾部修订分离。不盲发全选删除，不回退到窗口、页面或终端输出区；无法核验时返回 `rejected`。读取到输入框为空后才返回 `applied`；手机仅处理与本次在途代际一致的确认，收到成功才清掉手机视觉文字，并等新 `ready` 再开放手势。
+- 手势消息继续使用 AES-GCM combined 格式及逐帧随机 nonce；不修改配对、密钥或帧边界。断线清除租约和在途状态，不重发清空命令。
 
 
 ## 音频帧
@@ -143,8 +154,9 @@ iPhone                         Mac
 ## 断线与恢复
 
 - 任意一端断开都会取消进行中的 ASR，避免半段文字落进输入框。
-- iPhone 在前台自动重连，间隔 1.6^n 秒、封顶 8 秒；回到前台立即重试。
+- iPhone 普通失败重连间隔 1.6^n 秒、封顶 8 秒；回到前台清除旧退避与重试任务。已就绪的旧连接先用既有加密 `ping/pong(ts)` 检查，只有本次 `ts` 的 `pong` 才确认存活；TCP 800ms、BLE 1500ms 未确认则立即重建，不再额外等一次重试间隔。没有可用旧连接时直接重连已选 Mac，并刷新 Bonjour，仍保留定向 BLE 兜底。
+- 探测期间 UI 显示连接中并停用弦；已配对时仍允许先录后连。存活检查成功复用原会话，不重发 `audio.start`；真正断线先通知旧语音会话停止并保留本机文字，再开始新代际握手，不重发旧输入、清空或设置命令。新连接、再次后台与用户切换 Mac 均作废旧探测，避免迟到超时关闭新连接。
 - 新连接会替换旧连接，保证重连不被僵尸链路阻塞。
-- Mac 结束识别后不等待 WebSocket 关闭握手，拿到最终文本立即回传并输入。
+- Mac 结束识别后不等待 WebSocket 关闭握手；最终文字仍需完成可选润色、扫光及输入确认后再回传并发布手势就绪。
 
 上传与识别分别计时：iPhone 在 `audio.end` 的传输完成后才开始等结果；Mac 先等待百炼上传排空，再从 `finish-task` 发出后计算 60 秒最终识别期限，不从松手一刻固定等待 45 秒。百炼开启 `heartbeat` 防持续静音超时，WebSocket 总资源期限覆盖有界录音与排空。失败或断线保留本机已识别文字供复制，不把它自动发送给另一台 Mac。

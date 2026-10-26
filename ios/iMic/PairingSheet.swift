@@ -3,7 +3,7 @@ import UIKit
 
 struct PairingSheet: View {
     private enum UtilitySheet: String, Identifiable {
-        case waveforms, polishPreferences
+        case waveforms
 
         var id: String { rawValue }
     }
@@ -27,20 +27,33 @@ struct PairingSheet: View {
             } else {
                 ZStack {
                     Theme.ink.ignoresSafeArea()
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 16) {
                         header
-                        content
-                        Spacer(minLength: 8)
-                        footer
+                        Hairline()
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 0) {
+                                content
+                                    .padding(.top, 8)
+                                    .padding(.bottom, 24)
+                                Hairline()
+                                PolishPreferencesSection()
+                                    .padding(.vertical, 24)
+                                Hairline()
+                                footer
+                                    .padding(.top, 12)
+                            }
+                            .padding(.bottom, 18)
+                        }
+                        .scrollDismissesKeyboard(.interactively)
                     }
-                    .padding(.horizontal, 22)
+                    .padding(.horizontal, 24)
                     .padding(.top, 22)
                     .padding(.bottom, 18)
                     .overlay(alignment: .top) {
                         Rectangle().fill(Theme.line).frame(height: 1)
                     }
                 }
-                .presentationDetents([.height(466), .large])
+                .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
                 .presentationBackground(Theme.ink)
             }
@@ -106,15 +119,13 @@ struct PairingSheet: View {
             switch sheet {
             case .waveforms:
                 WaveformLibraryView()
-            case .polishPreferences:
-                PolishPreferencesView()
             }
         }
     }
 
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
-            PixelText(text: "LINK", cell: 4, color: Theme.ivory, tracking: 2.4)
+            PixelText(text: "SETTINGS", cell: 2.3, color: Theme.ivory, tracking: 1.6)
             Rectangle().fill(Theme.orange).frame(width: 4, height: 20)
             Spacer()
             Button {
@@ -124,7 +135,7 @@ struct PairingSheet: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Theme.muted)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("关闭")
@@ -148,36 +159,22 @@ struct PairingSheet: View {
     }
 
     private func connected(name: String) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                Circle().fill(Theme.orange).frame(width: 6, height: 6)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("当前连接设备")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.muted)
+                Spacer()
+                HUDLabel(text: "LINK / ENCRYPTED")
+            }
+            HStack(spacing: 12) {
+                Rectangle().fill(Theme.orange).frame(width: 4, height: 4)
                 Text(name)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Theme.ivory)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Spacer()
-                MetaLabel(text: "ENCRYPTED", color: Theme.orange)
-            }
-            .padding(14)
-            .overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
-
-            Text("按住底部横条说话。松开后，文字会直接填入 Mac 上正在使用的应用。")
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 12) {
-                Button {
-                    Haptics.shared.play(.tap)
-                    dismiss()
-                } label: {
-                    PixelText(text: "DONE", cell: 2.6, color: Theme.ink, tracking: 2)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .background(Theme.orange)
-                }
-
+                Spacer(minLength: 8)
                 Button {
                     Haptics.shared.play(.warning)
                     showForget = true
@@ -185,8 +182,7 @@ struct PairingSheet: View {
                     Text("忘记")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Theme.muted)
-                        .frame(width: 74, height: 52)
-                        .overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
+                        .frame(minWidth: 44, minHeight: 44)
                 }
             }
         }
@@ -358,36 +354,18 @@ struct PairingSheet: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
-                Haptics.shared.play(.tap)
-                codeFocused = false
-                utilitySheet = .polishPreferences
-            } label: {
-                HStack(spacing: 12) {
-                    Text("AI 润色偏好")
-                        .font(.system(size: 12, weight: .medium))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 8)
-                    MetaLabel(text: "ON MAC", color: Theme.muted)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .accessibilityHidden(true)
-                }
-                .foregroundStyle(Theme.orange)
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
-            }
-            Button {
                 codeFocused = false
                 utilitySheet = .waveforms
             } label: {
                 HStack {
-                    Text("波形复看").font(.system(size: 12, weight: .medium))
+                    Text("波形复看").font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Theme.ivory)
                     Spacer()
                     MetaLabel(text: "LOCAL · 24H", color: Theme.muted)
                     Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
                 }
-                .foregroundStyle(Theme.orange)
-                .frame(minHeight: 36)
+                .foregroundStyle(Theme.muted)
+                .frame(minHeight: 44)
                 .contentShape(Rectangle())
             }
             Hairline()
@@ -400,7 +378,10 @@ struct PairingSheet: View {
                         openURL(url)
                     }
                 } label: {
-                    MetaLabel(text: "SETTINGS", color: Theme.orange)
+                    Text("系统权限")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.muted)
+                        .frame(minWidth: 44, minHeight: 44)
                 }
             }
         }

@@ -60,6 +60,8 @@ final class TestClient {
     var finished = false
     var started = false
     var connected = false
+    var sawGestureBusy = false
+    var terminalResult: Int32?
 
     init() {
         params = NWParameters.tcp
@@ -251,6 +253,14 @@ final class TestClient {
             log("PAIRED token saved")
         case "ready":
             startAudio()
+        case "input.state":
+            log("GESTURE_STATE \(message.status ?? "-") revision=\(message.seq ?? -1)")
+            if message.status == "busy" { sawGestureBusy = true }
+            if message.status == "ready", let code = terminalResult {
+                guard sawGestureBusy else { fail("gesture state did not lock during processing"); return }
+                log("GESTURE_READY_AFTER_RESULT")
+                finish(code)
+            }
         case "ping":
             sendSealed(.pong(message.ts ?? 0))
         case "result":
@@ -258,7 +268,9 @@ final class TestClient {
             log("RESULT_BEGIN")
             log(text)
             log("RESULT_END latency_ms=\(Int(message.latency ?? 0)) pasted=\(message.pasted == true) target=\(message.target ?? "-")")
-            finish(text.isEmpty ? 1 : 0)
+            if CommandLine.arguments.contains("--verify-gesture-state") {
+                terminalResult = text.isEmpty ? 1 : 0
+            } else { finish(text.isEmpty ? 1 : 0) }
         case "audio.need":
             guard let from = message.seq, from >= 0 else { break }
             log("AUDIO_NEED from=\(from) available=\(journal.count)")

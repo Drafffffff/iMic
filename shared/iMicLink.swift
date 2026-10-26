@@ -21,6 +21,7 @@ public enum IMicLink {
     public static let handshakeTimeout: TimeInterval = 12
     public static let pairingCodeLifetime: TimeInterval = 600
     public static let polishPreferencesFeature = 1 << 4
+    public static let gestureControlFeature = 1 << 5
     public static let bleServiceUUID = "7E570000-7F4A-4C7E-9A2B-1C0D5E6F7A80"
     public static let bleUplinkUUID = "7E570001-7F4A-4C7E-9A2B-1C0D5E6F7A80"
     public static let bleDownlinkUUID = "7E570002-7F4A-4C7E-9A2B-1C0D5E6F7A80"
@@ -247,6 +248,18 @@ public struct LinkMessage: Codable, Equatable {
         polish = try container.decodeIfPresent(LinkPolishPreferences.self, forKey: .polish)
         ts = try container.decodeIfPresent(Double.self, forKey: .ts)
 
+        if t == "input.state" {
+            guard let seq, seq >= 0, status == "ready" || status == "busy" else { throw LinkError.decodingFailed }
+        }
+        if t == "input", action == "clear" {
+            guard let seq, seq >= 0 else { throw LinkError.decodingFailed }
+        }
+        if t == "input.result" {
+            guard action == "clear", let seq, seq >= 0, status == "applied" || status == "rejected" else {
+                throw LinkError.decodingFailed
+            }
+        }
+
         if t == "polish.settings" || t == "polish.saved"
             || (t == "settings" && (features ?? 0) & IMicLink.polishPreferencesFeature != 0) {
             guard polish != nil else {
@@ -337,9 +350,26 @@ public struct LinkMessage: Codable, Equatable {
     }
 
     /// iPhone → Mac：中心弦的手势输入。action 为 return / delete / left / right。
-    public static func input(_ action: String) -> LinkMessage {
+    public static func input(_ action: String, revision: Int? = nil) -> LinkMessage {
         var m = LinkMessage(t: "input")
         m.action = action
+        m.seq = revision
+        return m
+    }
+
+    public static func inputState(revision: Int, ready: Bool) -> LinkMessage {
+        var m = LinkMessage(t: "input.state")
+        m.seq = revision
+        m.status = ready ? "ready" : "busy"
+        return m
+    }
+
+    public static func inputResult(revision: Int, applied: Bool, message: String? = nil) -> LinkMessage {
+        var m = LinkMessage(t: "input.result")
+        m.action = "clear"
+        m.seq = revision
+        m.status = applied ? "applied" : "rejected"
+        m.message = message
         return m
     }
 

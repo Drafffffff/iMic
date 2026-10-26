@@ -235,12 +235,16 @@ final class LinkServer {
                               self.queue.sync(execute: { self.connection === connection && self.phase == .ready }) else { return }
                         self.onPolishPreferences?(preferences)
                     }
-                } else if message.t == "polish.saved" || message.t == "settings" {
+                } else if ["polish.saved", "settings", "input.state", "input.result"].contains(message.t) {
                     sendErrorAndClose("protocol", "iPhone 不能发送 Mac 的设置状态")
                 } else if message.t == "ping" {
                     try sendLocked(.pong(message.ts ?? 0))
                 } else {
-                    DispatchQueue.main.async { [weak self] in self?.onMessage?(message) }
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self,
+                              self.queue.sync(execute: { self.connection === connection && self.phase == .ready }) else { return }
+                        self.onMessage?(message)
+                    }
                 }
             case .json:
                 break

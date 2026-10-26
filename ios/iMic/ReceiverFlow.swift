@@ -13,6 +13,11 @@ final class ReceiverFlowStore: ObservableObject {
     private var pendingHead = 0
     private var suspended = false
     fileprivate var hasPending: Bool { pendingHead < pending.count }
+    fileprivate var sourceTouchFraction: CGFloat?
+
+    func updateTouch(xFraction: CGFloat) {
+        sourceTouchFraction = xFraction.isFinite ? min(1, max(0, xFraction)) : nil
+    }
 
     func update(text: String) {
         guard !suspended, text != previous else { return }
@@ -34,9 +39,12 @@ final class ReceiverFlowStore: ObservableObject {
         }
         previous = text
         previousCount = count
+        renderer?.wake()
     }
 
     func reset() {
+        // Keep the touch anchor: listening resets after touchDown, and recognition can
+        // continue delivering text after touchUp. The next press supplies a new anchor.
         previous = ""
         previousCount = 0
         pending.removeAll(keepingCapacity: true)
@@ -88,9 +96,14 @@ struct ReceiverFlowView: UIViewRepresentable {
 /// State and atlas capacity grow on ingestion; normal frames reuse all CPU/GPU storage.
 @MainActor
 final class ReceiverFlowSurface: UIView, StringMotionRendering {
+    var needsStringMotionFrames: Bool {
+        guard drawing != nil, window != nil, positioned else { return false }
+        return store?.hasPending == true || particles.contains { $0.phase != .attached }
+    }
+
+    func wake() { spectrum?.wake() }
     nonisolated private static let attachedScale: CGFloat = 0.38
     nonisolated private static let entryScale: CGFloat = 2.4
-    nonisolated private static let exitScale: CGFloat = 3.8
     nonisolated private static let baseSide: CGFloat = 16
 
     private enum Phase { case incoming, attached, projectile }
@@ -111,7 +124,12 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         var startOpacity: CGFloat = 0
         var rotation: CGFloat = 0
         var velocity = CGVector.zero
-        var spin: CGFloat = 0
+        var arrow = ReceiverArrowFlight(speed: 0)
+        var launchRotation: CGFloat = 0
+        var flightTilt: CGFloat = 0
+        var flightBend: CGFloat = 0
+        var exitScale: CGFloat = ReceiverFlowSurface.attachedScale
+        var emphasis: CGFloat = 1
     }
 
     private weak var store: ReceiverFlowStore?
@@ -120,6 +138,8 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
     private var drawing: WaveTextRenderer?
     private var particles: [Particle] = []
     private var draws: [WaveGlyphDraw] = []
+    private var exposures: [WaveGlyphSample] = []
+    private let shutter = ReceiverShutter()
     private var rings: [TorusGeometry.Ring] = []
     private var torus = CGRect.zero
     private var source = CGRect.zero
@@ -138,6 +158,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         addSubview(canvas)
         particles.reserveCapacity(512)
         draws.reserveCapacity(1024)
+        exposures.reserveCapacity(512 + 64 * ReceiverShutter.maximumSamples)
         do { drawing = try WaveTextRenderer(view: canvas) }
         catch { IMicLog.write("iphone.visual", "text renderer unavailable: \(error)") }
     }
@@ -151,6 +172,8 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
 
     func configure(store: ReceiverFlowStore, spectrum: SpectrumStore,
                    torus: CGRect, source: CGRect, reduced: Bool) {
+        let changed = self.store !== store || self.spectrum !== spectrum || self.torus != torus
+            || self.source != source || self.reduced != reduced
         if self.store !== store || self.spectrum !== spectrum {
             detach()
             self.store = store
@@ -172,6 +195,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
             }
         }
         positioned = torus.width > 0 && torus.height > 0
+        if changed { spectrum.wake() }
     }
 
     func detach() {
@@ -185,8 +209,10 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
     }
 
     func reset() {
+        wake()
         particles.removeAll(keepingCapacity: true)
         draws.removeAll(keepingCapacity: true)
+        exposures.removeAll(keepingCapacity: true)
         drawing?.resetAtlas()
         spectrum?.ink.reset()
         wasPendingReturn = false
@@ -198,7 +224,8 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
     private func updateGeometry(_ spectrum: SpectrumStore) {
         let motion = spectrum.stringMotion
         let layout = TorusGeometry.Layout(size: torus.size, frame: spectrum.frame,
-                                          pull: motion.pull, anchor: motion.anchor, reducedMotion: reduced)
+                                          pull: motion.pull, anchor: motion.anchor, reducedMotion: reduced, extendedUpward: true,
+                                          upwardTravel: motion.upwardTravel ?? max(1, torus.midY - 84))
         if rings.isEmpty {
             rings = (0..<TorusGeometry.ringCount).map { layout.ring(at: $0) }
         } else {
@@ -221,42 +248,64 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         if reduced {
             particles.removeAll(keepingCapacity: true)
             draws.removeAll(keepingCapacity: true)
+            exposures.removeAll(keepingCapacity: true)
             _ = drawing?.draw(draws, size: bounds.size)
             hadVisibleText = false
             return
         }
+        let count = particles.reduce(0) { $0 + ($1.phase == .attached ? 1 : 0) }
+        let layout = ReceiverFlightLayout(count: count, width: bounds.width)
+        var attachedIndex = 0
+        var shotIndex = 0
+        // Retire an earlier visual flight before a repeated release, keeping the budget global.
+        particles.removeAll { $0.phase == .projectile }
         // Attached text is the released load. Speech still arriving joins the next load.
         // No texture creation, allocations, command sending or audio work in this loop.
         for index in particles.indices where particles[index].phase == .attached {
             var particle = particles[index]
+            let selected = shotIndex < layout.visibleCount
+                && attachedIndex == layout.sourceIndex(for: shotIndex)
+            attachedIndex += 1
+            guard selected else {
+                // Invisible visual samples are reclaimed below, never removed from the transcript.
+                particles[index].phase = .projectile
+                particles[index].opacity = 0
+                continue
+            }
             let origin = attachment(particle)
             let progress = CGFloat(particle.ring) / CGFloat(TorusGeometry.ringCount - 1)
             let bowVelocity = TorusGeometry.stringDisplacement(
                 progress: progress, anchor: motion.anchor, pull: motion.velocity)
             let clearance = max(1, origin.y + 32)
-            let base = max(bounds.height * 3.2, clearance / 0.20)
-            let speed = max(base, base * 0.82 - bowVelocity * 0.55)
-                * (0.94 + particle.seed * 0.16 + strength * 0.10)
-            let travelTime = clearance / max(1, speed) + 0.045
-            let margin = max(0, min(origin.x - 48, bounds.width - origin.x - 48))
-            let lateralLimit = margin / travelTime * 0.85
-            let spread = (origin.x - torus.midX) * 1.55 + (particle.seed - 0.5) * 110
-            particle.velocity = CGVector(dx: min(lateralLimit, max(-lateralLimit, spread)), dy: -speed)
+            let speed = ReceiverArrowFlight.launchSpeed(
+                height: bounds.height, clearance: clearance, strength: strength,
+                bowVelocity: bowVelocity, variation: layout.speedMultiplier(for: shotIndex))
+            // Different impulse directions/speeds and a small smooth bow change each burst.
+            let targetX = layout.targetX(for: shotIndex)
+            particle.velocity = CGVector(dx: (targetX - origin.x) * speed / max(1, origin.y), dy: -speed)
+            particle.arrow = ReceiverArrowFlight(speed: hypot(particle.velocity.dx, particle.velocity.dy))
+            particle.exitScale = layout.exitSide / Self.baseSide
+            particle.emphasis = layout.emphasis
             particle.origin = origin
             particle.position = origin
-            particle.started = now + Double(particle.seed) * 0.012
+            particle.started = now + layout.delay(for: shotIndex)
             particle.scale = Self.attachedScale
             particle.flightProgress = 0
             particle.startOpacity = max(0.94, particle.opacity)
             particle.opacity = particle.startOpacity
             particle.rotation = rings[particle.ring].rotation
-            particle.spin = (particle.seed - 0.5) * 5.2
+            particle.launchRotation = particle.rotation
+            particle.flightTilt = layout.tilt(for: shotIndex)
+            particle.flightBend = layout.bend(for: shotIndex)
             particle.phase = .projectile
             particles[index] = particle
+            shotIndex += 1
         }
+        particles.removeAll { $0.phase == .projectile && $0.opacity == 0 }
     }
 
     func renderStringMotion(_ motion: StringMotionStore, now: Double, dt: Double) {
+        canvas.alpha = CGFloat(motion.clearLoadOpacity)
         guard window != nil, positioned, let spectrum, let drawing else { return }
         guard !particles.isEmpty || store?.hasPending == true || hadVisibleText else { return }
         updateGeometry(spectrum)
@@ -292,8 +341,8 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
                 let ring = Int((ordinal &* 17) % UInt64(TorusGeometry.ringCount))
                 let angle = CGFloat(ordinal) * 2.399963229728653
                 let seed = CGFloat((ordinal &* 73 &+ 19) % 997) / 996
-                let origin = CGPoint(x: source.midX + (seed - 0.5) * source.width * 0.48,
-                                     y: source.minY - 3 - Self.baseSide * Self.entryScale * 0.5)
+                let origin = ReceiverEmission.origin(source: source, touchFraction: store?.sourceTouchFraction,
+                    glyphSide: Self.baseSide * Self.entryScale, canvasWidth: bounds.width, seed: seed)
                 if reduced {
                     // Keep the whole load visible without entry flight, drift or looping effects.
                     particles.append(Particle(glyph: glyph, ring: ring, angle: angle, seed: seed,
@@ -306,9 +355,11 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
                         duration: motion.pendingReturn ? 0.035 : 0.43 + Double(seed) * 0.065))
                 }
             }
-            try drawing.reserve(instances: max(1024, particles.count * 2))
-            if draws.capacity < particles.count * 2 {
-                draws.reserveCapacity(max(draws.capacity * 2, particles.count * 2))
+            let sampleBudget = particles.count + 64 * (ReceiverShutter.maximumSamples - 1)
+            try drawing.reserve(instances: max(1024, particles.count), samples: sampleBudget)
+            if exposures.capacity < sampleBudget { exposures.reserveCapacity(sampleBudget) }
+            if draws.capacity < particles.count {
+                draws.reserveCapacity(max(draws.capacity * 2, particles.count))
             }
         } catch {
             if !reportedRenderFailure {
@@ -317,23 +368,20 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
             }
         }
         draws.removeAll(keepingCapacity: true)
+        exposures.removeAll(keepingCapacity: true)
         var index = 0
         while index < particles.count {
             var particle = particles[index]
             let age = CGFloat(now - particle.started)
             if particle.phase == .projectile {
-                if age >= 0 {
-                    let travel = age * (1 + 1.6 * age)
-                    particle.position = CGPoint(x: particle.origin.x + particle.velocity.dx * travel,
-                                                y: particle.origin.y + particle.velocity.dy * travel)
-                    particle.flightProgress = min(1, max(0, (particle.origin.y - particle.position.y) / max(1, particle.origin.y)))
-                    particle.scale = Self.attachedScale
-                        + (Self.exitScale - Self.attachedScale) * Self.smooth(particle.flightProgress)
-                    particle.opacity = particle.startOpacity + (1 - particle.startOpacity) * Self.smooth(age / 0.018)
-                    particle.rotation += particle.spin * CGFloat(max(0, dt))
+                if age < 0 {
+                    var waiting = particle
+                    waiting.opacity *= 0.42
+                    append(waiting)
+                    index += 1
+                    continue
                 }
-                // Culling uses the rendered, growing quad and its trail, not a fixed 24pt margin.
-                if !append(particle, shotAge: max(0, age)) {
+                if !appendProjectile(particle, age: age) {
                     particles.swapAt(index, particles.count - 1)
                     particles.removeLast()
                     continue
@@ -372,48 +420,55 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
             index += 1
         }
         if !draws.isEmpty || hadVisibleText {
-            _ = drawing.draw(draws, size: bounds.size)
+            _ = drawing.draw(draws, samples: exposures, size: bounds.size)
         }
         hadVisibleText = !draws.isEmpty
     }
 
-    @discardableResult
-    private func append(_ particle: Particle, shotAge: CGFloat? = nil,
-                        charge: CGFloat = 0, impact: CGFloat = 0) -> Bool {
-        let isShot = shotAge != nil
-        let flash = shotAge.map { max(0, 1 - $0 / 0.055) } ?? 0
-        let warmth = isShot ? flash : max(charge * 0.28, impact * 0.75)
-        let impulse = isShot ? 4 * particle.flightProgress * (1 - particle.flightProgress) : 0
-        let size = SIMD2<Float>(
-            Float(Self.baseSide * max(Self.attachedScale, particle.scale * (1 - impulse * 0.12))),
-            Float(Self.baseSide * particle.scale * (1 + impulse * 0.48)))
-        let cosine = Float(cos(particle.rotation))
-        let sine = Float(sin(particle.rotation))
-        let halfHeight = (abs(sine) * size.x + abs(cosine) * size.y) * 0.5
-        let trailVisible = shotAge.map { $0 > 0 && $0 < 0.16 } ?? false
-        let trailOffset = min(34, Float(abs(particle.velocity.dy)) * 0.005)
-            * Float(Self.smooth(particle.flightProgress / 0.15))
-        let trailingEdge = trailVisible ? halfHeight + abs(cosine) * size.y * 0.09 + trailOffset : halfHeight
-        guard !isShot || Float(particle.position.y) + trailingEdge >= 0 else { return false }
-        let halfWidth = (abs(cosine) * size.x + abs(sine) * size.y) * 0.5
-        let margin = min(Float(bounds.width) * 0.5, halfWidth + 2)
-        let x = isShot ? min(Float(bounds.width) - margin, max(margin, Float(particle.position.x)))
-            : Float(particle.position.x)
-        let color = SIMD4<Float>(1 - Float(warmth) * 0.05,
-                                0.29 + Float(warmth) * 0.65,
-                                Float(warmth) * 0.88, Float(particle.opacity))
-        let instance = WaveGlyphInstance(center: SIMD2(x, Float(particle.position.y)),
-                                         size: size, uvRect: particle.glyph.uv,
-                                         orientation: SIMD2(cosine, sine), color: color)
-        if trailVisible {
-            var trail = instance
-            trail.center.y += trailOffset
-            trail.size.y *= 1.18
-            trail.color.w *= 0.18
-            draws.append(WaveGlyphDraw(instance: trail, page: particle.glyph.page))
+    private func projectilePose(_ particle: Particle, at age: CGFloat) -> ReceiverFlightPose {
+        particle.arrow.pose(at: age, origin: particle.origin,
+            velocity: CGPoint(x: particle.velocity.dx, y: particle.velocity.dy),
+            exitSide: Self.baseSide * particle.exitScale, emphasis: particle.emphasis,
+            rotation: particle.launchRotation, tilt: particle.flightTilt, opacity: particle.startOpacity,
+            bend: particle.flightBend)
+    }
+
+    /// Full transforms are evaluated at each subframe, just like a layer shutter.
+    /// Normalized exposure includes scale, rotation, deformation, flash and opacity.
+    private func appendProjectile(_ particle: Particle, age: CGFloat) -> Bool {
+        let start = projectilePose(particle, at: age - shutter.duration / 2)
+        let end = projectilePose(particle, at: age + shutter.duration / 2)
+        let count = shutter.sampleCount(start: start, end: end)
+        let offset = exposures.count
+        var swept = CGRect.null
+        for index in 0..<count {
+            let pose = projectilePose(particle, at: shutter.sampleAge(index, count: count, at: age))
+            swept = swept.union(pose.bounds)
+            exposures.append(WaveGlyphSample(pose))
         }
-        draws.append(WaveGlyphDraw(instance: instance, page: particle.glyph.page))
+        // The shutter can still see a glyph whose current position has left the screen.
+        guard swept.maxY >= 0 else {
+            exposures.removeLast(count)
+            return false
+        }
+        appendDraw(particle.glyph, bounds: swept, sampleOffset: offset, sampleCount: count)
         return true
+    }
+
+    private func append(_ particle: Particle, charge: CGFloat = 0, impact: CGFloat = 0) {
+        let side = Self.baseSide * particle.scale
+        let pose = ReceiverFlightPose(center: particle.position, size: CGSize(width: side, height: side),
+            rotation: particle.rotation, opacity: particle.opacity, warmth: max(charge * 0.28, impact * 0.75))
+        let offset = exposures.count
+        exposures.append(WaveGlyphSample(pose))
+        appendDraw(particle.glyph, bounds: pose.bounds, sampleOffset: offset, sampleCount: 1)
+    }
+
+    private func appendDraw(_ glyph: WaveGlyphTexture, bounds: CGRect, sampleOffset: Int, sampleCount: Int) {
+        let instance = WaveGlyphInstance(
+            bounds: SIMD4(Float(bounds.minX), Float(bounds.minY), Float(bounds.width), Float(bounds.height)),
+            uvRect: glyph.uv, sampleRange: SIMD2(UInt32(sampleOffset), UInt32(sampleCount)))
+        draws.append(WaveGlyphDraw(instance: instance, page: glyph.page))
     }
 
     private static func smooth(_ value: CGFloat) -> CGFloat {

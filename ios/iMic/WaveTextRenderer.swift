@@ -75,25 +75,6 @@ final class WaveTextCanvas: UIView {
     }
 }
 
-/// Swift and Metal share this 64-byte, SIMD-aligned instance layout.
-struct WaveGlyphInstance {
-    var center: SIMD2<Float>
-    var size: SIMD2<Float>
-    var uvRect: SIMD4<Float>
-    var orientation: SIMD2<Float>
-    var color: SIMD4<Float>
-}
-
-struct WaveGlyphTexture {
-    let page: Int
-    let uv: SIMD4<Float>
-}
-
-struct WaveGlyphDraw {
-    var instance: WaveGlyphInstance
-    let page: Int
-}
-
 /// One draw per atlas page, not one view/layer/draw call per character. New glyphs
 /// are rasterized only on ingestion; ordered blits prevent CPU/GPU texture races.
 @MainActor
@@ -114,6 +95,7 @@ final class WaveTextRenderer {
     private var buffers: [MTLBuffer] = []
     private var bufferIndex = 0
     private var capacity = 0
+    private var sampleCapacity = 0
     private var glyphs: [Character: WaveGlyphTexture] = [:]
     private var pages: [MTLTexture] = []
     private var uploads: [Upload] = []
@@ -133,6 +115,9 @@ final class WaveTextRenderer {
     private static let cellsPerPage = columns * columns
 
     init(view: WaveTextCanvas) throws {
+        assert(MemoryLayout<WaveGlyphInstance>.stride == 48)
+        assert(MemoryLayout<WaveGlyphInstance>.offset(of: \.sampleRange) == 32)
+        assert(MemoryLayout<WaveGlyphSample>.stride == 32)
         guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else {
             throw RenderError.unavailable
         }
@@ -164,7 +149,7 @@ final class WaveTextRenderer {
         descriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
         descriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
         pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
-        try reserve(instances: 1024)
+        try reserve(instances: 1024, samples: 1024)
     }
 
     func prepare(_ character: Character) {
@@ -209,11 +194,13 @@ final class WaveTextRenderer {
     }
 
     /// Growth happens as content arrives, never by creating a buffer for each draw.
-    func reserve(instances: Int) throws {
-        guard instances > capacity else { return }
+    func reserve(instances: Int, samples: Int) throws {
+        guard instances > capacity || samples > sampleCapacity else { return }
         var next = max(1024, capacity)
         while next < instances { next *= 2 }
-        let length = next * MemoryLayout<WaveGlyphInstance>.stride
+        var nextSamples = max(1024, sampleCapacity)
+        while nextSamples < samples { nextSamples *= 2 }
+        let length = next * MemoryLayout<WaveGlyphInstance>.stride + nextSamples * MemoryLayout<WaveGlyphSample>.stride
         var replacement: [MTLBuffer] = []
         replacement.reserveCapacity(3)
         for _ in 0..<3 {
@@ -224,6 +211,7 @@ final class WaveTextRenderer {
         }
         buffers = replacement
         capacity = next
+        sampleCapacity = nextSamples
     }
 
     func resetAtlas() {
@@ -241,8 +229,8 @@ final class WaveTextRenderer {
     }
 
     @discardableResult
-    func draw(_ draws: [WaveGlyphDraw], size: CGSize) -> Bool {
-        guard size.width > 0, size.height > 0, draws.count <= capacity,
+    func draw(_ draws: [WaveGlyphDraw], samples: [WaveGlyphSample] = [], size: CGSize) -> Bool {
+        guard size.width > 0, size.height > 0, draws.count <= capacity, samples.count <= sampleCapacity,
               slots.wait(timeout: .now()) == .success else { return false }
         guard let drawable = view.metalLayer.nextDrawable(),
               let command = queue.makeCommandBuffer() else { slots.signal(); return false }
@@ -278,7 +266,14 @@ final class WaveTextRenderer {
             output[pageCursors[draw.page]] = draw.instance
             pageCursors[draw.page] += 1
         }
+        let sampleOffset = capacity * MemoryLayout<WaveGlyphInstance>.stride
+        samples.withUnsafeBytes { bytes in
+            if let base = bytes.baseAddress, !bytes.isEmpty {
+                memcpy(buffer.contents().advanced(by: sampleOffset), base, bytes.count)
+            }
+        }
         encoder.setRenderPipelineState(pipeline)
+        encoder.setFragmentBuffer(buffer, offset: sampleOffset, index: 0)
         var viewport = SIMD2<Float>(Float(size.width), Float(size.height))
         encoder.setVertexBytes(&viewport, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
         for page in pages.indices where pageCounts[page] > 0 {

@@ -19,10 +19,12 @@ struct HomeView: View {
     @State private var stringAxis: StringAxis?
     @State private var stringHint: String?
     @State private var cursorStep = 0
+    @State private var clearTriggeredThisGesture = false
+    @State private var stringGestureBlocked = false
     @GestureState private var stringTouchActive = false
 
     private enum StringAxis: Equatable { case vertical, horizontal }
-    private let contentInset: CGFloat = 22
+    private let contentInset: CGFloat = 24
 
     private var linkReady: Bool { link.phase.isReady }
     private var canRecordNow: Bool {
@@ -31,7 +33,9 @@ struct HomeView: View {
 
     private var stringMotion: StringMotionStore { session.spectrumStore.stringMotion }
     private var canUseString: Bool {
-        linkReady && scenePhase == .active && !showPairing && !showResult && !showDevices
+        linkReady && link.gestureSupported && link.gestureReady && !link.clearPending
+            && session.phase != .listening && session.phase != .transcribing && !session.isUploading
+            && scenePhase == .active && !showPairing && !showResult && !showDevices
     }
 
     var body: some View {
@@ -39,18 +43,26 @@ struct HomeView: View {
         GeometryReader { geometry in
             ZStack {
                 TechBackground()
-                VStack(spacing: 0) {
+                let width = max(1, geometry.size.width - contentInset * 2)
+                let height = geometry.size.height
+                let instrumentHeight = min(300, height * 0.40)
+                // Keep the entire interaction area together and about 24pt lower than the draft.
+                let instrumentCenter = height * 0.52
+                Group {
                     header
-                    Spacer(minLength: 14)
-                    statusBlock(width: geometry.size.width - 44)
-                    Spacer(minLength: 14)
+                        .frame(width: width, height: 62, alignment: .top)
+                        .position(x: geometry.size.width / 2, y: 45)
+                    HUDDivider(store: session.spectrumStore, connected: linkReady)
+                        .frame(width: width, height: 10)
+                        .position(x: geometry.size.width / 2, y: 87)
+                    statusBlock(width: width)
+                        .frame(height: 108, alignment: .top)
+                        .position(x: geometry.size.width / 2, y: height * 0.145 + 74)
                     GeometryReader { torus in
-                        TorusView(
-                            store: session.spectrumStore,
-                            dimmed: session.phase == .idle && !canRecordNow
-                        )
+                        Color.clear
                         .contentShape(Rectangle())
-                        .gesture(stringGesture(width: torus.size.width, height: torus.size.height))
+                        .gesture(stringGesture(width: torus.size.width, height: torus.size.height,
+                            frame: torus.frame(in: .global)))
                         .simultaneousGesture(
                             DragGesture(minimumDistance: 0).onChanged { _ in
                                 // A fresh touch cancels a shot even before the
@@ -59,30 +71,43 @@ struct HomeView: View {
                             }
                         )
                     }
-                    .frame(height: min(360, geometry.size.height * 0.40))
+                    .frame(width: width, height: instrumentHeight)
                     .anchorPreference(key: ReceiverAnchorsKey.self, value: .bounds) {
                         ReceiverAnchors(torus: $0)
                     }
-
-                    // 固定高度的不可见留白：即使出现结果或提示，主图与底栏也不移动。
-                    Color.clear.frame(height: 38)
-
-                    Spacer(minLength: 16)
-
-                    holdBar(width: geometry.size.width - contentInset * 2)
-                        .anchorPreference(key: ReceiverAnchorsKey.self, value: .bounds) {
-                            ReceiverAnchors(source: $0)
+                    .position(x: geometry.size.width / 2, y: instrumentCenter)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(stringControlHint)
+                        Text(secondaryGestureHint)
+                    }
+                    .modifier(InstrumentHint())
+                    .frame(width: max(1, width - 40), height: 38, alignment: .topLeading)
+                    .position(x: geometry.size.width / 2,
+                              y: instrumentCenter + instrumentHeight / 2 + 17)
+                    VStack(spacing: 0) {
+                        HStack {
+                            HUDLabel(text: "TX / VOICE")
+                            Rectangle().fill(Theme.line).frame(width: 73, height: 0.5)
+                                .padding(.leading, 8)
+                            Spacer()
+                            HUDLabel(text: "PRESS + HOLD", color: Theme.orange.opacity(0.7))
                         }
-                    footer
+                        .frame(height: 12)
+                        holdBar(width: width)
+                            .anchorPreference(key: ReceiverAnchorsKey.self, value: .bounds) {
+                                ReceiverAnchors(source: $0)
+                            }
+                            .padding(.top, 10)
+                        footer
+                    }
+                    .frame(width: width, height: 116, alignment: .top)
+                    .position(x: geometry.size.width / 2, y: height - 64)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, contentInset)
-                .padding(.top, 6)
-                .padding(.bottom, 8)
+                .frame(width: geometry.size.width, height: height)
                 .overlay(alignment: .bottom) {
                     if cancelArmed {
                         Text("松开取消")
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .font(.system(size: 10, weight: .regular))
                             .foregroundStyle(Theme.ivory)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
@@ -92,7 +117,7 @@ struct HomeView: View {
                             .transition(.opacity)
                     } else if let notice = session.notice {
                         Text(notice)
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .font(.system(size: 10, weight: .regular))
                             .foregroundStyle(Theme.muted)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
@@ -102,7 +127,7 @@ struct HomeView: View {
                             .transition(.opacity)
                     } else if let hint = stringHint {
                         Text(hint)
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .font(.system(size: 10, weight: .regular))
                             .foregroundStyle(Theme.orange)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
@@ -119,12 +144,21 @@ struct HomeView: View {
                         .zIndex(10)
                 }
             }
+            .coordinateSpace(name: "home")
             .animation(.easeOut(duration: 0.22), value: showResult)
             .overlayPreferenceValue(ReceiverAnchorsKey.self) { anchors in
                 GeometryReader { proxy in
                     if !showResult, let torus = anchors.torus, let source = anchors.source {
-                        ReceiverFlowView(store: receiver, spectrum: session.spectrumStore,
-                                         torusFrame: proxy[torus], sourceFrame: proxy[source])
+                        ZStack {
+                            TorusView(store: session.spectrumStore, dimmed: session.phase == .idle && !canRecordNow,
+                                      instrumentHUD: true,
+                                      channelLabel: linkReady ? "CH 01" : (canRecordNow ? "BUFFER" : "NO LINK"),
+                                      viewportFrame: proxy[torus])
+                            ReceiverFlowView(store: receiver, spectrum: session.spectrumStore,
+                                             torusFrame: proxy[torus], sourceFrame: proxy[source])
+                            ClearDropZone(motion: stringMotion, distance: max(1, proxy[torus].midY - 84),
+                                          enabled: canUseString && session.pullDeleteEnabled)
+                        }
                     }
                 }
                 .ignoresSafeArea()
@@ -139,8 +173,8 @@ struct HomeView: View {
                 .toolbar(.visible, for: .navigationBar)
         }
         }
-        .statusBarHidden(true)
-        .persistentSystemOverlays(.hidden)
+        .statusBarHidden(false)
+        .simultaneousGesture(TapGesture().onEnded { session.spectrumStore.wake() })
         .sheet(isPresented: $showPairing) {
             PairingSheet()
                 .environmentObject(link)
@@ -152,13 +186,12 @@ struct HomeView: View {
             link.start()
             session.activateAudio()
             stringMotion.reduceMotion = reduceMotion
-            BowReleaseSound.shared.prepare()
             stringMotion.onFireReturn = { [weak session = session, weak link = link, weak receiver = receiver] in
                 guard let session, let link, link.phase.isReady,
                       session.snapReturnEnabled, !showPairing, !showResult, !showDevices,
                       UIApplication.shared.applicationState == .active,
                       session.sendInput("return") else { return false }
-                session.showGestureNotice("回车")
+                session.showGestureNotice("发射文字")
                 receiver?.fire()
                 return true
             }
@@ -166,8 +199,7 @@ struct HomeView: View {
                 guard let session, let link, link.phase.isReady,
                       session.pullDeleteEnabled,
                       UIApplication.shared.applicationState == .active else { return false }
-                session.sendInput("delete")
-                return true
+                return session.sendInput("delete")
             }
             if case .needsCode = link.phase, !showDevices {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
@@ -182,6 +214,9 @@ struct HomeView: View {
             }
             #if DEBUG
             let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--ui-preview=settings") {
+                showPairing = true
+            }
             if arguments.contains("--debug-buffer-tone") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                     session.startDebugBufferTone()
@@ -206,6 +241,35 @@ struct HomeView: View {
             stringMotion.onFireReturn = nil
             session.deactivateAudio()
         }
+        .task {
+            #if DEBUG
+            // Standalone visual regression preview: no Mac, audio or input commands.
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--debug-standby-check") {
+                await StandbyDiagnostics.run(spectrum: session.spectrumStore, receiver: receiver)
+            }
+            if arguments.contains("--debug-standby-audio-check") {
+                try? await Task.sleep(for: .seconds(2))
+                await session.verifyStandbyAudio()
+            }
+            if arguments.contains("--ui-preview=flight") {
+                let requested = arguments.first { $0.hasPrefix("--debug-flight-count=") }
+                    .flatMap { Int($0.replacingOccurrences(of: "--debug-flight-count=", with: "")) } ?? 120
+                let count = min(5000, max(1, requested))
+                let phrase = "把今天讨论的交互细节整理成一页说明重点保留按住说话松开即输入的节奏"
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled else { return }
+                if let value = arguments.first(where: { $0.hasPrefix("--debug-flight-origin=") }),
+                   let fraction = Double(value.replacingOccurrences(of: "--debug-flight-origin=", with: "")) {
+                    receiver.updateTouch(xFraction: CGFloat(fraction))
+                }
+                receiver.update(text: String(String(repeating: phrase, count: count / phrase.count + 1).prefix(count)))
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { return }
+                receiver.fire()
+            }
+            #endif
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active {
                 stringMotion.cancel()
@@ -215,6 +279,19 @@ struct HomeView: View {
                 session.handleForeground()
             } else if phase == .background {
                 session.handleBackground()
+            }
+        }
+        .onChange(of: canUseString) { _, allowed in
+            if !allowed {
+                if stringAxis != nil || stringTouchActive { stringGestureBlocked = true }
+                stringMotion.cancel(preserveClear: true)
+            }
+        }
+        .onChange(of: session.clearGeneration) { _, generation in
+            Task { @MainActor in
+                if stringMotion.isClearing { try? await Task.sleep(for: .milliseconds(300)) }
+                guard session.clearGeneration == generation else { return }
+                receiver.reset()
             }
         }
         .onChange(of: link.phase) { _, phase in
@@ -243,7 +320,7 @@ struct HomeView: View {
         }
         .onChange(of: session.phase) { _, phase in
             if phase == .listening || phase == .idle {
-                receiver.reset()
+                if !stringMotion.isClearing { receiver.reset() }
                 showResult = false
             }
         }
@@ -259,6 +336,7 @@ struct HomeView: View {
         }
         .onChange(of: showPairing) { _, presented in
             if presented { stringMotion.cancel() }
+            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showDevices)
         }
         .onChange(of: showResult) { _, presented in
             if presented { stringMotion.cancel() }
@@ -276,9 +354,10 @@ struct HomeView: View {
             stringHint = hint
         }
         .onChange(of: stringTouchActive) { _, active in
+            if !active { stringGestureBlocked = false; clearTriggeredThisGesture = false }
             // SwiftUI can cancel a drag without delivering onEnded (sheet/background).
             if !active, stringAxis != nil {
-                stringMotion.cancel()
+                stringMotion.cancel(preserveClear: true)
                 stringAxis = nil
                 cursorStep = 0
                 stringHint = nil
@@ -296,74 +375,78 @@ struct HomeView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 12) {
-            PixelText(text: "IMIC", cell: 2.3, color: Theme.ivory, tracking: 1.4)
-            Rectangle()
-                .fill(Theme.orange)
-                .frame(width: 3, height: 12)
-            MetaLabel(text: "SYS 01", color: Theme.orange)
-            Spacer()
-            Button {
-                Haptics.shared.play(.tap)
-                showPairing = false
-                showDevices = true
-            } label: {
-                HStack(spacing: 6) {
-                    Circle().fill(connectionColor).frame(width: 5, height: 5)
-                    MetaLabel(text: connectionLabel, color: linkReady ? Theme.ivory : Theme.muted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(Theme.muted)
+        HStack(alignment: .top, spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                Image("Wordmark")
+                    .renderingMode(.original)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 90, height: 26, alignment: .leading)
+                    .blendMode(.screen)
+                    .accessibilityLabel("iMic")
+                HUDLabel(text: "SYS 01")
+            }
+            Spacer(minLength: 12)
+            HStack(spacing: 5) {
+                Button {
+                    Haptics.shared.play(.tap)
+                    showPairing = false
+                    showDevices = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Rectangle().fill(connectionColor).frame(width: 3.5, height: 3.5)
+                        Text(connectionLabel)
+                            .font(.system(size: 9.5, weight: .regular, design: .monospaced))
+                            .tracking(0.3)
+                            .foregroundStyle(Theme.muted)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8, weight: .regular))
+                            .foregroundStyle(Theme.muted)
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
-                .frame(minHeight: 30)
-                .contentShape(Rectangle())
+                .frame(maxWidth: 150, alignment: .trailing)
+                .accessibilityLabel("连接电脑，\(connectionLabel)，点击切换 Mac")
+                Button {
+                    Haptics.shared.play(.tap)
+                    showPairing = true
+                } label: {
+                    PixelSymbol(kind: .settings, color: Theme.ivory.opacity(0.72))
+                        .frame(width: 19.5, height: 19.5)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("设置")
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("连接电脑，\(connectionLabel)，点击切换 Mac")
-            Button {
-                Haptics.shared.play(.tap)
-                showPairing = true
-            } label: {
-                Image(systemName: "dot.radiowaves.left.and.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.orange)
-                    .frame(width: 30, height: 30)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel("连接 Mac")
+            // Align the visible glyph, rather than its 44pt touch target, to the content edge.
+            .padding(.trailing, -12)
+            .offset(y: -9)
         }
-        .frame(height: 30)
     }
 
     // MARK: - Status
 
     private func statusBlock(width: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 11) {
-            HStack {
-                MetaLabel(text: "VOICE / LINK", color: Theme.muted)
-                Spacer()
-                MetaLabel(
-                    text: linkReady ? "CH 01 · ENCRYPTED" : (canRecordNow ? "BUFFERING" : "NO CHANNEL"),
-                    color: Theme.orange
-                )
-            }
-            PixelText(
-                text: statusWord,
-                cell: statusCell(width: width),
-                color: statusColor,
-                tracking: 3
-            )
-            .frame(height: 7 * statusCell(width: width), alignment: .leading)
+        VStack(alignment: .center, spacing: 0) {
+            HUDLabel(text: "VOICE / INPUT")
+                .padding(.bottom, 13)
+            PixelText(text: statusWord, cell: statusCell(width: width),
+                      color: statusColor, tracking: 2.8)
+                .frame(height: 30, alignment: .center)
             Text(statusLine)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(Theme.muted)
+                .modifier(InstrumentHint())
                 .lineLimit(2)
-                .frame(minHeight: 38, alignment: .topLeading)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+                .frame(minHeight: 34, alignment: .top)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 13)
         }
-        .frame(width: width, alignment: .leading)
+        .frame(width: width, alignment: .center)
     }
 
     // MARK: - Result
@@ -446,35 +529,48 @@ struct HomeView: View {
 
     private func holdBar(width: CGFloat) -> some View {
         ZStack {
-            Rectangle()
+            RecordingBarShape()
                 .fill(barFill)
                 .overlay(
-                    Rectangle().stroke(
+                    RecordingBarShape().stroke(
                         canRecordNow ? Color.clear : Theme.orange.opacity(0.8),
                         lineWidth: 1
                     )
                 )
-            HStack(spacing: 12) {
+                .overlay(alignment: .leading) {
+                    Rectangle().fill(barTextColor.opacity(0.32))
+                        .frame(width: 2, height: 30).padding(.leading, 11)
+                }
+                .overlay(alignment: .trailing) {
+                    Rectangle().fill(barTextColor.opacity(0.16))
+                        .frame(width: 0.7, height: 42).padding(.trailing, 50)
+                }
+            HStack(spacing: 0) {
                 PixelText(
                     text: barLabel,
                     cell: barCell(width: width),
                     color: barTextColor,
                     tracking: 2.2
                 )
-                Spacer(minLength: 6)
+                Spacer(minLength: 12)
                 if session.phase == .listening {
                     Text(String(format: "%.1f s", session.elapsed))
                         .font(.system(size: 12, weight: .medium, design: .monospaced))
                         .foregroundStyle(barTextColor.opacity(0.8))
                 } else {
-                    Image(systemName: canRecordNow ? "mic.fill" : "link")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(barTextColor.opacity(0.9))
+                    if canRecordNow {
+                        PixelSymbol(kind: .microphone, color: barTextColor)
+                            .frame(width: 14, height: 24)
+                    } else {
+                        Image(systemName: "link")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(barTextColor.opacity(0.9))
+                    }
                 }
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 24)
         }
-        .frame(width: width, height: 70)
+        .frame(width: width, height: 68)
         .contentShape(Rectangle())
         .scaleEffect(pressing && session.phase == .listening ? 0.986 : 1)
         .animation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.7), value: pressing)
@@ -499,6 +595,9 @@ struct HomeView: View {
                     if session.phase == .listening {
                         session.endListening(cancelled: cancelled)
                     }
+                },
+                onPositionChanged: { fraction in
+                    receiver.updateTouch(xFraction: fraction)
                 }
             )
         }
@@ -510,31 +609,44 @@ struct HomeView: View {
             if session.phase == .listening {
                 session.endListening(cancelled: false)
             } else {
+                receiver.updateTouch(xFraction: 0.5)
                 beginInteraction()
             }
         }
     }
 
     /// 中心弦：竖向拨弦（下=回车，上=删除），横向滑动移动光标。
-    private func stringGesture(width: CGFloat, height: CGFloat) -> some Gesture {
+    private func stringGesture(width: CGFloat, height: CGFloat, frame: CGRect) -> some Gesture {
         DragGesture(minimumDistance: 6, coordinateSpace: .local)
             .updating($stringTouchActive) { _, active, _ in active = true }
             .onChanged { value in
+                guard !stringMotion.isClearing else { return }
+                guard !stringGestureBlocked else { return }
                 guard canUseString else {
+                    stringGestureBlocked = true
                     stringMotion.cancel()
+                    stringHint = link.gestureSupported ? "等待电脑完成处理后再拉弦" : "请更新 Mac 端启用弦控制"
                     return
                 }
+                guard !clearTriggeredThisGesture else { return }
                 if stringAxis == nil {
                     stringMotion.cancelPendingReturn()
                     let dx = abs(value.translation.width)
                     let dy = abs(value.translation.height)
                     stringAxis = dx > dy * 1.35 ? .horizontal : .vertical
                     if stringAxis == .vertical {
-                        stringMotion.begin(anchor: value.startLocation.x / max(1, width), height: height)
+                        let stretch = session.pullDeleteEnabled ? StringClearStretch(
+                            distance: frame.minY + value.startLocation.y - 84, depth: frame.midY - 84) : nil
+                        stringMotion.begin(anchor: value.startLocation.x / max(1, width), height: height, clearStretch: stretch)
                     }
                 }
                 switch stringAxis {
                 case .vertical:
+                    if session.pullDeleteEnabled, value.translation.height < -80,
+                       frame.minY + value.location.y <= 84 {
+                        requestClear()
+                        return
+                    }
                     stringMotion.drag(
                         translation: value.translation.height,
                         velocity: value.velocity.height,
@@ -562,7 +674,10 @@ struct HomeView: View {
                 }
             }
             .onEnded { value in
-                if stringAxis == .vertical {
+                if stringAxis == .vertical, canUseString, !stringGestureBlocked, !clearTriggeredThisGesture,
+                   session.pullDeleteEnabled, value.translation.height < -80, frame.minY + value.location.y <= 84 {
+                    requestClear()
+                } else if stringAxis == .vertical {
                     let command = stringMotion.finish(
                         translation: value.translation.height,
                         velocity: value.velocity.height,
@@ -578,7 +693,18 @@ struct HomeView: View {
                 stringHint = nil
                 stringAxis = nil
                 cursorStep = 0
+                clearTriggeredThisGesture = false
+                stringGestureBlocked = false
             }
+    }
+
+    private func requestClear() {
+        clearTriggeredThisGesture = true
+        stringMotion.completeClearContact()
+        if session.sendInput("clear") {
+            session.showGestureNotice("正在清空输入框…")
+            Haptics.shared.play(.cancelArmed)
+        }
     }
 
     private func beginInteraction() {
@@ -607,26 +733,30 @@ struct HomeView: View {
 
     private var footer: some View {
         HStack {
-            MetaLabel(text: "AES-256 · BONJOUR")
+            Text("松开输入 · 上滑取消")
+                .modifier(InstrumentHint())
             Spacer()
             ZStack(alignment: .trailing) {
-                MetaLabel(text: "16 kHz · PCM")
+                HUDLabel(text: "PCM / 16K")
                     .opacity(hasResultText ? 0 : 1)
-                Text("查看结果  ›")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .tracking(1.4)
-                    .foregroundStyle(Theme.orange)
-                    .opacity(hasResultText ? 1 : 0)
-                    .allowsHitTesting(hasResultText)
-                    .onTapGesture {
-                        Haptics.shared.play(.overlayOpen)
-                        showResult = true
-                    }
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityLabel("查看识别结果")
+                Button {
+                    Haptics.shared.play(.overlayOpen)
+                    showResult = true
+                } label: {
+                    Text("查看结果  ›")
+                        .modifier(InstrumentHint())
+                        .frame(minWidth: 74, minHeight: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .opacity(hasResultText ? 1 : 0)
+                .allowsHitTesting(hasResultText)
+                .accessibilityHidden(!hasResultText)
+                .accessibilityLabel("查看识别结果")
             }
-            .frame(width: 98, alignment: .trailing)
+            .frame(width: 98, height: 14, alignment: .trailing)
         }
+        .frame(height: 14)
         .padding(.top, 12)
     }
 
@@ -646,7 +776,7 @@ struct HomeView: View {
 
     private var connectionLabel: String {
         switch link.phase {
-        case .ready(let name): return name.uppercased()
+        case .ready(let name): return name
         case .connecting(let name): return "LINKING \(name)".uppercased()
         case .needsCode(let name): return "PAIR \(name)".uppercased()
         case .searching: return "SEARCHING"
@@ -656,7 +786,7 @@ struct HomeView: View {
     }
 
     private func statusCell(width: CGFloat) -> CGFloat {
-        min(14, PixelFont.fittedCell(for: "SENDING", width: width, tracking: 3))
+        min(4.2, PixelFont.fittedCell(for: statusWord, width: width, tracking: 2.8))
     }
 
     private var statusWord: String {
@@ -743,10 +873,28 @@ struct HomeView: View {
     }
 
     private func barCell(width: CGFloat) -> CGFloat {
-        let length = CGFloat(barLabel.count)
-        // 给左右 padding、麦克风图标和计时/提示留出空间，再拟合像素字。
-        let available = max(120, width - 36 - 13 - 12 - 8)
-        return max(1.8, min(2.7, available / max(1, length * 5 + (length - 1) * 0.8)))
+        let accessory: CGFloat = session.phase == .listening ? 54 : 14
+        let available = max(80, width - 48 - accessory - 12)
+        return min(2.55, PixelFont.fittedCell(for: barLabel, width: available, tracking: 2.2))
+    }
+
+    private var stringControlHint: String {
+        guard linkReady else { return "连接 Mac 后可拨弦" }
+        guard link.gestureSupported else { return "请更新 Mac 端启用弦控制" }
+        if link.clearPending { return "正在清空输入框…" }
+        if session.phase == .listening { return "录音结束并完成输入后可拉弦" }
+        guard link.gestureReady, session.phase != .transcribing, !session.isUploading else {
+            return "等待电脑完成润色、动画与输入"
+        }
+        return session.snapReturnEnabled ? "下拉松手发射文字" : "发射已在 Mac 关闭"
+    }
+
+    private var secondaryGestureHint: String {
+        guard linkReady else { return "语音和按键发送到当前选择的 Mac" }
+        var actions: [String] = []
+        if session.pullDeleteEnabled { actions.append("上拉删除／顶部清空") }
+        if session.swipeCursorEnabled { actions.append("左右移动光标") }
+        return actions.isEmpty ? "弦手势已在 Mac 关闭" : actions.joined(separator: " · ")
     }
 }
 

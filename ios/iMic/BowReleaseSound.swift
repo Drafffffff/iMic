@@ -172,11 +172,12 @@ final class BowReleaseSound {
         do {
             let engine = try CHHapticEngine(audioSession: AVAudioSession.sharedInstance())
             self.engine = engine
-            engine.isAutoShutdownEnabled = false
+            engine.isAutoShutdownEnabled = true
             engine.stoppedHandler = { [weak self] reason in
                 Task { @MainActor in
                     guard let self, self.generation == currentGeneration else { return }
                     IMicLog.write("iphone.bow", "coordinated engine stopped reason=\(reason.rawValue)")
+                    self.prepared = false
                     self.invalidateCore()
                 }
             }

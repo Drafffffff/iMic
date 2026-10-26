@@ -1,6 +1,6 @@
 import AVFoundation
 
-/// 16 kHz / mono / PCM16 capture; the foreground hot mic also permits bow feedback playback.
+/// On-demand 16 kHz / mono / PCM16 capture, with a short warm lease owned by SessionModel.
 final class AudioCapture {
     enum CaptureError: LocalizedError {
         case format
@@ -46,7 +46,7 @@ final class AudioCapture {
             try session.setPreferredSampleRate(16_000)
             try session.setPreferredIOBufferDuration(0.01)
             try session.setActive(true, options: [])
-            // Preserve touch feedback and bow playback while the foreground mic stays hot.
+            // Preserve touch feedback and bow playback while capturing.
             try? session.setAllowHapticsAndSystemSoundsDuringRecording(true)
 
             // Every generation owns a fresh engine, sink and queue: no old IO callback

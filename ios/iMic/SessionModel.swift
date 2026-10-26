@@ -16,7 +16,9 @@ final class SessionModel: ObservableObject {
         case error
     }
 
-    @Published private(set) var phase: Phase = .idle
+    @Published private(set) var phase: Phase = .idle {
+        didSet { if phase != oldValue { updateAudioStandby() } }
+    }
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var transcript = ""
     @Published private(set) var liveTranscript = ""
@@ -27,6 +29,7 @@ final class SessionModel: ObservableObject {
     @Published private(set) var notice: String?
     @Published private(set) var micDenied = false
     @Published private(set) var copied = false
+    @Published private(set) var clearGeneration = 0
     @Published private(set) var remoteFeatures = 0b1110
     let spectrumStore = SpectrumStore()
     let link: LinkClient
@@ -40,6 +43,8 @@ final class SessionModel: ObservableObject {
     private let debugBufferText: String?
     private var debugDidRun = false
     private var audioGeneration: UInt64 = 0
+    private var audioStandbyTask: Task<Void, Never>?
+    private var audioAuthorizationTask: Task<Void, Never>?
 
     private var wantsRecording = false
     private var session: UInt16 = 0
@@ -127,6 +132,21 @@ final class SessionModel: ObservableObject {
         link.onResult = { [weak self] message in
             Task { @MainActor in self?.handle(message) }
         }
+        link.onInputResult = { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                if result.status == "applied" {
+                    self.transcript = ""
+                    self.liveTranscript = ""
+                    self.phase = .idle
+                    self.clearGeneration += 1
+                    self.showGestureNotice("已清空当前输入框")
+                } else {
+                    self.showGestureNotice(result.message ?? "当前输入框无法安全清空")
+                    Haptics.shared.play(.error)
+                }
+            }
+        }
         link.onRemoteState = { phase in
             IMicLog.write("iphone.session", "remote state=\(phase)")
         }
@@ -146,7 +166,7 @@ final class SessionModel: ObservableObject {
 
     // MARK: - Permissions / first press
 
-    /// 前台常驻热麦克风：按下时不再激活 AVAudioSession 或启动引擎，直接进入录音状态。
+    /// Prepare permission only. Foreground standby must not open the input device.
     func activateAudio() {
         guard !isPreview else { return }
         #if DEBUG
@@ -155,22 +175,27 @@ final class SessionModel: ObservableObject {
         #endif
         if AudioCapture.permissionGranted {
             micDenied = false
-            _ = startAudioEngine()
             if !wantsRecording { speechPreview.prepareAuthorization() }
             return
         }
-        Task {
+        guard audioAuthorizationTask == nil else { return }
+        audioAuthorizationTask = Task { [weak self] in
             let granted = await AudioCapture.requestPermission()
-            guard !Task.isCancelled else { return }
+            guard let self else { return }
+            defer { self.audioAuthorizationTask = nil }
+            guard !Task.isCancelled, UIApplication.shared.applicationState == .active else { return }
             micDenied = !granted
             if granted {
-                _ = startAudioEngine()
                 if !wantsRecording { speechPreview.prepareAuthorization() }
             }
         }
     }
 
     func deactivateAudio() {
+        audioStandbyTask?.cancel()
+        audioStandbyTask = nil
+        audioAuthorizationTask?.cancel()
+        wantsRecording = false
         audioGeneration &+= 1
         audio.stop()
         preRoll.removeAll()
@@ -179,6 +204,8 @@ final class SessionModel: ObservableObject {
 
     @discardableResult
     private func startAudioEngine() -> Bool {
+        audioStandbyTask?.cancel()
+        audioStandbyTask = nil
         guard !audio.isRunning else { return true }
         audioGeneration &+= 1
         let generation = audioGeneration
@@ -209,6 +236,62 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// A short lease retains 150ms pre-roll for consecutive utterances; it never
+    /// starts a cold engine and expires even while ASR/network work is pending.
+    private func updateAudioStandby() {
+        if wantsRecording || phase == .listening {
+            audioStandbyTask?.cancel()
+            audioStandbyTask = nil
+            return
+        }
+        guard !isPreview, audio.isRunning, audioStandbyTask == nil else { return }
+        audioStandbyTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(5)) }
+            catch { return }
+            guard let self, !Task.isCancelled, !self.wantsRecording,
+                  self.phase != .listening else { return }
+            self.audioStandbyTask = nil
+            self.audioGeneration &+= 1
+            self.audio.stop()
+            self.preRoll.removeAll(keepingCapacity: true)
+            IMicLog.write("iphone.power", "standby microphone stopped")
+        }
+    }
+
+    #if DEBUG
+    /// Runs only when explicitly launched for diagnostics. Never sends audio/input to Mac.
+    func verifyStandbyAudio() async {
+        guard !isPreview, AudioCapture.permissionGranted, phase == .idle else {
+            IMicLog.write("iphone.power", "audio check skipped: requires idle and existing microphone permission")
+            return
+        }
+        let cold = !audio.isRunning
+        let began = Date()
+        wantsRecording = true
+        let started = startAudioEngine()
+        let latency = Date().timeIntervalSince(began) * 1000
+        IMicLog.write("iphone.power", "audio check cold=\(cold) started=\(started) startMs=\(Int(latency))")
+        guard started else { wantsRecording = false; return }
+        wantsRecording = false
+        updateAudioStandby()
+        do {
+            try await Task.sleep(for: .seconds(1))
+            wantsRecording = true
+            _ = startAudioEngine() // Cancels the old lease, even for a running engine.
+            try await Task.sleep(for: .seconds(5))
+            guard audio.isRunning else {
+                IMicLog.write("iphone.power", "audio check FAIL stale lease stopped active capture")
+                deactivateAudio()
+                return
+            }
+            wantsRecording = false
+            updateAudioStandby()
+            try await Task.sleep(for: .seconds(6))
+            IMicLog.write("iphone.power", "audio check \(cold && !audio.isRunning ? "PASS" : "FAIL")")
+        } catch { deactivateAudio() }
+    }
+    #endif
+
     private func handleAudioFailure(_ message: String) {
         wantsRecording = false
         if phase == .listening { endListening(cancelled: true) }
@@ -223,12 +306,12 @@ final class SessionModel: ObservableObject {
         Haptics.shared.play(.error)
     }
 
-    /// 引擎一直运行；未录音时只保留最后 150ms，按下后立刻补进开头。
+    /// Within the short warm lease retain 150ms; cold standby receives no PCM.
     private func handleLiveAudio(_ data: Data) {
         guard !isPreview, !syntheticActive else { return }
         if phase == .listening {
             ingest(data)
-        } else if phase == .idle || phase == .error {
+        } else {
             preRoll.append(data)
             if preRoll.count > 4_800 {
                 preRoll.removeFirst(preRoll.count - 4_800)
@@ -238,6 +321,7 @@ final class SessionModel: ObservableObject {
     }
 
     func beginListening() {
+        guard !link.clearPending, !spectrumStore.stringMotion.isClearing else { return }
         if isPreview {
             if phase == .listening {
                 endListening(cancelled: false)
@@ -261,6 +345,7 @@ final class SessionModel: ObservableObject {
 
         if AudioCapture.permissionGranted {
             guard startAudioEngine() else {
+                wantsRecording = false
                 phase = .error
                 message = "麦克风启动失败"
                 Haptics.shared.play(.error)
@@ -270,8 +355,9 @@ final class SessionModel: ObservableObject {
         } else {
             Task {
                 let granted = await AudioCapture.requestPermission()
-                guard wantsRecording else { return }
+                guard wantsRecording, UIApplication.shared.applicationState == .active else { return }
                 guard granted else {
+                    wantsRecording = false
                     micDenied = true
                     phase = .error
                     message = "麦克风权限未开启"
@@ -280,6 +366,7 @@ final class SessionModel: ObservableObject {
                 }
                 micDenied = false
                 guard startAudioEngine() else {
+                    wantsRecording = false
                     phase = .error
                     message = "麦克风启动失败"
                     Haptics.shared.play(.error)
@@ -1065,12 +1152,9 @@ final class SessionModel: ObservableObject {
     /// 中心弦手势：回车 / 删除 / 左右移动光标。Mac 端设置关闭时会忽略。
     @discardableResult
     func sendInput(_ action: String) -> Bool {
-        guard link.phase.isReady else {
-            Haptics.shared.play(.warning)
-            return false
-        }
-        link.sendInput(action)
-        return true
+        guard link.phase.isReady, phase != .listening, phase != .transcribing, !isUploading,
+              link.gestureReady, !link.clearPending else { return false }
+        return link.sendInput(action)
     }
 
     func showGestureNotice(_ text: String?) {
@@ -1115,6 +1199,7 @@ final class SessionModel: ObservableObject {
 
     func handleBackground() {
         if phase == .listening { endListening(cancelled: true) }
+        link.enterBackground()
         deactivateAudio()
         Haptics.shared.stop()
     }

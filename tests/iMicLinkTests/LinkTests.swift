@@ -2,6 +2,96 @@ import XCTest
 import CryptoKit
 @testable import iMicLink
 
+final class GestureControlTests: XCTestCase {
+    func testPipelineCompletionAndStaleLease() {
+        var gate = LinkGestureLease()
+        XCTAssertFalse(gate.permits(0))
+        gate.update(ready: true)
+        let idle = gate.revision
+        XCTAssertTrue(gate.permits(idle))
+        for _ in ["recording", "ASR", "polish", "sweep", "final input"] {
+            gate.update(ready: false)
+            XCTAssertFalse(gate.permits(idle))
+            XCTAssertFalse(gate.permits(gate.revision))
+        }
+        gate.update(ready: true)
+        XCTAssertFalse(gate.permits(idle))
+        XCTAssertTrue(gate.permits(gate.revision))
+        let clear = gate.revision
+        gate.update(ready: false)
+        XCTAssertFalse(gate.permits(clear), "A held or replayed clear cannot execute twice")
+    }
+
+    func testGestureMessagesRoundTripAndRejectMalformedState() throws {
+        for message in [LinkMessage.inputState(revision: 12, ready: true),
+                        .inputState(revision: 13, ready: false), .input("clear", revision: 12),
+                        .inputResult(revision: 12, applied: true),
+                        .inputResult(revision: 12, applied: false, message: "不可清空")] {
+            XCTAssertEqual(try LinkMessage.decode(message.encoded()), message)
+        }
+        for invalid in [#"{"t":"input.state","status":"ready"}"#,
+                        #"{"t":"input.state","seq":1,"status":"unknown"}"#,
+                        #"{"t":"input.state","seq":-1,"status":"ready"}"#,
+                        #"{"t":"input","action":"clear"}"#,
+                        #"{"t":"input.result","seq":1,"action":"clear","status":"sent"}"#] {
+            XCTAssertThrowsError(try LinkMessage.decode(Data(invalid.utf8)))
+        }
+        XCTAssertEqual(try LinkMessage.decode(LinkMessage.input("delete").encoded()).action, "delete")
+    }
+
+    func testFullScreenStretchKeepsInitialDeleteFeelAndReachesZone() {
+        let stretch = StringClearStretch(distance: 350, depth: 330)
+        var previous: CGFloat = 0
+        for distance in stride(from: CGFloat(0), through: 350, by: 1) {
+            let normal: CGFloat = -60 * tanh(distance * 0.72 / 60)
+            let pull = stretch.pull(normal: normal, translation: -distance, limit: 60)
+            XCTAssertLessThanOrEqual(pull, previous + 0.001)
+            if distance < 80 { XCTAssertEqual(pull, normal, accuracy: 0.001) }
+            previous = pull
+        }
+        XCTAssertEqual(previous, -330, accuracy: 0.001)
+        XCTAssertEqual(-40 + stretch.pull(normal: -60, translation: -350, limit: 60, origin: -40), -330, accuracy: 0.001)
+        XCTAssertEqual(stretch.pull(normal: 30, translation: 50, limit: 60), 30)
+    }
+
+    func testClearContactDissolvesBeforeContinuousSpringReturn() {
+        let feedback = StringClearFeedback(initialPull: -325, depth: 330)
+        XCTAssertEqual(feedback.frame(at: 0, reducedMotion: false).pull, -325)
+        XCTAssertLessThan(feedback.frame(at: 0.06, reducedMotion: false).pull, -325)
+        XCTAssertEqual(feedback.frame(at: 0.06, reducedMotion: false).opacity, 1)
+        XCTAssertEqual(feedback.frame(at: 0.22, reducedMotion: false).opacity, 0)
+        XCTAssertEqual(feedback.frame(at: 0.22, reducedMotion: false).pull, -330)
+        XCTAssertGreaterThan(feedback.frame(at: 0.26, reducedMotion: false).pull, -190)
+        XCTAssertGreaterThan(feedback.frame(at: 0.30, reducedMotion: false).pull, 0,
+                             "A fully drawn string must cross neutral within 80ms of release")
+        for reduced in [false, true] {
+            var previous = feedback.frame(at: 0, reducedMotion: reduced)
+            for index in 1...126 {
+                let frame = feedback.frame(at: Double(index) / 120, reducedMotion: reduced)
+                XCTAssertLessThan(abs(frame.pull - previous.pull), 55, "No contact/return teleport at 120 Hz")
+                XCTAssertTrue((0...1).contains(frame.opacity))
+                if reduced { XCTAssertLessThanOrEqual(frame.pull, 0) }
+                previous = frame
+            }
+            XCTAssertTrue(previous.finished)
+            XCTAssertEqual(previous.pull, 0)
+            XCTAssertEqual(previous.opacity, 1)
+        }
+    }
+
+    func testPullRatchetConsumesNewTeethWithoutJitterOrCatchUpBursts() {
+        var ratchet = StringPullRatchet()
+        XCTAssertFalse(ratchet.advance(distance: 20, now: 0))
+        XCTAssertTrue(ratchet.advance(distance: 50, now: 0.1))
+        XCTAssertFalse(ratchet.advance(distance: 49, now: 0.2))
+        XCTAssertFalse(ratchet.advance(distance: 51, now: 0.3))
+        XCTAssertTrue(ratchet.advance(distance: 300, now: 0.4))
+        XCTAssertFalse(ratchet.advance(distance: 320, now: 0.41))
+        XCTAssertFalse(ratchet.advance(distance: 300, now: 0.5))
+        XCTAssertTrue(ratchet.advance(distance: 350, now: 0.6))
+    }
+}
+
 final class LinkWireTests: XCTestCase {
     func testFramesSurviveArbitrarySplits() throws {
         let payload = Data((0..<3000).map { UInt8($0 & 0xff) })

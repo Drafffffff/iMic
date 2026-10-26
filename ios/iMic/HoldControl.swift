@@ -7,6 +7,7 @@ struct HoldControl: UIViewRepresentable {
     var onBegan: () -> Void
     var onMoved: (CGFloat) -> Void
     var onEnded: (Bool) -> Void
+    var onPositionChanged: (CGFloat) -> Void = { _ in }
 
     func makeUIView(context: Context) -> Control {
         let view = Control()
@@ -19,6 +20,7 @@ struct HoldControl: UIViewRepresentable {
         view.onBegan = onBegan
         view.onMoved = onMoved
         view.onEnded = onEnded
+        view.onPositionChanged = onPositionChanged
         return view
     }
 
@@ -26,12 +28,14 @@ struct HoldControl: UIViewRepresentable {
         view.onBegan = onBegan
         view.onMoved = onMoved
         view.onEnded = onEnded
+        view.onPositionChanged = onPositionChanged
     }
 
     final class Control: UIView {
         var onBegan: (() -> Void)?
         var onMoved: ((CGFloat) -> Void)?
         var onEnded: ((Bool) -> Void)?
+        var onPositionChanged: ((CGFloat) -> Void)?
         private var startPoint: CGPoint?
         private var translation: CGFloat = 0
 
@@ -40,6 +44,7 @@ struct HoldControl: UIViewRepresentable {
             guard let touch = touches.first else { return }
             startPoint = touch.location(in: self)
             translation = 0
+            updatePosition(touch)
             onBegan?()
         }
 
@@ -47,12 +52,14 @@ struct HoldControl: UIViewRepresentable {
             super.touchesMoved(touches, with: event)
             guard let touch = touches.first, let startPoint = startPoint else { return }
             translation = touch.location(in: self).y - startPoint.y
+            updatePosition(touch)
             onMoved?(translation)
         }
 
         override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
             super.touchesEnded(touches, with: event)
             let cancelled = translation < -64
+            if let touch = touches.first { updatePosition(touch) }
             startPoint = nil
             onEnded?(cancelled)
         }
@@ -65,6 +72,12 @@ struct HoldControl: UIViewRepresentable {
 
         override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
             bounds.contains(point)
+        }
+
+        private func updatePosition(_ touch: UITouch) {
+            guard bounds.width > 0 else { return }
+            let fraction = (touch.location(in: self).x - bounds.minX) / bounds.width
+            onPositionChanged?(min(1, max(0, fraction)))
         }
     }
 }

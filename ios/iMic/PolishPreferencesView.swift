@@ -1,158 +1,125 @@
 import SwiftUI
 
+/// 设置页内直接编辑；展示与提交均使用 Mac 确认的唯一偏好状态。
 @MainActor
-struct PolishPreferencesView: View {
+struct PolishPreferencesSection: View {
     @EnvironmentObject private var link: LinkClient
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    // A transient, visibly unconfirmed selection prevents native switches from
+    // snapping back while awaiting ACK. It is never persisted or replayed.
+    @State private var requestedPreferences: LinkPolishPreferences?
+    @State private var requestedMacID: String?
 
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    header
-                    destination
-                    connectionStatus
-
-                    if let error = link.polishPreferencesError {
-                        VStack(alignment: .leading, spacing: 8) {
-                            MetaLabel(text: "NOT CONFIRMED", color: Theme.orange)
-                            Text(error)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(Theme.orange)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text(link.polishPreferences == nil
-                                 ? "尚未取得 Mac 确认的偏好，暂时无法修改。"
-                                 : "下方保留 Mac 上次确认的值。连接可用时，可再次调整以重新提交。")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Theme.muted)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-
-                    if let preferences = link.polishPreferences {
-                        preferencesEditor(preferences)
-                            .disabled(!canEdit)
-                            .opacity(canEdit ? 1 : 0.6)
-                    } else {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Hairline()
-                            Text("尚未获取这台 Mac 的润色偏好，因此暂不显示开关与选项。连接并读取成功后，才可修改。")
-                                .font(.system(size: 14))
-                                .foregroundStyle(Theme.muted)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Hairline()
-                        MetaLabel(text: "CONFIGURED ON MAC")
-                        Text("这里只修改当前连接 Mac 的润色开关、强度与场景。API Key、服务来源与地址仍由 Mac 配置，不会传到 iPhone。")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(22)
-            }
-            .background(Theme.ink)
-            .navigationTitle("AI 润色偏好")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("关闭") {
-                        Haptics.shared.play(.tap)
-                        dismiss()
-                    }
-                    .tint(Theme.muted)
-                }
-            }
-        }
-        .preferredColorScheme(.dark)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-        .presentationBackground(Theme.ink)
+    private var displayedPreferences: LinkPolishPreferences? {
+        if link.polishPreferencesSaving, requestedMacID == link.selectedMacID,
+           let requestedPreferences { return requestedPreferences }
+        return link.polishPreferences
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            PixelText(text: "POLISH", cell: 3.4, color: Theme.ivory, tracking: 2)
-            Text("每次调整都会发送到 Mac；收到 Mac 回显，才表示已经保存。")
-                .font(.system(size: 14))
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        PixelText(text: "POLISH", cell: 2.1, color: Theme.ivory, tracking: 1.5)
+                        Text("AI 润色")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Theme.ivory)
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                    Spacer(minLength: 8)
+                    if displayedPreferences != nil {
+                        Toggle("启用 AI 润色", isOn: Binding(
+                            get: { displayedPreferences?.enabled ?? false },
+                            set: { enabled in update { $0.enabled = enabled } }
+                        ))
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        // iOS 27 的原生开关绘制比旧的布局宽度更宽，
+                        // 保留固有尺寸和独立留白，避免滚动容器切掉右端。
+                        .fixedSize(horizontal: true, vertical: true)
+                        .padding(.horizontal, 8)
+                        .frame(minWidth: 76, minHeight: 44, alignment: .trailing)
+                        .tint(Theme.orange)
+                        .disabled(!isAvailable)
+                        .allowsHitTesting(!link.polishPreferencesSaving)
+                        .accessibilityHint("保存到当前连接的 Mac，等待 Mac 确认后生效")
+                    }
+                }
+
+                connectionStatus
+            }
+
+            if let error = link.polishPreferencesError {
+                Text(error)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("更改未获确认，\(error)")
+            }
+
+            if let preferences = displayedPreferences {
+                preferencesEditor(preferences)
+                    .disabled(!isAvailable)
+                    .allowsHitTesting(!link.polishPreferencesSaving)
+                    .opacity(isAvailable ? 1 : 0.6)
+            }
+
+            Text("API Key、模型与服务地址请在 Mac 配置。")
+                .font(.system(size: 11))
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    private var destination: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            MetaLabel(text: "TARGET MAC")
-            Text(targetName)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(Theme.ivory)
-                .fixedSize(horizontal: false, vertical: true)
-            if !link.phase.isReady {
-                Text("当前未连接，不能保存更改。")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onChange(of: link.polishPreferencesSaving) { _, saving in
+            if !saving { clearRequest() }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("目标 Mac，\(targetName)\(link.phase.isReady ? "，已连接" : "，未连接")")
+        .onChange(of: link.selectedMacID) { _, _ in clearRequest() }
+        .onChange(of: link.phase) { _, phase in
+            if !phase.isReady { clearRequest() }
+        }
     }
 
     private var connectionStatus: some View {
         let status = statusDescription
-        return VStack(alignment: .leading, spacing: 9) {
-            Hairline()
-            HStack(spacing: 10) {
-                if isWaiting {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(Theme.orange)
-                        .accessibilityHidden(true)
-                } else {
-                    Rectangle()
-                        .fill(canEdit ? Theme.orange : Theme.muted)
-                        .frame(width: 4, height: 14)
-                        .accessibilityHidden(true)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                ZStack {
+                    if isWaiting {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .tint(Theme.orange)
+                    } else {
+                        Rectangle()
+                            .fill(isAvailable ? Theme.orange : Theme.muted)
+                            .frame(width: 3, height: 3)
+                    }
                 }
+                .frame(width: 12, height: 16)
+                .accessibilityHidden(true)
                 Text(status.title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Theme.ivory)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
+                    .contentTransition(.opacity)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: status.title)
             }
-            Text(status.detail)
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
+            .frame(height: 16, alignment: .leading)
+            // Saving occupies the same single row as confirmation. Details only
+            // expand for an actual connection or confirmation problem.
+            if !isAvailable || link.polishPreferencesError != nil {
+                Text(status.detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .accessibilityElement(children: .combine)
     }
 
     private func preferencesEditor(_ preferences: LinkPolishPreferences) -> some View {
         VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 12) {
-                sectionHeading("ENABLE", title: "AI 润色")
-                Toggle(isOn: Binding(
-                    get: { preferences.enabled },
-                    set: { enabled in update { $0.enabled = enabled } }
-                )) {
-                    Text("启用 AI 润色")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(Theme.ivory)
-                }
-                .tint(Theme.orange)
-                .accessibilityHint("保存到当前连接的 Mac，等待 Mac 确认后生效")
-                Text("关闭时保留识别原文；强度和场景仍会保存在 Mac。")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                Hairline()
+            VStack(alignment: .leading, spacing: 10) {
                 sectionHeading("STRENGTH", title: "润色强度")
                 HStack(spacing: 8) {
                     ForEach(PolishStrength.allCases, id: \.self) { strength in
@@ -160,14 +127,7 @@ struct PolishPreferencesView: View {
                         Button {
                             update { $0.options.strength = strength }
                         } label: {
-                            Text(strength.title)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(selected ? Theme.orange : Theme.ivory)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: .infinity, minHeight: 48)
-                                .padding(.horizontal, 6)
-                                .overlay(Rectangle().stroke(selected ? Theme.orange : Theme.line, lineWidth: 1))
-                                .contentShape(Rectangle())
+                            optionLabel(strength.title, selected: selected)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("润色强度，\(strength.title)")
@@ -178,76 +138,63 @@ struct PolishPreferencesView: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                Hairline()
                 sectionHeading("SCENARIO", title: "使用场景")
-                VStack(spacing: 0) {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                     ForEach(PolishScenario.allCases, id: \.self) { scenario in
                         let selected = preferences.options.scenario == scenario
                         Button {
                             update { $0.options.scenario = scenario }
                         } label: {
-                            HStack(spacing: 16) {
-                                Text(scenario.title)
-                                    .font(.system(size: 15, weight: .medium))
-                                    .foregroundStyle(selected ? Theme.orange : Theme.ivory)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Spacer(minLength: 8)
-                                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                                    .font(.system(size: 17))
-                                    .foregroundStyle(selected ? Theme.orange : Theme.muted)
-                                    .accessibilityHidden(true)
-                            }
-                            .frame(minHeight: 48)
-                            .padding(.vertical, 3)
-                            .contentShape(Rectangle())
+                            optionLabel(scenario.title, selected: selected)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("使用场景，\(scenario.title)")
                         .accessibilityValue(selected ? "已选择" : "未选择")
                         .accessibilityAddTraits(selected ? .isSelected : [])
-                        Hairline()
                     }
                 }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                MetaLabel(text: "LAST CONFIRMED", color: Theme.muted)
-                Text(preferences.options.summary)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.ivory)
-                    .fixedSize(horizontal: false, vertical: true)
-                if !preferences.enabled {
-                    Text("当前未启用；以上规则将在开启 AI 润色后使用。")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            Text(link.polishPreferencesSaving ? "正在提交以上选择，等待 Mac 确认后生效。"
+                 : (preferences.enabled ? preferences.options.summary : "当前未启用；强度与场景仍保存在 Mac。"))
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 44, alignment: .topLeading)
         }
+    }
+
+    private func optionLabel(_ title: String, selected: Bool) -> some View {
+        Text(title)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(selected ? Theme.orange : Theme.ivory)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .padding(.horizontal, 6)
+            .background(selected ? Theme.orange.opacity(0.06) : .clear)
+            .overlay(Rectangle().stroke(selected ? Theme.orange.opacity(0.8) : Theme.line, lineWidth: 1))
+            .contentShape(Rectangle())
     }
 
     private func sectionHeading(_ technical: String, title: String) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            PixelText(text: technical, cell: 1.7, color: Theme.muted, tracking: 1.5)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(title)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Theme.ivory)
                 .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 4)
+            PixelText(text: technical, cell: 1.1, color: Theme.muted, tracking: 0.8)
+                .accessibilityHidden(true)
         }
     }
 
-    private var targetName: String {
-        switch link.phase {
-        case .ready(let name), .needsCode(let name), .connecting(let name):
-            return name
-        default:
-            return link.selectedMacName ?? "尚未选择 Mac"
-        }
+    private var isAvailable: Bool {
+        link.phase.isReady && link.polishPreferencesSupported
+            && link.polishPreferences != nil
     }
 
     private var canEdit: Bool {
-        link.phase.isReady && link.polishPreferencesSupported
-            && link.polishPreferences != nil && !link.polishPreferencesSaving
+        isAvailable && !link.polishPreferencesSaving
     }
 
     private var isWaiting: Bool {
@@ -262,16 +209,16 @@ struct PolishPreferencesView: View {
             case .connecting:
                 return ("正在连接 Mac", "连接完成后会读取 Mac 的真实偏好。离线时不会保存更改。")
             case .needsCode:
-                return ("请先完成配对", "关闭本页，在连接页输入 Mac 上显示的六位配对码。")
+                return ("请先完成配对", "在上方输入 Mac 上显示的六位配对码。")
             default:
-                return ("尚未连接 Mac", "请先在连接页选择并连接 Mac。已确认的值仅供查看，不代表当前在线状态。")
+                return ("尚未连接 Mac", "请先在上方连接 Mac；上次确认的偏好仅供查看。")
             }
         }
         guard link.polishPreferencesSupported else {
             return ("这台 Mac 暂不支持手机设置", "请更新 Mac 端 iMic；当前无法从 iPhone 读取或修改润色偏好。")
         }
         if link.polishPreferencesSaving {
-            return ("等待 Mac 确认", "正在保存到当前 Mac，控件暂时不可编辑。下方保留上次确认的值，收到回显后更新。")
+            return ("等待 Mac 确认 · 尚未保存", "")
         }
         guard link.polishPreferences != nil else {
             return (link.polishPreferencesError == nil ? "正在读取 Mac 偏好" : "尚未获取 Mac 偏好",
@@ -288,8 +235,15 @@ struct PolishPreferencesView: View {
         var preferences = confirmed
         change(&preferences)
         guard preferences != confirmed else { return }
+        requestedMacID = link.selectedMacID
+        requestedPreferences = preferences
         if link.updatePolishPreferences(preferences) {
             Haptics.shared.play(.selection)
-        }
+        } else { clearRequest() }
+    }
+
+    private func clearRequest() {
+        requestedPreferences = nil
+        requestedMacID = nil
     }
 }
