@@ -65,6 +65,7 @@ final class TextPolishEffect: @unchecked Sendable {
         let windowID: CGWindowID
         let window: CGRect
         let field: CGRect
+        let elementFrame: CGRect
         let textSignature: Int?
     }
     private let queue = DispatchQueue(label: "imic.polish-ocr", qos: .userInitiated)
@@ -121,9 +122,11 @@ final class TextPolishEffect: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self, !token.cancelled,
                   let target = Self.locate(pid: pid, element: element, expected: text, token: token) else {
+                if !token.cancelled { IMicLog.write("mac.effect", "locate unavailable chars=\(text.count)") }
                 DispatchQueue.main.async { self?.prepared([], generation: version) }
                 return
             }
+            IMicLog.write("mac.effect", "viewport clipped=\(!Self.same(target.elementFrame, target.field)) height=\(Int(target.field.height)) document_height=\(Int(target.elementFrame.height))")
             Task {
                 do {
                     guard !token.cancelled else { return }
@@ -331,7 +334,7 @@ final class TextPolishEffect: @unchecked Sendable {
                                     oldRows: [CGRect], original: String, visibleUnits: Double,
                                     token: EffectCancellation, version: Int, attempt: Int) {
         guard !token.cancelled else { return }
-        let field = Self.frame(target.element) ?? target.field
+        let field = Self.visibleField(target.element, window: target.window) ?? target.field
         let estimate = PolishEndpointEstimate.endpoint(original: original, final: finalText,
                                                        rows: oldRows, field: field, visibleUnits: visibleUnits, referenceField: target.field)
         let estimatedRows = PolishEndpointEstimate.layout(original: original, final: finalText,
@@ -411,7 +414,7 @@ final class TextPolishEffect: @unchecked Sendable {
     /// range geometry is incomplete (e.g. Codex), use the OCR display check.
     private static func finalRows(target: Target, text: String) -> [CGRect]? {
         guard let value = read(target.element, kAXValueAttribute) as? String,
-              let field = frame(target.element), !text.isEmpty else { return nil }
+              let field = visibleField(target.element, window: target.window), !text.isEmpty else { return nil }
         let span = (value as NSString).range(of: text, options: .backwards)
         guard span.location != NSNotFound else { return nil }
         func parameter(_ name: String, _ input: CFTypeRef) -> CFTypeRef? {
@@ -464,11 +467,28 @@ final class TextPolishEffect: @unchecked Sendable {
               size.width > 0, size.height > 0 else { return nil }
         return CGRect(origin: point, size: size)
     }
+    private static func visibleField(_ element: AXUIElement, window: CGRect) -> CGRect? {
+        guard let content = frame(element) else { return nil }
+        var clips: [CGRect] = []
+        var parent = read(element, kAXParentAttribute)
+        for _ in 0..<24 {
+            guard let raw = parent, CFGetTypeID(raw) == AXUIElementGetTypeID() else { break }
+            let ancestor = raw as! AXUIElement
+            let role = read(ancestor, kAXRoleAttribute) as? String
+            if role == kAXScrollAreaRole || role == "AXClipView" || role == kAXWindowRole,
+               let rect = frame(ancestor), rect.width > 10, rect.height > 8 { clips.append(rect) }
+            if role == kAXWindowRole { break }
+            parent = read(ancestor, kAXParentAttribute)
+        }
+        return TextViewport.visible(content: content, window: window, clips: clips)
+    }
+
     private static func same(_ a: CGRect, _ b: CGRect) -> Bool {
         abs(a.minX-b.minX) < 1 && abs(a.minY-b.minY) < 1 && abs(a.width-b.width) < 1 && abs(a.height-b.height) < 1
     }
     private static func valid(_ target: Target) -> Bool {
-        guard let current = frame(target.element), same(current, target.field) else { return false }
+        guard let current = frame(target.element), same(current, target.elementFrame),
+              let visible = visibleField(target.element, window: target.window), same(visible, target.field) else { return false }
         if let signature = target.textSignature {
             return (read(target.element, kAXValueAttribute) as? String)?.hashValue == signature
         }
@@ -503,12 +523,16 @@ final class TextPolishEffect: @unchecked Sendable {
                               info[kCGWindowLayer as String] as? Int == 0,
                               let id = info[kCGWindowNumber as String] as? UInt32,
                               let raw = info[kCGWindowBounds as String] as? NSDictionary,
-                              let rect = CGRect(dictionaryRepresentation: raw), rect.contains(field) else { return nil }
+                              let rect = CGRect(dictionaryRepresentation: raw), rect.intersects(field) else { return nil }
                         return (id, rect)
                     }
-                    if let window = matches.min(by: { $0.1.width*$0.1.height < $1.1.width*$1.1.height }) {
-                        return Target(element: candidate, windowID: window.0, window: window.1, field: field,
-                                      textSignature: (read(candidate, kAXValueAttribute) as? String)?.hashValue)
+                    let owner = read(candidate, kAXWindowAttribute)
+                    let ownerFrame = owner.flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? frame($0 as! AXUIElement) : nil }
+                    let window = matches.first(where: { item in ownerFrame.map { same($0, item.1) } ?? false })
+                        ?? matches.min(by: { $0.1.width*$0.1.height < $1.1.width*$1.1.height })
+                    if let window, let visible = visibleField(candidate, window: window.1) {
+                        return Target(element: candidate, windowID: window.0, window: window.1, field: visible,
+                                      elementFrame: field, textSignature: (read(candidate, kAXValueAttribute) as? String)?.hashValue)
                     }
                 }
             }
@@ -552,7 +576,10 @@ final class TextPolishEffect: @unchecked Sendable {
         let candidates = observations.compactMap { $0.topCandidates(1).first }
         if requireTail, TextRegionMatcher.match(expected: String(expected.suffix(24)), fragments: candidates.map(\.string),
                                                cancelled: { token.cancelled }) == nil { return RecognizedRegions() }
-        guard let spans = TextRegionMatcher.match(expected: expected, fragments: candidates.map(\.string), cancelled: { token.cancelled }) else { return RecognizedRegions() }
+        guard let spans = TextRegionMatcher.match(expected: expected, fragments: candidates.map(\.string), cancelled: { token.cancelled }) else {
+            if !token.cancelled { IMicLog.write("mac.effect", "ocr unmatched expected_chars=\(expected.count) fragments=\(candidates.count)") }
+            return RecognizedRegions()
+        }
         let visibleUnits = spans.reduce(0.0) { total, span in
             total+PolishEndpointEstimate.units(in: (candidates[span.fragment].string as NSString).substring(with: span.range))
         }

@@ -29,6 +29,15 @@ enum SweepLineLayout {
     }
 }
 
+/// AX document bounds can exceed the window after a long dictation. Capture
+/// only their intersection with the visible scroll containers and window.
+enum TextViewport {
+    static func visible(content: CGRect, window: CGRect, clips: [CGRect]) -> CGRect? {
+        let rect = clips.reduce(content.intersection(window)) { $0.intersection($1) }
+        return !rect.isNull && !rect.isInfinite && rect.width > 10 && rect.height > 8 ? rect : nil
+    }
+}
+
 /// Visual fallback only: approximate reflow using the two transcripts and the
 /// observed line pitch/advance. It is not a caret or text-delivery assertion.
 enum PolishEndpointEstimate {

@@ -2,6 +2,20 @@ import AppKit
 import XCTest
 
 final class PolishEffectTests: XCTestCase {
+    func testLongScrollingDocumentStillHasVisibleAnimationRegion() {
+        let content = CGRect(x: 20, y: -4000, width: 700, height: 5000)
+        let window = CGRect(x: 0, y: 0, width: 800, height: 600)
+        let viewport = CGRect(x: 20, y: 300, width: 700, height: 220)
+        XCTAssertFalse(window.contains(content))
+        XCTAssertEqual(TextViewport.visible(content: content, window: window, clips: [viewport]), viewport)
+    }
+    func testNestedScrollContainersClipLongDocumentAndExcludeHiddenArea() {
+        let content = CGRect(x: 20, y: -4000, width: 700, height: 5000)
+        let visible = TextViewport.visible(content: content, window: CGRect(x: 0, y: 0, width: 800, height: 600),
+                     clips: [CGRect(x: 20, y: 200, width: 700, height: 350), CGRect(x: 20, y: 300, width: 700, height: 150)])
+        XCTAssertEqual(visible, CGRect(x: 20, y: 300, width: 700, height: 150))
+        XCTAssertNil(TextViewport.visible(content: content, window: CGRect(x: 0, y: 1200, width: 800, height: 600), clips: []))
+    }
     func testGesturesStayLockedThroughPostWriteRelease() {
         var effect = PolishEffectLifecycle()
         XCTAssertFalse(effect.blocksGestures)
@@ -217,6 +231,13 @@ final class PolishEffectTests: XCTestCase {
         XCTAssertNil(TextRegionMatcher.match(expected: "完整的语音识别文字需要及时保留", fragments: ["这是另一段完全无关的原稿内容"]))
         XCTAssertNil(TextRegionMatcher.match(expected: "好的", fragments: ["之前的原稿里也有好的两个字"]))
     }
+    func testVeryLongDictationMatchesVisibleTailBeyondMatcherBudget() {
+        let suffix = "最后可见的本轮文字包含一个独特结论：滚动输入框必须按可见区域定位动画，并保留屏幕外已经输入的全部内容。"
+        let text = String(repeating: "这部分已经滚出输入框的可见区域。", count: 300)+suffix
+        let result = TextRegionMatcher.match(expected: text, fragments: ["旧草稿的尾部", suffix])
+        XCTAssertEqual(result?.map(\.fragment), [1])
+        XCTAssertEqual(result?.last?.range.length, (suffix as NSString).length-1)
+    }
     func testOnlyVisibleSuffixOfLongTranscriptCanBeMatched() {
         let suffix = "这是当前输入框最后可见的文字需要保留完整的逐行区域并在润色结束后播放扫光"
         let text = String(repeating: "前面已经滚出屏幕的内容", count: 30) + suffix
@@ -244,24 +265,34 @@ if CommandLine.arguments.contains("--visual") {
     let window = NSWindow(contentRect: NSRect(x: 180, y: 280, width: 760, height: 270), styleMask: [.titled, .closable], backing: .buffered, defer: false)
     window.title = "iMic · POLISH SWEEP TEST"
     let growing = CommandLine.arguments.contains("--grow")
+    let long = CommandLine.arguments.contains("--long")
     let text = NSTextView(frame: NSRect(x: 24, y: 24, width: 712, height: growing ? 70 : 210))
     text.font = .systemFont(ofSize: 19)
     text.backgroundColor = NSColor(srgbRed: 0.08, green: 0.08, blue: 0.08, alpha: 1)
     text.textColor = .white
     text.textContainerInset = NSSize(width: 12, height: 12)
     if growing { text.isVerticallyResizable = false }
-    let prefix = growing ? "" : "原稿：这一行需要保留，不能被扫光覆盖。\n"
-    let preview = growing ? "请把这句话扩展为四行说明文字" : "今天讨论文字区域覆盖的效果希望高亮只覆盖这次新增的文字不要覆盖前面的原稿继续补充一段较长的文字检查自动换行后每一行的坐标最后统一替换成整理后的内容"
+    let prefix = growing || long ? "" : "原稿：这一行需要保留，不能被扫光覆盖。\n"
+    let preview = long ? String(repeating: "较早输入的内容已经滚动到可见区域以外，需要保留完整正文。", count: 80)+"这是本轮长文独有的可见尾段。动画需要跟随当前可见文字，不能因为整篇文档高度超出窗口就停止。我们继续检查自动滚动后的每一行坐标是否仍然可以获取。" : growing ? "请把这句话扩展为四行说明文字" : "今天讨论文字区域覆盖的效果希望高亮只覆盖这次新增的文字不要覆盖前面的原稿继续补充一段较长的文字检查自动换行后每一行的坐标最后统一替换成整理后的内容"
     text.string = prefix + preview
-    window.contentView?.addSubview(text)
+    if long {
+        let scroll = NSScrollView(frame: NSRect(x: 24, y: 24, width: 712, height: 210))
+        scroll.hasVerticalScroller = true
+        text.isVerticallyResizable = true
+        text.textContainer?.containerSize = NSSize(width: 690, height: CGFloat.greatestFiniteMagnitude)
+        text.textContainer?.widthTracksTextView = true
+        scroll.documentView = text
+        window.contentView?.addSubview(scroll)
+        text.sizeToFit(); text.scrollRangeToVisible(NSRange(location: (text.string as NSString).length, length: 0))
+    } else { window.contentView?.addSubview(text) }
     window.makeKeyAndOrderFront(nil); window.makeFirstResponder(text)
     app.activate(ignoringOtherApps: true)
     let effect = TextPolishEffect()
     var choice = PolishFinalChoice()
     let fallback = CommandLine.arguments.contains("--fallback")
     let raw = "今天讨论文字区域覆盖的效果，希望高亮只覆盖这次新增的文字，不覆盖前面的原稿。继续补充较长文字，检查自动换行后的坐标，最后统一替换。"
-    let polished = growing ? "第一行：文字从少量扩展成更完整的内容。\n第二行：输入框需要在结果写入后向上增高。\n第三行：新增的底线从左侧展开，并跟随新的文字区域。\n第四行：等待整体对齐后，再播放结束效果。" : "今天讨论文字区域的覆盖效果：高亮仅覆盖本轮新增内容，保留原稿；自动换行后仍能准确定位，最后统一替换为整理后的文字。"
-    let mode = growing ? "grow" : CommandLine.arguments.contains("--cancel") ? "cancel" : CommandLine.arguments.contains("--slow") ? "slow" : fallback ? "fallback" : "fast"
+    let polished = long ? preview+"最后补充一句润色后的结论。" : growing ? "第一行：文字从少量扩展成更完整的内容。\n第二行：输入框需要在结果写入后向上增高。\n第三行：新增的底线从左侧展开，并跟随新的文字区域。\n第四行：等待整体对齐后，再播放结束效果。" : "今天讨论文字区域的覆盖效果：高亮仅覆盖本轮新增内容，保留原稿；自动换行后仍能准确定位，最后统一替换为整理后的文字。"
+    let mode = long ? "long" : growing ? "grow" : CommandLine.arguments.contains("--cancel") ? "cancel" : CommandLine.arguments.contains("--slow") ? "slow" : fallback ? "fallback" : "fast"
     var phaseTimer: Timer?
     var captured = Set<PolishEffectLifecycle.Phase>()
     func finishFixture() {
@@ -295,7 +326,7 @@ if CommandLine.arguments.contains("--visual") {
         if mode == "cancel" {
             DispatchQueue.main.asyncAfter(deadline: .now()+0.25) { effect.cancel() }
         }
-        let resultDelay = (mode == "slow" || growing) ? 3.0 : mode == "fast" ? 0.03 : 1.2
+        let resultDelay = long ? 8.0 : (mode == "slow" || growing) ? 3.0 : mode == "fast" ? 0.03 : 1.2
         DispatchQueue.main.asyncAfter(deadline: .now()+resultDelay) {
             precondition(text.string == prefix+preview, "Intermediate ASR leaked to UI")
             let final = choice.settle(raw: raw, polished: fallback ? nil : polished)!
@@ -303,6 +334,10 @@ if CommandLine.arguments.contains("--visual") {
             effect.deliverAfterSweep {
                 commits += 1
                 text.string = prefix+final
+                if long {
+                    text.sizeToFit(); text.scrollRangeToVisible(NSRange(location: (text.string as NSString).length, length: 0))
+                    print("VISUAL_LONG chars=\(final.count) documentHeight=\(Int(text.frame.height))")
+                }
                 if growing {
                     DispatchQueue.main.asyncAfter(deadline: .now()+0.08) {
                         text.setFrameSize(NSSize(width: 712, height: 210))
