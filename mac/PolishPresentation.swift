@@ -180,7 +180,17 @@ enum TextRegionMatcher {
         return result
     }
 
+    struct Match {
+        let spans: [Span]
+        let includesEnd: Bool
+    }
+
     static func match(expected: String, fragments: [String], cancelled: () -> Bool = { false }) -> [Span]? {
+        locate(expected: expected, fragments: fragments, cancelled: cancelled)?.spans
+    }
+
+    static func locate(expected: String, fragments: [String], allowClipped: Bool = false,
+                       cancelled: () -> Bool = { false }) -> Match? {
         // Bound CPU/memory independently of the maximum ten-minute recording.
         let pattern = Array(tokens([expected]).suffix(1_200))
         let source = Array(tokens(fragments).suffix(4_000))
@@ -219,7 +229,13 @@ enum TextRegionMatcher {
         guard consumed >= 6, Double(matches) / Double(consumed) >= 0.9 else { return nil }
         let full = Double(bestI - i) / Double(m) >= 0.85
         let visibleSuffix = bestI == m && bestJ >= n - 2 && matches >= 24
-        guard full || visibleSuffix else { return nil }
+        // Narrow single-line fields may show fewer than 24 characters, or a
+        // middle slice. Require a strong match covering most visible OCR text;
+        // retain the existing competing-occurrence rejection below.
+        let coverage = Double(bestJ-j)/Double(n)
+        let clipped = allowClipped && matches >= 8 && Double(matches)/Double(consumed) >= 0.94
+            && coverage >= (bestI == m ? 0.65 : 0.85)
+        guard full || visibleSuffix || clipped else { return nil }
         // Two equally plausible occurrences: skip rather than highlight old draft.
         let competing = (1...n).filter { $0 <= j || $0 > bestJ + 3 }.map { columnBest[$0] }.max() ?? 0
         guard Double(competing) < Double(best) * 0.94 else { return nil }
@@ -231,6 +247,6 @@ enum TextRegionMatcher {
                 spans.append(Span(fragment: token.fragment, range: token.range))
             }
         }
-        return spans.isEmpty ? nil : spans
+        return spans.isEmpty ? nil : Match(spans: spans, includesEnd: bestI == m)
     }
 }

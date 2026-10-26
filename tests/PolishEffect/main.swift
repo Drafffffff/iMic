@@ -2,6 +2,30 @@ import AppKit
 import XCTest
 
 final class PolishEffectTests: XCTestCase {
+    func testSingleLineCanLocateShortVisibleTailOfLongValue() {
+        let visible = "这里是搜索框实际可见的结尾"
+        let expected = String(repeating: "前面已经横向隐藏的文字", count: 20)+visible
+        XCTAssertNil(TextRegionMatcher.match(expected: expected, fragments: [visible]))
+        let match = TextRegionMatcher.locate(expected: expected, fragments: [visible], allowClipped: true)
+        XCTAssertEqual(match?.spans.map(\.fragment), [0])
+        XCTAssertEqual(match?.includesEnd, true)
+    }
+    func testSingleLineMiddleSliceDoesNotClaimHiddenEndpoint() {
+        let visible = "这里是横向滚动后可见的中间文字"
+        let match = TextRegionMatcher.locate(expected: "隐藏的开头"+visible+"隐藏的结尾", fragments: [visible], allowClipped: true)
+        XCTAssertNotNil(match)
+        XCTAssertEqual(match?.includesEnd, false)
+    }
+    func testSingleLineRejectsRepeatedOrVeryShortVisibleText() {
+        let visible = "搜索框里重复出现的文字"
+        XCTAssertNil(TextRegionMatcher.locate(expected: "隐藏开头"+visible, fragments: [visible, visible], allowClipped: true))
+        XCTAssertNil(TextRegionMatcher.locate(expected: "隐藏开头后面的好的", fragments: ["好的"], allowClipped: true))
+    }
+    func testSingleLineDoesNotMatchSmallPhraseInUnrelatedDraft() {
+        let visible = "本轮输入的独特结尾"
+        XCTAssertNil(TextRegionMatcher.locate(expected: "已经隐藏的前缀"+visible,
+            fragments: [String(repeating: "其他旧草稿内容", count: 20)+visible], allowClipped: true))
+    }
     func testLongScrollingDocumentStillHasVisibleAnimationRegion() {
         let content = CGRect(x: 20, y: -4000, width: 700, height: 5000)
         let window = CGRect(x: 0, y: 0, width: 800, height: 600)
@@ -257,7 +281,57 @@ final class PolishEffectTests: XCTestCase {
     }
 }
 
-if CommandLine.arguments.contains("--visual") {
+func runSingleLineFixture() {
+    TextPolishEffect.prewarm()
+    let app = NSApplication.shared
+    app.setActivationPolicy(.regular)
+    let previous = NSWorkspace.shared.frontmostApplication
+    let window = NSWindow(contentRect: NSRect(x: 200, y: 330, width: 540, height: 140), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    window.title = "iMic · SINGLE LINE TEST"
+    let field = NSTextField(frame: NSRect(x: 30, y: 50, width: 480, height: 36))
+    field.font = .systemFont(ofSize: 20)
+    field.isEditable = true; field.isSelectable = true; field.cell?.usesSingleLineMode = true
+    field.cell?.wraps = false; field.cell?.isScrollable = true
+    let preview = String(repeating: "前面的文字横向隐藏。", count: 12)+"这里是输入框当前可见的独特尾部文字"
+    let final = preview+"，这是润色后的结论。"
+    field.stringValue = preview
+    window.contentView?.addSubview(field)
+    window.makeKeyAndOrderFront(nil); window.makeFirstResponder(field)
+    app.activate(ignoringOtherApps: true)
+    func scrollToEnd() {
+        if let editor = field.currentEditor() as? NSTextView {
+            editor.setSelectedRange(NSRange(location: (field.stringValue as NSString).length, length: 0))
+            editor.scrollRangeToVisible(editor.selectedRange())
+        }
+    }
+    let effect = TextPolishEffect()
+    DispatchQueue.main.asyncAfter(deadline: .now()+2) {
+        scrollToEnd()
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let target = InputTarget.capture(pid: pid)
+        print("VISUAL_SINGLE_LINE focus=\(NSWorkspace.shared.frontmostApplication?.processIdentifier == pid)")
+        effect.prepare(pid: pid, element: target.visualElement, text: preview,
+                       allowed: { NSWorkspace.shared.frontmostApplication?.processIdentifier == pid }, interrupted: {})
+        DispatchQueue.main.asyncAfter(deadline: .now()+4) {
+            effect.deliverAfterSweep {
+                field.stringValue = final; scrollToEnd()
+                effect.finishDelivery(succeeded: true, finalText: final, verified: false)
+                print("VISUAL_SINGLE_LINE sweep=\(effect.didShowSweep) commits=1 chars=\(final.count)")
+                DispatchQueue.main.asyncAfter(deadline: .now()+1.3) {
+                    effect.cancel(); window.orderOut(nil); previous?.activate(options: [])
+                    app.stop(nil)
+                    if let event = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0,
+                                                      windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0) { app.postEvent(event, atStart: true) }
+                }
+            }
+        }
+    }
+    app.run()
+}
+
+if CommandLine.arguments.contains("--single-line") {
+    runSingleLineFixture()
+} else if CommandLine.arguments.contains("--visual") {
     TextPolishEffect.prewarm()
     let previous = NSWorkspace.shared.frontmostApplication
     let app = NSApplication.shared
@@ -318,8 +392,9 @@ if CommandLine.arguments.contains("--visual") {
             try? capture.run()
         }
     }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + (long ? 2.0 : 0.5)) {
         let pid = ProcessInfo.processInfo.processIdentifier
+        print("VISUAL_FOCUS ready=\(NSWorkspace.shared.frontmostApplication?.processIdentifier == pid)")
         let target = InputTarget.capture(pid: pid)
         effect.prepare(pid: pid, element: target.visualElement, text: preview,
                        allowed: { NSWorkspace.shared.frontmostApplication?.processIdentifier == pid }, interrupted: {})

@@ -61,6 +61,18 @@ struct TechBackground: View {
 enum TorusGeometry {
     static let ringCount = 44
 
+    static func clampedAnchor(_ anchor: CGFloat) -> CGFloat {
+        anchor.isFinite ? min(0.94, max(0.06, anchor)) : 0.5
+    }
+
+    /// Touches use the view's coordinates; tension uses the span between fixed rails.
+    static func touchAnchor(x: CGFloat, width: CGFloat) -> CGFloat {
+        guard width > 0, width.isFinite, x.isFinite else { return 0.5 }
+        let bar = max(0, min(width * 0.88, width - 32))
+        let left = width / 2 - bar / 2 - 12
+        return clampedAnchor((x - left) / max(1, bar + 24))
+    }
+
     struct RingPosition {
         let progress: CGFloat
         let envelope: CGFloat
@@ -242,14 +254,14 @@ enum TorusGeometry {
 
     static func stringDisplacement(progress: CGFloat, anchor: CGFloat, pull: CGFloat) -> CGFloat {
         guard progress > 0, progress < 1 else { return 0 }
-        let anchor = min(0.85, max(0.15, anchor))
+        let anchor = clampedAnchor(anchor)
         let distance = progress <= anchor ? progress / anchor : (1 - progress) / (1 - anchor)
         // 两端固定，受力点两侧连续光滑展开，而不是局部凹陷或整体平移。
         return pull * sin(distance * .pi / 2)
     }
 
     static func stringSlope(progress: CGFloat, anchor: CGFloat, pull: CGFloat, width: CGFloat) -> CGFloat {
-        let anchor = min(0.85, max(0.15, anchor))
+        let anchor = clampedAnchor(anchor)
         let left = progress <= anchor
         let span = left ? anchor : 1 - anchor
         let distance = left ? progress / span : (1 - progress) / span

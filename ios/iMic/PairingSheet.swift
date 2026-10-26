@@ -44,6 +44,7 @@ struct PairingSheet: View {
                             }
                             .padding(.bottom, 18)
                         }
+                        .scrollIndicators(.hidden)
                         .scrollDismissesKeyboard(.interactively)
                     }
                     .padding(.horizontal, 24)

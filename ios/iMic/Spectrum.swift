@@ -909,7 +909,7 @@ final class StringMotionStore: ObservableObject {
         onActivity?()
         cancelPendingReturn()
         BowReleaseSound.shared.stop()
-        self.anchor = min(1, max(0, anchor))
+        self.anchor = TorusGeometry.clampedAnchor(anchor)
         self.height = height
         spring.begin()
         deleteHold.reset()
@@ -917,6 +917,16 @@ final class StringMotionStore: ObservableObject {
         pullRatchet = StringPullRatchet()
         dragging = true
         cancelled = false
+    }
+
+    /// A vertical grab remains a grab when the finger moves sideways; both the
+    /// waveform and its attached glyphs read this live force point on the same clock.
+    func moveAnchor(to anchor: CGFloat) {
+        guard dragging, !cancelled, !isClearing else { return }
+        let next = TorusGeometry.clampedAnchor(anchor)
+        guard next != self.anchor else { return }
+        onActivity?()
+        self.anchor = next
     }
 
     func drag(translation: CGFloat, velocity: CGFloat, returnEnabled: Bool, deleteEnabled: Bool,

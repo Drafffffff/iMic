@@ -637,11 +637,13 @@ struct HomeView: View {
                     if stringAxis == .vertical {
                         let stretch = session.pullDeleteEnabled ? StringClearStretch(
                             distance: frame.minY + value.startLocation.y - 84, depth: frame.midY - 84) : nil
-                        stringMotion.begin(anchor: value.startLocation.x / max(1, width), height: height, clearStretch: stretch)
+                        stringMotion.begin(anchor: TorusGeometry.touchAnchor(x: value.startLocation.x, width: width),
+                                           height: height, clearStretch: stretch)
                     }
                 }
                 switch stringAxis {
                 case .vertical:
+                    stringMotion.moveAnchor(to: TorusGeometry.touchAnchor(x: value.location.x, width: width))
                     if session.pullDeleteEnabled, value.translation.height < -80,
                        frame.minY + value.location.y <= 84 {
                         requestClear()
@@ -674,6 +676,9 @@ struct HomeView: View {
                 }
             }
             .onEnded { value in
+                if stringAxis == .vertical, canUseString, !stringGestureBlocked, !clearTriggeredThisGesture {
+                    stringMotion.moveAnchor(to: TorusGeometry.touchAnchor(x: value.location.x, width: width))
+                }
                 if stringAxis == .vertical, canUseString, !stringGestureBlocked, !clearTriggeredThisGesture,
                    session.pullDeleteEnabled, value.translation.height < -80, frame.minY + value.location.y <= 84 {
                     requestClear()

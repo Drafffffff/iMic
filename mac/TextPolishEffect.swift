@@ -66,6 +66,7 @@ final class TextPolishEffect: @unchecked Sendable {
         let window: CGRect
         let field: CGRect
         let elementFrame: CGRect
+        let singleLine: Bool
         let textSignature: Int?
     }
     private let queue = DispatchQueue(label: "imic.polish-ocr", qos: .userInitiated)
@@ -101,7 +102,10 @@ final class TextPolishEffect: @unchecked Sendable {
         originalText = text
         self.allowed = allowed
         self.interrupted = interrupted
-        guard Self.enabled, !text.isEmpty, allowed() else { lifecycle.skipVisual(); return }
+        guard Self.enabled, !text.isEmpty, allowed() else {
+            IMicLog.write("mac.effect", "skipped reason=ineligible enabled=\(Self.enabled) chars=\(text.count)")
+            lifecycle.skipVisual(); return
+        }
         guard #available(macOS 14.0, *), CGPreflightScreenCaptureAccess() else {
             IMicLog.write("mac.effect", "skipped reason=capture_unavailable_or_permission")
             lifecycle.skipVisual(); return
@@ -126,7 +130,7 @@ final class TextPolishEffect: @unchecked Sendable {
                 DispatchQueue.main.async { self?.prepared([], generation: version) }
                 return
             }
-            IMicLog.write("mac.effect", "viewport clipped=\(!Self.same(target.elementFrame, target.field)) height=\(Int(target.field.height)) document_height=\(Int(target.elementFrame.height))")
+            IMicLog.write("mac.effect", "viewport clipped=\(!Self.same(target.elementFrame, target.field)) height=\(Int(target.field.height)) document_height=\(Int(target.elementFrame.height)) single_line=\(target.singleLine)")
             Task {
                 do {
                     guard !token.cancelled else { return }
@@ -136,7 +140,7 @@ final class TextPolishEffect: @unchecked Sendable {
                             DispatchQueue.main.async { self.prepared([], generation: version) }; return
                         }
                         let start = ProcessInfo.processInfo.systemUptime
-                        let rectangles = Self.recognize(image, field: target.field, expected: text, token: token)
+                        let rectangles = Self.recognize(image, field: target.field, expected: text, token: token, allowClipped: target.singleLine)
                         let unchanged = Self.valid(target)
                         let result = unchanged && !token.cancelled ? rectangles.rectangles : []
                         IMicLog.write("mac.effect", "ocr lines=\(result.count) ms=\(Int((ProcessInfo.processInfo.systemUptime-start)*1000))")
@@ -335,18 +339,20 @@ final class TextPolishEffect: @unchecked Sendable {
                                     token: EffectCancellation, version: Int, attempt: Int) {
         guard !token.cancelled else { return }
         let field = Self.visibleField(target.element, window: target.window) ?? target.field
-        let estimate = PolishEndpointEstimate.endpoint(original: original, final: finalText,
-                                                       rows: oldRows, field: field, visibleUnits: visibleUnits, referenceField: target.field)
-        let estimatedRows = PolishEndpointEstimate.layout(original: original, final: finalText,
-                                                          rows: oldRows, field: field, visibleUnits: visibleUnits, referenceField: target.field)
-        DispatchQueue.main.async {
-            guard self.generation == version, self.lifecycle.phase == .writing, !token.cancelled else { return }
-            self.releaseEndpoint = estimate
-            if let estimate { self.installPanel(regions: estimatedRows.isEmpty ? oldRows : estimatedRows, entering: false, endpoint: estimate) }
+        if !target.singleLine {
+            let estimate = PolishEndpointEstimate.endpoint(original: original, final: finalText,
+                                                           rows: oldRows, field: field, visibleUnits: visibleUnits, referenceField: target.field)
+            let estimatedRows = PolishEndpointEstimate.layout(original: original, final: finalText,
+                                                              rows: oldRows, field: field, visibleUnits: visibleUnits, referenceField: target.field)
+            DispatchQueue.main.async {
+                guard self.generation == version, self.lifecycle.phase == .writing, !token.cancelled else { return }
+                self.releaseEndpoint = estimate
+                if let estimate { self.installPanel(regions: estimatedRows.isEmpty ? oldRows : estimatedRows, entering: false, endpoint: estimate) }
+            }
         }
         // Some editors expose the new value before updating its line geometry.
         // Do not finalize on that first, stale AX layout immediately after write.
-        if attempt >= 2, let rects = Self.finalRows(target: target, text: finalText) {
+        if !target.singleLine, attempt >= 2, let rects = Self.finalRows(target: target, text: finalText) {
             DispatchQueue.main.async {
                 guard self.generation == version, self.lifecycle.phase == .writing, !token.cancelled else { return }
                 self.releaseEndpoint = nil
@@ -365,7 +371,7 @@ final class TextPolishEffect: @unchecked Sendable {
                 let image = try await Self.capture(fresh)
                 self.queue.async {
                     guard !token.cancelled else { return }
-                    let geometry = Self.recognize(image, field: fresh.field, expected: finalText, token: token, requireTail: true)
+                    let geometry = Self.recognize(image, field: fresh.field, expected: finalText, token: token, requireTail: true, allowClipped: fresh.singleLine)
                     let rects = geometry.rectangles
                     guard Self.valid(fresh) else { return }
                     DispatchQueue.main.async {
@@ -374,7 +380,7 @@ final class TextPolishEffect: @unchecked Sendable {
                         self.releaseEndpoint = nil
                         self.regions = SweepLineLayout.rows(in: rects)
                         self.installPanel(regions: self.regions, entering: false)
-                        self.reveal(source: "ocr_display_match", burst: true)
+                        self.reveal(source: "ocr_display_match", burst: geometry.includesEnd)
                     }
                 }
             } catch { /* The visual-only deadline releases the hold. */ }
@@ -532,7 +538,7 @@ final class TextPolishEffect: @unchecked Sendable {
                         ?? matches.min(by: { $0.1.width*$0.1.height < $1.1.width*$1.1.height })
                     if let window, let visible = visibleField(candidate, window: window.1) {
                         return Target(element: candidate, windowID: window.0, window: window.1, field: visible,
-                                      elementFrame: field, textSignature: (read(candidate, kAXValueAttribute) as? String)?.hashValue)
+                                      elementFrame: field, singleLine: role == kAXTextFieldRole || (read(candidate, "AXMultiline") as? Bool) == false, textSignature: (read(candidate, kAXValueAttribute) as? String)?.hashValue)
                     }
                 }
             }
@@ -563,8 +569,9 @@ final class TextPolishEffect: @unchecked Sendable {
     private struct RecognizedRegions {
         var rectangles: [CGRect] = []
         var visibleUnits: Double = 0
+        var includesEnd = false
     }
-    private static func recognize(_ image: CGImage, field: CGRect, expected: String, token: EffectCancellation, requireTail: Bool = false) -> RecognizedRegions {
+    private static func recognize(_ image: CGImage, field: CGRect, expected: String, token: EffectCancellation, requireTail: Bool = false, allowClipped: Bool = false) -> RecognizedRegions {
         guard !token.cancelled else { return RecognizedRegions() }
         _ = ocrWarmup
         guard !token.cancelled else { return RecognizedRegions() }
@@ -574,12 +581,13 @@ final class TextPolishEffect: @unchecked Sendable {
             abs($0.boundingBox.midY-$1.boundingBox.midY) > 0.015 ? $0.boundingBox.midY > $1.boundingBox.midY : $0.boundingBox.minX < $1.boundingBox.minX
         }
         let candidates = observations.compactMap { $0.topCandidates(1).first }
-        if requireTail, TextRegionMatcher.match(expected: String(expected.suffix(24)), fragments: candidates.map(\.string),
+        if requireTail, !allowClipped, TextRegionMatcher.match(expected: String(expected.suffix(24)), fragments: candidates.map(\.string),
                                                cancelled: { token.cancelled }) == nil { return RecognizedRegions() }
-        guard let spans = TextRegionMatcher.match(expected: expected, fragments: candidates.map(\.string), cancelled: { token.cancelled }) else {
+        guard let match = TextRegionMatcher.locate(expected: expected, fragments: candidates.map(\.string), allowClipped: allowClipped, cancelled: { token.cancelled }) else {
             if !token.cancelled { IMicLog.write("mac.effect", "ocr unmatched expected_chars=\(expected.count) fragments=\(candidates.count)") }
             return RecognizedRegions()
         }
+        let spans = match.spans
         let visibleUnits = spans.reduce(0.0) { total, span in
             total+PolishEndpointEstimate.units(in: (candidates[span.fragment].string as NSString).substring(with: span.range))
         }
@@ -591,7 +599,7 @@ final class TextPolishEffect: @unchecked Sendable {
                                 width: r.width*field.width, height: r.height*field.height).intersection(field)
             return result.width > 1 && result.height > 1 ? result : nil
         }
-        return RecognizedRegions(rectangles: rectangles, visibleUnits: visibleUnits)
+        return RecognizedRegions(rectangles: rectangles, visibleUnits: visibleUnits, includesEnd: match.includesEnd)
     }
 }
 
