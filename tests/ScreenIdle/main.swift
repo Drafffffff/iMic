@@ -6,62 +6,76 @@ enum ScreenIdleChecks {
     static func check(_ condition: @autoclosure () -> Bool, _ message: String) {
         if !condition() { fatalError(message) }
     }
-
     static func wait(_ duration: Double) async { try? await Task.sleep(for: .seconds(duration)) }
+    static func settle(_ controller: IdleScreenDimming, at state: IdleScreenDimming.State) async {
+        let deadline = Date().addingTimeInterval(1)
+        while controller.state != state, Date() < deadline { await wait(0.02) }
+        check(controller.state == state, "Transition must reach \(state)")
+    }
 
     static func main() async {
-        var brightness = 0.8
+        var shade: Double = 0
         var writes: [Double] = []
         let controller = IdleScreenDimming(idleDelay: 0.18, fadeDuration: 0.08, restoreDuration: 0.04,
-            read: { brightness }, write: { brightness = $0; writes.append($0) })
+            write: { shade = $0; writes.append($0) })
         controller.setActive(true)
         await wait(0.07)
         check(writes.isEmpty, "No early dimming")
         controller.noteActivity()
         await wait(0.13)
         check(writes.isEmpty, "Fresh interaction must renew the idle deadline")
-        await wait(0.20)
-        check(controller.state == .dimmed && abs(brightness - 0.2) < 0.001, "Fade must settle at one quarter brightness")
-        check(zip(writes,writes.dropFirst()).allSatisfy { $0 >= $1 }, "Dimming must be monotonic")
-        let settled = writes.count
+        await settle(controller, at: .dimmed)
+        check(shade == 0.75, "Sleep dims only the app's shade")
+        check(zip(writes,writes.dropFirst()).allSatisfy { $0 <= $1 }, "Sleep fade must be monotonic")
+        let settledWrites = writes.count
         await wait(0.10)
-        check(writes.count == settled, "Dimmed standby must produce zero brightness callbacks")
-        brightness += 0.006 // Auto-brightness drift while dimmed, as observed on device.
-        controller.brightnessChanged()
+        check(writes.count == settledWrites, "Sleeping shade produces zero callbacks")
+
         controller.setTouching(true)
-        await wait(0.09)
-        check(abs(brightness - 0.8) < 0.001, "Auto-brightness drift must not stop the first touch restoring")
+        check(shade == 0, "Touch-down must clear the shade synchronously before control interaction")
+        for _ in 0..<5 { await wait(0.01); controller.setTouching(true) }
+        await settle(controller, at: .blocked)
+        check(shade == 0, "Repeated long-press/move events must finish restoring")
         await wait(0.28)
-        check(controller.state == .blocked && brightness == 0.8, "Held gestures must not dim")
+        check(shade == 0, "A held gesture must never dim")
         controller.setTouching(false)
         controller.setBusy(true)
         await wait(0.32)
-        check(brightness == 0.8, "Recording/recognition must not dim")
+        check(shade == 0, "Recording/recognition must stay awake")
         controller.setBusy(false)
-        await wait(0.32)
-        check(abs(brightness - 0.2) < 0.001, "Completed work must begin a fresh idle period")
+        await settle(controller, at: .dimmed)
         controller.setActive(false)
-        check(abs(brightness - 0.8) < 0.001, "Leaving app must immediately restore brightness")
+        check(shade == 0, "Leaving for Control Center, lock screen or another app removes the shade immediately")
         let inactiveWrites = writes.count
         await wait(0.25)
-        check(writes.count == inactiveWrites, "Inactive app must have no delayed writes")
+        check(writes.count == inactiveWrites, "Inactive app has no delayed writes")
+
+        // The controller has no system-brightness getter/setter or saved brightness.
+        // Returning from a manual adjustment starts visibly awake, every time.
+        for _ in 0..<3 {
+            controller.setActive(true)
+            check(shade == 0, "Foreground/manual-brightness return must start awake")
+            await settle(controller, at: .dimmed)
+            controller.noteActivity()
+            await settle(controller, at: .armed)
+            check(shade == 0, "Repeated sleep/wake cycles never accumulate darkness")
+            controller.setActive(false)
+        }
+
         controller.setActive(true)
         await wait(0.22) // Interrupt a partially completed fade.
         controller.setActive(false)
-        check(abs(brightness - 0.8) < 0.001, "Backgrounding during fade must restore, too")
+        check(shade == 0, "Backgrounding mid-fade immediately removes the app shade")
         await wait(0.12)
-        check(brightness == 0.8, "A cancelled fade must never write again")
+        check(shade == 0, "Cancelled fade cannot write a stale dark frame")
         controller.setActive(true)
-        await wait(0.32)
-        brightness = 0.55 // A manual brightness change takes ownership away from the app.
-        controller.brightnessChanged()
+        await settle(controller, at: .dimmed)
+        controller.noteActivity()
+        await wait(0.02) // Interrupt restoration itself.
         controller.setActive(false)
-        check(brightness == 0.55, "Never restore over the user's new brightness preference")
-        brightness = 0.01
-        controller.setActive(true)
-        await wait(0.32)
-        check(brightness == 0.01, "Never increase an already dark screen")
-        controller.setActive(false)
-        print("Screen idle: renewed deadline, monotonic dimming, zero idle writes, touch/hold, busy work, foreground/background and manual brightness ownership passed")
+        check(shade == 0, "Losing focus during wake-up also clears the shade synchronously")
+        await wait(0.12)
+        check(shade == 0, "No late wake-up callbacks after detach")
+        print("Screen idle: app-only shade, renewed deadline, zero sleep callbacks, first-touch/long-press wake, busy protection, repeated wake and lifecycle cancellation passed")
     }
 }
