@@ -2,6 +2,20 @@ import AppKit
 import XCTest
 
 final class PolishEffectTests: XCTestCase {
+    func testWindowFallbackIncludesFloatingDialogButNeverOtherApp() {
+        let main = PolishWindowSelection.Candidate(id: 1, pid: 10, frame: CGRect(x: 0, y: 0, width: 800, height: 600), layer: 0, visible: true)
+        let dialog = PolishWindowSelection.Candidate(id: 2, pid: 10, frame: CGRect(x: 100, y: 100, width: 400, height: 200), layer: 8, visible: true)
+        let otherApp = PolishWindowSelection.Candidate(id: 3, pid: 11, frame: dialog.frame, layer: 8, visible: true)
+        XCTAssertEqual(PolishWindowSelection.choose([otherApp, dialog, main], pid: 10)?.id, 2)
+        XCTAssertNil(PolishWindowSelection.choose([otherApp], pid: 10))
+        XCTAssertEqual(PolishWindowSelection.choose([dialog, main], pid: 10, preferred: main.frame)?.id, 1)
+    }
+    func testWindowFallbackRejectsMenuAndInvisibleWindows() {
+        let rect = CGRect(x: 10, y: 10, width: 400, height: 200)
+        let menu = PolishWindowSelection.Candidate(id: 1, pid: 10, frame: rect, layer: 101, visible: true)
+        let hidden = PolishWindowSelection.Candidate(id: 2, pid: 10, frame: rect, layer: 0, visible: false)
+        XCTAssertNil(PolishWindowSelection.choose([menu, hidden], pid: 10))
+    }
     func testSingleLineCanLocateShortVisibleTailOfLongValue() {
         let visible = "这里是搜索框实际可见的结尾"
         let expected = String(repeating: "前面已经横向隐藏的文字", count: 20)+visible
@@ -249,6 +263,23 @@ final class PolishEffectTests: XCTestCase {
         // Ambiguity protection still applies inside a field.
         XCTAssertNil(TextRegionMatcher.locate(expected: text, fragments: [text, text, "36/2000"], fieldScoped: true))
     }
+    func testLineSegmentsTrimBreaksSkipBlankLinesAndMarkParagraphs() {
+        let text = "第一段第一行第一段第二行\n\n第二段\r\n第三段\u{2028}软换行   \n" as NSString
+        func segment(_ location: Int, _ length: Int) -> (String, Bool)? {
+            TextLineSegment.visible(NSRange(location: location, length: length), in: text).map { (text.substring(with: $0.range), $0.endsParagraph) }
+        }
+        XCTAssertEqual(segment(0, 6)?.0, "第一段第一行")
+        XCTAssertEqual(segment(0, 6)?.1, false)            // soft wrap inside a paragraph
+        XCTAssertEqual(segment(6, 7)?.0, "第一段第二行")
+        XCTAssertEqual(segment(6, 7)?.1, true)
+        XCTAssertNil(segment(13, 1))                       // blank line
+        XCTAssertEqual(segment(14, 5)?.0, "第二段")         // CRLF trimmed
+        XCTAssertEqual(segment(14, 5)?.1, true)
+        XCTAssertEqual(segment(19, 4)?.0, "第三段")         // line separator is not a paragraph break
+        XCTAssertEqual(segment(19, 4)?.1, false)
+        XCTAssertEqual(segment(23, 7)?.1, true)
+        XCTAssertNil(TextLineSegment.visible(NSRange(location: 0, length: 4), in: "   \n" as NSString))
+    }
     func testRowStaggerIsOrderedAndHandoffRemainsBounded() {
         for count in [1, 3, 8, 40] {
             let delays = (0..<count).map { SweepLineLayout.delay(row: $0, lineCount: count) }
@@ -331,6 +362,40 @@ final class PolishEffectTests: XCTestCase {
     }
 }
 
+func runWindowOnlyFixture() {
+    TextPolishEffect.prewarm()
+    let app = NSApplication.shared; app.setActivationPolicy(.regular)
+    let previous = NSWorkspace.shared.frontmostApplication
+    let panel = NSPanel(contentRect: NSRect(x: 180, y: 340, width: 650, height: 200), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    panel.title = "iMic · WINDOW OCR TEST"; panel.level = .floating
+    let preview = "这个自定义对话框没有暴露可编辑的辅助功能输入框。\n需要在所属窗口内识别本轮文字，再播放逐行扫光效果。"
+    let final = "自定义对话框通过窗口截图定位本轮文字。\n没有标准输入框时，也可以对可见文字播放扫光。"
+    let label = NSTextField(wrappingLabelWithString: preview)
+    label.frame = NSRect(x: 24, y: 36, width: 600, height: 100)
+    label.font = .systemFont(ofSize: 21); label.textColor = .white
+    panel.contentView?.addSubview(label)
+    panel.makeKeyAndOrderFront(nil); app.activate(ignoringOtherApps: true)
+    let effect = TextPolishEffect()
+    DispatchQueue.main.asyncAfter(deadline: .now()+2) {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        effect.prepare(pid: pid, element: nil, text: preview,
+                       allowed: { NSWorkspace.shared.frontmostApplication?.processIdentifier == pid }, interrupted: {})
+        DispatchQueue.main.asyncAfter(deadline: .now()+4) {
+            effect.deliverAfterSweep {
+                label.stringValue = final
+                effect.finishDelivery(succeeded: true, finalText: final, verified: false)
+                print("VISUAL_WINDOW_ONLY sweep=\(effect.didShowSweep) commits=1 floating=true")
+                DispatchQueue.main.asyncAfter(deadline: .now()+1.4) {
+                    effect.cancel(); panel.orderOut(nil); previous?.activate(options: []); app.stop(nil)
+                    if let event = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0,
+                                                      windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0) { app.postEvent(event, atStart: true) }
+                }
+            }
+        }
+    }
+    app.run()
+}
+
 func runSingleLineFixture() {
     TextPolishEffect.prewarm()
     let app = NSApplication.shared
@@ -379,7 +444,9 @@ func runSingleLineFixture() {
     app.run()
 }
 
-if CommandLine.arguments.contains("--single-line") {
+if CommandLine.arguments.contains("--window-only") {
+    runWindowOnlyFixture()
+} else if CommandLine.arguments.contains("--single-line") {
     runSingleLineFixture()
 } else if CommandLine.arguments.contains("--visual") {
     TextPolishEffect.prewarm()
@@ -390,6 +457,7 @@ if CommandLine.arguments.contains("--single-line") {
     window.title = "iMic · POLISH SWEEP TEST"
     let growing = CommandLine.arguments.contains("--grow")
     let long = CommandLine.arguments.contains("--long")
+    let paragraphs = CommandLine.arguments.contains("--paragraphs")
     let text = NSTextView(frame: NSRect(x: 24, y: 24, width: 712, height: growing ? 70 : 210))
     text.font = .systemFont(ofSize: 19)
     text.backgroundColor = NSColor(srgbRed: 0.08, green: 0.08, blue: 0.08, alpha: 1)
@@ -397,7 +465,8 @@ if CommandLine.arguments.contains("--single-line") {
     text.textContainerInset = NSSize(width: 12, height: 12)
     if growing { text.isVerticallyResizable = false }
     let prefix = growing || long ? "" : "原稿：这一行需要保留，不能被扫光覆盖。\n"
-    let preview = long ? String(repeating: "较早输入的内容已经滚动到可见区域以外，需要保留完整正文。", count: 80)+"这是本轮长文独有的可见尾段。动画需要跟随当前可见文字，不能因为整篇文档高度超出窗口就停止。我们继续检查自动滚动后的每一行坐标是否仍然可以获取。" : growing ? "请把这句话扩展为四行说明文字" : "今天讨论文字区域覆盖的效果希望高亮只覆盖这次新增的文字不要覆盖前面的原稿继续补充一段较长的文字检查自动换行后每一行的坐标最后统一替换成整理后的内容"
+    let paragraphText = "第一段说明覆盖效果，段落末尾只出现一个橙色端点，并检查自动换行后的每一行。\n\n第二段在空行之后开始，空行不能让定位失败。\n第三段只用单个换行分隔，也要有自己的端点。"
+    let preview = paragraphs ? paragraphText : long ? String(repeating: "较早输入的内容已经滚动到可见区域以外，需要保留完整正文。", count: 80)+"这是本轮长文独有的可见尾段。动画需要跟随当前可见文字，不能因为整篇文档高度超出窗口就停止。我们继续检查自动滚动后的每一行坐标是否仍然可以获取。" : growing ? "请把这句话扩展为四行说明文字" : "今天讨论文字区域覆盖的效果希望高亮只覆盖这次新增的文字不要覆盖前面的原稿继续补充一段较长的文字检查自动换行后每一行的坐标最后统一替换成整理后的内容"
     text.string = prefix + preview
     if long {
         let scroll = NSScrollView(frame: NSRect(x: 24, y: 24, width: 712, height: 210))
@@ -415,8 +484,8 @@ if CommandLine.arguments.contains("--single-line") {
     var choice = PolishFinalChoice()
     let fallback = CommandLine.arguments.contains("--fallback")
     let raw = "今天讨论文字区域覆盖的效果，希望高亮只覆盖这次新增的文字，不覆盖前面的原稿。继续补充较长文字，检查自动换行后的坐标，最后统一替换。"
-    let polished = long ? preview+"最后补充一句润色后的结论。" : growing ? "第一行：文字从少量扩展成更完整的内容。\n第二行：输入框需要在结果写入后向上增高。\n第三行：新增的底线从左侧展开，并跟随新的文字区域。\n第四行：等待整体对齐后，再播放结束效果。" : "今天讨论文字区域的覆盖效果：高亮仅覆盖本轮新增内容，保留原稿；自动换行后仍能准确定位，最后统一替换为整理后的文字。"
-    let mode = long ? "long" : growing ? "grow" : CommandLine.arguments.contains("--cancel") ? "cancel" : CommandLine.arguments.contains("--slow") ? "slow" : fallback ? "fallback" : "fast"
+    let polished = paragraphs ? paragraphText.replacingOccurrences(of: "说明", with: "描述") : long ? preview+"最后补充一句润色后的结论。" : growing ? "第一行：文字从少量扩展成更完整的内容。\n第二行：输入框需要在结果写入后向上增高。\n第三行：新增的底线从左侧展开，并跟随新的文字区域。\n第四行：等待整体对齐后，再播放结束效果。" : "今天讨论文字区域的覆盖效果：高亮仅覆盖本轮新增内容，保留原稿；自动换行后仍能准确定位，最后统一替换为整理后的文字。"
+    let mode = paragraphs ? "paragraphs" : long ? "long" : growing ? "grow" : CommandLine.arguments.contains("--cancel") ? "cancel" : CommandLine.arguments.contains("--slow") ? "slow" : fallback ? "fallback" : "fast"
     var phaseTimer: Timer?
     var captured = Set<PolishEffectLifecycle.Phase>()
     func finishFixture() {

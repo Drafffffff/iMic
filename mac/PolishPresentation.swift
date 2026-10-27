@@ -82,6 +82,49 @@ enum SweepLineLayout {
     }
 }
 
+/// Candidates arrive in front-to-back order. Dialogs may sit above layer zero;
+/// never cross into another application's window or into menus/status overlays.
+enum PolishWindowSelection {
+    struct Candidate {
+        let id: UInt32
+        let pid: Int32
+        let frame: CGRect
+        let layer: Int
+        let visible: Bool
+    }
+    static func choose(_ candidates: [Candidate], pid: Int32, preferred: CGRect? = nil) -> Candidate? {
+        let eligible = candidates.filter {
+            $0.pid == pid && $0.visible && (0...24).contains($0.layer)
+                && $0.frame.width >= 80 && $0.frame.height >= 32
+        }
+        if let preferred, let exact = eligible.first(where: {
+            abs($0.frame.minX-preferred.minX) < 2 && abs($0.frame.minY-preferred.minY) < 2
+                && abs($0.frame.width-preferred.width) < 2 && abs($0.frame.height-preferred.height) < 2
+        }) { return exact }
+        return eligible.first
+    }
+}
+
+/// One visual line of an editor, as reported by its AX line ranges.
+enum TextLineSegment {
+    /// The line's UTF-16 range without trailing line breaks, and whether a hard
+    /// paragraph break ended it. Blank lines return nil: their bounds are empty
+    /// in most editors and they carry no rail.
+    static func visible(_ range: NSRange, in text: NSString) -> (range: NSRange, endsParagraph: Bool)? {
+        var length = range.length
+        var endsParagraph = false
+        while length > 0 {
+            let unit = text.character(at: range.location+length-1)
+            if unit == 0x0A || unit == 0x0D || unit == 0x2029 { endsParagraph = true }
+            else if unit != 0x2028 { break }
+            length -= 1
+        }
+        let trimmed = NSRange(location: range.location, length: length)
+        guard length > 0, !text.substring(with: trimmed).trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return (trimmed, endsParagraph)
+    }
+}
+
 /// AX document bounds can exceed the window after a long dictation. Capture
 /// only their intersection with the visible scroll containers and window.
 enum TextViewport {
