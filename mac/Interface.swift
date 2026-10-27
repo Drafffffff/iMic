@@ -632,7 +632,7 @@ extension AppDelegate {
         let gestureChecks = column([snapReturnCheck, pullDeleteCheck, swipeCursorCheck], spacing: 8)
 
         let deepseekTitle = overline("TEXT POLISH")
-        deepseekCheck = checkbox("识别后润色文本", #selector(toggleDeepSeek), key: "deepseekEnabled", defaultValue: false)
+        deepseekCheck = checkbox("启用 AI 润色与转换", #selector(toggleDeepSeek), key: "deepseekEnabled", defaultValue: false)
         polishProviderPicker.addItems(withTitles: PolishProvider.allCases.map(\.title))
         polishProviderPicker.selectItem(at: PolishProvider.allCases.firstIndex(of: editingPolishProvider)!)
         polishProviderPicker.target = self
@@ -676,72 +676,59 @@ extension AppDelegate {
         polishAdvancedButton.alignment = .left
         loadPolishProviderFields()
         let polishOptions = DeepSeekConfiguration.options
-        polishStrengthButtons = NSSegmentedControl(
-            labels: PolishStrength.allCases.map(\.title), trackingMode: .selectOne,
-            target: self, action: #selector(changePolishOptions(_:))
-        )
-        polishStrengthButtons.setAccessibilityLabel("润色强度")
-        polishStrengthButtons.selectedSegment = PolishStrength.allCases.firstIndex(of: polishOptions.strength)!
-        for (index, strength) in PolishStrength.allCases.enumerated() {
-            let symbol: String
-            switch strength {
-            case .light: symbol = "pencil"
-            case .medium: symbol = "text.badge.checkmark"
-            case .heavy: symbol = "wand.and.stars"
-            }
-            let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
-            polishStrengthButtons.setImage(image, forSegment: index)
-        }
-        polishScenarioButtons = NSSegmentedControl(
-            labels: PolishScenario.allCases.map(\.title), trackingMode: .selectOne,
-            target: self, action: #selector(changePolishOptions(_:))
-        )
-        polishScenarioButtons.setAccessibilityLabel("润色场景")
-        polishScenarioButtons.selectedSegment = PolishScenario.allCases.firstIndex(of: polishOptions.scenario)!
-        for (index, scenario) in PolishScenario.allCases.enumerated() {
-            let symbol: String
-            switch scenario {
-            case .general: symbol = "text.alignleft"
-            case .chat: symbol = "bubble.left.and.bubble.right"
-            case .email: symbol = "envelope"
-            case .notes: symbol = "note.text"
-            case .agent: symbol = "terminal"
-            }
-            let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
-            polishScenarioButtons.setImage(image, forSegment: index)
-        }
-        for control in [polishStrengthButtons!, polishScenarioButtons!] {
+        polishModeButtons = NSSegmentedControl(
+            labels: PolishMode.allCases.map(\.title), trackingMode: .selectOne,
+            target: self, action: #selector(changePolishOptions(_:)))
+        polishModeButtons.setAccessibilityLabel("转换模式")
+        polishModeButtons.selectedSegment = PolishMode.allCases.firstIndex(of: polishOptions.mode) ?? 0
+        polishToneButtons = NSSegmentedControl(
+            labels: PolishTone.allCases.map(\.title), trackingMode: .selectOne,
+            target: self, action: #selector(changePolishOptions(_:)))
+        polishToneButtons.setAccessibilityLabel("表达语气")
+        polishToneButtons.selectedSegment = PolishTone.allCases.firstIndex(of: polishOptions.tone) ?? 0
+        for control in [polishModeButtons!, polishToneButtons!] {
             control.segmentStyle = .rounded
             control.segmentDistribution = .fillEqually
             control.selectedSegmentBezelColor = .imicOrange
             control.font = .systemFont(ofSize: 11, weight: .medium)
-            control.heightAnchor.constraint(equalToConstant: 28).isActive = true
+            control.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        }
+        for (index, mode) in PolishMode.allCases.enumerated() {
+            polishModeButtons.setToolTip(mode.detail, forSegment: index)
+        }
+        for (index, tone) in PolishTone.allCases.enumerated() {
+            polishToneButtons.setToolTip("\(tone.detail)\n例如：\(tone.example)", forSegment: index)
         }
         polishOutputPicker = NSPopUpButton(frame: .zero, pullsDown: false)
-        polishOutputPicker.addItems(withTitles: PolishOutput.allCases.map(\.title))
-        polishOutputPicker.selectItem(at: PolishOutput.allCases.firstIndex(of: polishOptions.output)!)
+        polishOutputPicker.addItems(withTitles: PolishOutput.languages.map(\.title))
+        polishOutputPicker.selectItem(at: PolishOutput.languages.firstIndex(of: polishOptions.output) ?? 0)
         polishOutputPicker.target = self
         polishOutputPicker.action = #selector(changePolishOutput(_:))
         polishOutputPicker.font = .systemFont(ofSize: 11, weight: .medium)
-        polishOutputPicker.setAccessibilityLabel("润色输出")
-        polishOptionsHint = label(polishOptions.summary, size: 10, color: .imicMuted)
+        polishOutputPicker.setAccessibilityLabel("输出语言")
+        polishOptionsHint = label("", size: 10, color: .imicMuted)
         polishOptionsHint.maximumNumberOfLines = 0
-        polishOptionsHint.setAccessibilityLabel("当前润色选项说明")
+        polishOptionsHint.setAccessibilityLabel("当前转换组合")
+        polishModeHint = label("", size: 10, color: .imicMuted)
+        polishToneHint = label("", size: 10, color: .imicMuted)
+        for hint in [polishModeHint!, polishToneHint!] { hint.maximumNumberOfLines = 0 }
         updatePolishOptionControls(polishOptions)
-        let deepseekFields = column([
-            label("润色来源", size: 10, color: .imicMuted, mono: true), polishProviderPicker,
-            deepseekKey, deepseekHint, polishAdvancedButton!, polishAdvanced!,
-            label("润色强度", size: 10, color: .imicMuted, mono: true),
-            polishStrengthButtons!,
-            label("使用场景", size: 10, color: .imicMuted, mono: true),
-            polishScenarioButtons!,
-            label("输出", size: 10, color: .imicMuted, mono: true),
-            polishOutputPicker!, polishOptionsHint!
+        let modeFields = column([
+            label("MODE · 转换模式", size: 10, color: .imicMuted, mono: true), polishModeButtons!, polishModeHint!
+        ], spacing: 8)
+        let toneFields = column([
+            label("TONE · 表达语气", size: 10, color: .imicMuted, mono: true), polishToneButtons!, polishToneHint!
+        ], spacing: 8)
+        let languageFields = column([
+            label("LANGUAGE · 输出语言", size: 10, color: .imicMuted, mono: true), polishOutputPicker!, polishOptionsHint!
+        ], spacing: 8)
+        let providerFields = column([
+            label("SERVICE · 润色服务", size: 10, color: .imicMuted, mono: true), polishProviderPicker,
+            deepseekKey, deepseekHint, polishAdvancedButton!, polishAdvanced!
         ], spacing: 6)
-        for view in deepseekFields.arrangedSubviews {
-            fullWidth(view, in: deepseekFields)
+        let deepseekFields = column([modeFields, toneFields, languageFields, providerFields], spacing: 18)
+        for group in [modeFields, toneFields, languageFields, providerFields, deepseekFields] {
+            for view in group.arrangedSubviews { fullWidth(view, in: group) }
         }
 
         let previewTitle = overline("LIVE PREVIEW")

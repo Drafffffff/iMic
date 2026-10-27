@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>恶魔低语 · 荧光线框 V.01</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <svg class="svg-library" aria-hidden="true"><defs>
+    <symbol id="mic" viewBox="0 0 24 32"><rect x="7" y="2" width="10" height="18" rx="5"/><path d="M3 13v3a9 9 0 0 0 18 0v-3M12 25v5M7 30h10"/></symbol>
+    <symbol id="gear" viewBox="0 0 28 28"><path d="m11 2-1 4-4 1-3 4 2 3-2 4 3 4 4 0 2 4h5l1-4 4-1 3-4-2-3 2-4-3-4-4 0-2-4Z"/><circle cx="14" cy="14" r="5"/></symbol>
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="M12 3v17M6 14l6 6 6-6M4 3h16"/></symbol>
+    <symbol id="computer" viewBox="0 0 30 26"><path d="M2 2h26v17H2ZM11 19v5m8-5v5M7 24h16"/></symbol>
+    <symbol id="close" viewBox="0 0 24 24"><path d="m5 5 14 14M19 5 5 19"/></symbol>
+  </defs></svg>
+
+  <header class="workbench-heading">
+    <span>DEVIL’S WHISPER <i>/</i> VISUAL STUDY 01</span>
+    <span>代码交互原型 · 模拟信号</span>
+  </header>
+
+  <main class="workbench">
+    <section class="phone" id="phone" aria-label="恶魔低语手机界面原型">
+      <div class="screen-texture" aria-hidden="true"></div>
+      <div class="system-bar" aria-label="模拟系统状态栏">
+        <span>09:41</span><div class="island" aria-hidden="true"></div>
+        <div class="system-icons" aria-hidden="true"><svg viewBox="0 0 18 14"><path d="M1 13v-3m4 3V7m4 6V4m4 9V1" stroke-width="2.1"/></svg><svg viewBox="0 0 20 14"><path d="M1 4Q10-3 19 4M4 7q6-5 12 0m-9 3q3-3 6 0" stroke-width="1.9"/><circle cx="10" cy="12" r=".8" fill="currentColor"/></svg><svg class="battery" viewBox="0 0 27 14"><rect x="1" y="2" width="22" height="10" rx="2"/><path d="M25 5v4"/><rect x="3" y="4" width="17" height="6" fill="currentColor" stroke="none"/></svg></div>
+      </div>
+
+      <header class="app-header">
+        <div class="brand"><h1>恶魔低语</h1><span>DEVIL’S WHISPER</span></div>
+        <button class="device-entry" id="device-button" aria-label="查看连接设备"><span class="signal-dot"></span><span>MacBook Pro</span><span class="chevron">›</span></button>
+        <button class="icon-button" id="settings-button" aria-label="设置"><svg><use href="#gear"/></svg></button>
+      </header>
+
+      <div class="header-rule" aria-hidden="true"><svg viewBox="0 0 354 15" preserveAspectRatio="none"><path class="dim" d="M0 11h88l8-8h258"/><path class="blue" d="M238 3h83"/><path class="orange" d="M338 3h16"/><rect x="351" y="1.5" width="3" height="3"/></svg></div>
+
+      <section class="status" aria-live="polite">
+        <div class="status-eyebrow"><span class="pixel">VOICE / INPUT</span><span class="status-marker"></span></div>
+        <div class="status-readout" id="status-word">READY</div>
+        <p id="status-caption">按住说话，让声音成为文字</p>
+      </section>
+
+      <section class="instrument" aria-label="可下拉的三维声场">
+        <div class="instrument-top"><span class="pixel">01 / VOICE FIELD</span><span class="linked"><span class="signal-dot"></span>已连接</span></div>
+        <div class="scene-wrap" id="scene-wrap" tabindex="0" role="slider" aria-label="拉弦张力" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="下拉后松手发射演示文字">
+          <canvas id="scene"></canvas>
+          <div class="glyph-layer" id="glyph-layer" aria-hidden="true"></div>
+          <svg class="ruler ruler-left" viewBox="0 0 16 184" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <svg class="ruler ruler-right" viewBox="0 0 16 184" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <span class="fixed-anchor left" aria-hidden="true"></span><span class="fixed-anchor right" aria-hidden="true"></span>
+          <div class="scene-unavailable" hidden>当前浏览器未启用 WebGL 2，无法显示三维原型。</div>
+        </div>
+        <div class="instrument-bottom"><span><b class="channel-count">44</b><span class="pixel"> BANDS</span></span><svg class="axis-triad" viewBox="0 0 37 25" aria-hidden="true"><path d="M17 16 2 22M17 16V2M17 16l16 6"/><text x="0" y="16">X</text><text x="21" y="7">Y</text><text x="32" y="17">Z</text></svg><span class="pixel">16 kHz</span></div>
+      </section>
+
+      <div class="gesture-help"><svg aria-hidden="true"><use href="#arrow"/></svg><div><p>下拉松手，发射文字</p><p>上拉删除 · 左右移动光标</p></div><span id="tension-readout" aria-hidden="true">↳ 00</span></div>
+
+      <section class="recording-controls">
+        <div class="recording-meta"><span class="pixel">TX / VOICE</span><div class="meter-ticks" aria-hidden="true"></div><span class="pixel" id="record-meta">PRESS + HOLD</span></div>
+        <button class="record-button" id="record-button" aria-label="按住开始演示录音"><span class="record-label" id="record-label">HOLD TO SPEAK</span><span class="elapsed" id="elapsed"></span><span class="record-mic"><svg aria-hidden="true"><use href="#mic"/></svg></span></button>
+        <div class="recording-footer"><span id="footer-hint">松开输入 · 上滑取消</span><button id="result-button" hidden>查看文字 <span>↗</span></button><span class="pixel" id="footer-format">PCM / 16K</span></div>
+      </section>
+      <div class="home-indicator" aria-hidden="true"></div>
+
+      <section class="sheet" id="settings" hidden aria-label="设置预览">
+        <div class="sheet-heading"><span class="pixel">SETTINGS</span><button class="icon-button" id="settings-close" aria-label="关闭设置"><svg><use href="#close"/></svg></button></div>
+        <div class="sheet-scroll">
+          <div class="connection-panel"><div class="field-heading"><span>当前连接设备</span><span class="pixel">LINK / ENCRYPTED</span></div><div class="device-row"><svg aria-hidden="true"><use href="#computer"/></svg><span>MacBook Pro</span><span class="signal-dot"></span></div></div>
+          <div class="polish-section"><div class="polish-heading"><div><span class="pixel">POLISH</span><h2>AI 润色</h2></div><button class="wire-switch on" id="polish-switch" role="switch" aria-checked="true" aria-label="AI 润色"><span></span></button></div><p class="save-status" id="save-status">已确认 · 原型中的本地演示设置</p>
+            <div class="field-heading"><span>润色强度</span><span class="pixel">STRENGTH</span></div><div class="options strength-options" role="group" aria-label="润色强度"><button data-strength="light">轻度</button><button class="selected" data-strength="medium" aria-pressed="true">中度</button><button data-strength="heavy">重度</button></div>
+            <div class="field-heading"><span>使用场景</span><span class="pixel">SCENARIO</span></div><div class="options scenario-options" role="group" aria-label="使用场景"><button data-scenario="general">通用</button><button data-scenario="chat">日常聊天</button><button data-scenario="email">工作邮件</button><button data-scenario="notes">会议笔记</button><button class="selected" data-scenario="agent" aria-pressed="true">Agent 指令</button></div>
+            <p class="field-note">服务与模型在 Mac 配置。此处仅演示界面交互。</p>
+          </div>
+          <button class="library-entry" id="library-button">波形复看 <span class="pixel">LOCAL · 24H ↗</span></button>
+        </div>
+      </section>
+      <section class="result-sheet" id="result-sheet" hidden aria-label="识别结果预览"><div class="sheet-heading"><span class="pixel">RESULT</span><button class="icon-button" id="result-close" aria-label="关闭结果"><svg><use href="#close"/></svg></button></div><p id="result-text"></p><span class="pixel result-demo">LOCAL DEMO / NOT TRANSMITTED</span></section>
+    </section>
+
+    <aside class="tuning-panel" aria-label="原型画面调校">
+      <div class="tuning-title"><span class="pixel">DISPLAY / 01</span><h2>荧光线框</h2><p>细线保留结构，光晕形成材质。<br>拖动声场可体验拉伸与回弹。</p></div>
+      <div class="tuning-group"><span class="tuning-caption">显示材质</span><label class="tuning-toggle"><span>荧光辉光</span><input type="checkbox" id="glow-control" checked></label><label class="tuning-toggle"><span>复古屏幕纹理</span><input type="checkbox" id="crt-control" checked></label><label class="tuning-toggle"><span>暂停环境动效</span><input type="checkbox" id="pause-control"></label></div>
+      <div class="tuning-group"><span class="tuning-caption">三维视角</span><div class="view-options"><button class="selected" data-view="front" aria-pressed="true">正视</button><button data-view="side">侧视</button><button data-view="oblique">斜视</button></div></div>
+      <div class="tuning-group"><span class="tuning-caption">交互演示 · 模拟信号</span><button class="demo-action" id="demo-voice">开始录音演示 <span>↗</span></button><button class="demo-action" id="demo-fire">拉弦与文字弹射 <span>↗</span></button></div>
+      <div class="palette"><span style="--swatch:#4c8dff">声场</span><span style="--swatch:#ff671f">动作</span><span style="--swatch:#84dca2">确认</span></div>
+      <p class="prototype-note">V.01 · 视觉与交互原型<br>三维几何与后处理实时渲染。<br>未连接麦克风或 Mac。</p>
+    </aside>
+  </main>
+</body>
+</html>

@@ -53,16 +53,21 @@ struct ReceiverFlightLayout {
     }
 
     func tilt(for index: Int) -> CGFloat {
-        (scatter(index, stride: 0.438579021, stream: 2) - 0.5) * 0.44
+        (scatter(index, stride: 0.438579021, stream: 2) - 0.5) * 0.9
     }
 
     func delay(for index: Int) -> Double {
-        // All glyphs leave within one 60Hz frame, including an arbitrarily long load.
-        Double(scatter(index, stride: 0.569840291, stream: 3)) * 0.014
+        // A ragged volley within ~3 frames: still one burst, but never a single flash point.
+        Double(phase(stream: UInt64(index) &* 3 &+ 4099)) * 0.05
     }
 
     func bend(for index: Int) -> CGFloat {
-        (phase(stream: UInt64(index) &+ 4) * 2 - 1) * min(10, width * 0.025)
+        (phase(stream: UInt64(index) &+ 4) * 2 - 1) * min(22, width * 0.055)
+    }
+
+    /// Radians per second; each glyph tumbles a little, in either direction.
+    func spin(for index: Int) -> CGFloat {
+        (phase(stream: UInt64(index) &* 3 &+ 8191) * 2 - 1) * 2.6
     }
 
     private func scatter(_ index: Int, stride: Double, stream: UInt64) -> CGFloat {
@@ -110,8 +115,8 @@ struct ReceiverArrowFlight {
     }
 
     func pose(at age: CGFloat, origin: CGPoint, velocity: CGPoint, exitSide: CGFloat,
-              emphasis: CGFloat, rotation: CGFloat, tilt: CGFloat, opacity: CGFloat,
-              bend: CGFloat = 0) -> ReceiverFlightPose {
+              emphasis: CGFloat, launchSide: CGFloat = 6.08, spin: CGFloat = 0, rotation: CGFloat,
+              tilt: CGFloat, opacity: CGFloat, bend: CGFloat = 0) -> ReceiverFlightPose {
         let time = max(0, age)
         let travel = travel(at: time)
         var center = CGPoint(x: origin.x + velocity.x * travel, y: origin.y + velocity.y * travel)
@@ -121,14 +126,15 @@ struct ReceiverArrowFlight {
         let arc = progress * (1 - progress)
         center.x += bend * 16 * arc * arc
         let growth = 1 - pow(1 - min(1, progress / 0.85), 1.6)
-        let side = 6.08 + (exitSide - 6.08) * growth
+        let side = launchSide + (exitSide - launchSide) * growth
         let impulse = age < 0 ? 0 : max(0, 1 - abs(time - 0.025) / 0.035) * emphasis
         let settle = Self.smooth(time / 0.045)
         return ReceiverFlightPose(center: center,
-            size: CGSize(width: max(6.08, side * (1 - impulse * 0.12)), height: side * (1 + impulse * 0.38)),
-            rotation: rotation * (1 - settle) + tilt * settle,
+            size: CGSize(width: max(launchSide, side * (1 - impulse * 0.12)), height: side * (1 + impulse * 0.38)),
+            rotation: rotation * (1 - settle) + tilt * settle + spin * time,
             opacity: opacity + (1 - opacity) * Self.smooth(time / 0.012),
-            warmth: age < 0 ? 0 : max(0, 1 - time / 0.055))
+            // A longer white-hot flash reads as the hit of the string, then cools to orange.
+            warmth: age < 0 ? 0.9 : max(0, 1 - time / 0.09))
     }
 
     private static func smooth(_ value: CGFloat) -> CGFloat {

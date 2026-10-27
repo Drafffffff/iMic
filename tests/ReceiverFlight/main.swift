@@ -38,9 +38,9 @@ for width: CGFloat in [320, 375, 402, 440, 852] {
             let x = layout.targetX(for: index)
             expect(x - layout.exitSide * 0.75 >= 0, "Glyph must clear the left edge")
             expect(x + layout.exitSide * 0.75 <= width, "Glyph must clear the right edge")
-            expect(layout.delay(for: index) >= 0 && layout.delay(for: index) < 1.0 / 60,
+            expect(layout.delay(for: index) >= 0 && layout.delay(for: index) < 0.05,
                    "The entire load must fire within one display frame, never queue in waves")
-            expect(abs(layout.tilt(for: index)) <= 0.22, "Launch tilt must preserve recognizable glyphs")
+            expect(abs(layout.tilt(for: index)) <= 0.45, "Launch tilt must preserve recognizable glyphs")
             targets.append(x)
             speeds.append(layout.speedMultiplier(for: index))
         }
@@ -67,10 +67,11 @@ expect(releaseA.bend(for: 0) != releaseB.bend(for: 0), "A new release must chang
 for seed in UInt64(0)..<128 {
     let release = ReceiverFlightLayout(count: 120, width: 402, seed: seed)
     for index in 0..<release.visibleCount {
-        expect(abs(release.bend(for: index)) <= 10, "Mid-flight perturbations must remain subtle")
+        expect(abs(release.bend(for: index)) <= 22, "Mid-flight perturbations must remain bounded")
+        expect(abs(release.spin(for: index)) <= 2.6, "Tumbling must stay a gentle variation")
         expect(release.speedMultiplier(for: index) >= 0.78 && release.speedMultiplier(for: index) <= 1.42,
                "Randomness must retain the arrow's existing speed envelope")
-        expect(release.delay(for: index) < 1.0 / 60, "Randomness must not turn a burst into a queue")
+        expect(release.delay(for: index) < 0.05, "Randomness must not turn a burst into a queue")
         expect(release.targetX(for: index) >= 32 && release.targetX(for: index) <= 370,
                "Random exit points must retain the edge clearance")
     }
@@ -85,10 +86,10 @@ let curvedArrow = ReceiverArrowFlight(speed: 4000)
 for age: CGFloat in [0, 0.02, 0.04, 0.06, 0.1, 0.2] {
     func pose(bend: CGFloat) -> ReceiverFlightPose {
         curvedArrow.pose(at: age, origin: CGPoint(x: 200, y: 450), velocity: CGPoint(x: 300, y: -3988),
-            exitSide: 32, emphasis: 1, rotation: 0.2, tilt: 0, opacity: 1, bend: bend)
+            exitSide: 32, emphasis: 1, rotation: 0.2, tilt: 0, opacity: 1, bend: bend * 2.2)
     }
     let straight = pose(bend: 0), bent = pose(bend: 10)
-    expect(abs(bent.center.x - straight.center.x) <= 10.001 && bent.center.y == straight.center.y,
+    expect(abs(bent.center.x - straight.center.x) <= 22.001 && bent.center.y == straight.center.y,
            "Curvature must not slow vertical flight or cause large swerves")
     if age == 0 || straight.center.y <= 0 {
         expect(bent.center == straight.center, "Mid-flight perturbation must vanish at release and exit")

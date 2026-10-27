@@ -24,9 +24,11 @@ public enum IMicLink {
     public static let pairingCodeLifetime: TimeInterval = 600
     public static let polishPreferencesFeature = 1 << 4
     public static let gestureControlFeature = 1 << 5
-    /// 润色偏好包含 `options.output`（翻译 / 终端命令）。Mac 在 `settings` 中声明；
-    /// iPhone 在 `polish.settings` 中声明，未声明时 Mac 保留现有输出模式，避免旧版手机保存时把它重置。
+    /// 旧版润色输出（翻译 / 终端命令）的能力位；新版同时声明 polishModesFeature。
+    /// 未声明新能力的旧手机保存只修改开关，Mac 保留当前模式、语气和语言。
     public static let polishOutputFeature = 1 << 6
+    /// 五种转换模式、四种语气与四种输出语言；不再使用强度和旧场景。
+    public static let polishModesFeature = 1 << 7
     public static let bleServiceUUID = "7E570000-7F4A-4C7E-9A2B-1C0D5E6F7A80"
     public static let bleUplinkUUID = "7E570001-7F4A-4C7E-9A2B-1C0D5E6F7A80"
     public static let bleDownlinkUUID = "7E570002-7F4A-4C7E-9A2B-1C0D5E6F7A80"
@@ -184,6 +186,12 @@ public struct LinkPolishPreferences: Codable, Equatable, Sendable {
         self.enabled = enabled
         self.options = options
     }
+
+    /// 旧手机只允许修改开关，避免把不理解的新模式、语气和语言覆盖为默认值。
+    public func applying(_ request: LinkPolishPreferences, features: Int) -> LinkPolishPreferences {
+        features & IMicLink.polishModesFeature != 0
+            ? request : LinkPolishPreferences(enabled: request.enabled, options: options)
+    }
 }
 
 public struct LinkMessage: Codable, Equatable {
@@ -273,6 +281,16 @@ public struct LinkMessage: Codable, Equatable {
                     DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "润色偏好必须完整提供")
                 )
             }
+        }
+        if ["settings", "polish.settings", "polish.saved"].contains(t),
+           (features ?? 0) & IMicLink.polishModesFeature != 0 {
+            enum PresetKeys: String, CodingKey { case options, mode, tone, output }
+            let preferences = try container.nestedContainer(keyedBy: PresetKeys.self, forKey: .polish)
+            let options = try preferences.nestedContainer(keyedBy: PresetKeys.self, forKey: .options)
+            _ = try options.decode(PolishMode.self, forKey: .mode)
+            _ = try options.decode(PolishTone.self, forKey: .tone)
+            let output = try options.decode(PolishOutput.self, forKey: .output)
+            guard PolishOutput.languages.contains(output) else { throw LinkError.decodingFailed }
         }
         if t == "polish.saved", (features ?? 0) & IMicLink.polishPreferencesFeature == 0 {
             throw DecodingError.dataCorruptedError(
@@ -394,7 +412,7 @@ public struct LinkMessage: Codable, Equatable {
     }
 
     /// iPhone → Mac：请求保存完整润色偏好，仅用于认证后的加密链路。
-    /// `features` 声明手机理解的偏好字段（目前为 `polishOutputFeature`）。
+    /// `features` 声明手机理解的偏好字段（`polishOutputFeature` 与 `polishModesFeature`）。
     public static func polishSettings(_ preferences: LinkPolishPreferences, features: Int? = nil) -> LinkMessage {
         var m = LinkMessage(t: "polish.settings")
         m.polish = preferences

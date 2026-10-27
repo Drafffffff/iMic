@@ -307,8 +307,14 @@ final class WaveformInkStore {
         let start: CGPoint
         let control: CGPoint
         let end: CGPoint
+        /// Landing time, so the arc can grow out of the collapsing glyph.
+        let born: Double
+        /// Ambient clock at landing; flowing arcs advance from here and rest with that clock.
+        let phase: Double
 
-        init(angle: CGFloat) {
+        init(angle: CGFloat, born: Double = CACurrentMediaTime(), phase: Double = 0) {
+            self.born = born
+            self.phase = phase
             let turn = 2 * CGFloat.pi
             let normalizedAngle = (angle.truncatingRemainder(dividingBy: turn) + turn)
                 .truncatingRemainder(dividingBy: turn)
@@ -342,16 +348,22 @@ final class WaveformInkStore {
     private var releasing = false
     var reduceMotion = false
     private(set) var releaseFlash: CGFloat = 0
+    /// 发射冲击波：从拉弦点沿线圈向两端传播的一次亮带，只依赖时间，不改几何。
+    private var waveAge: CGFloat = .infinity
+    private var waveOrigin: CGFloat = 0
+    private var waveStrength: CGFloat = 0
+    nonisolated static let waveLifetime: CGFloat = 0.34
+    var releaseWaveActive: Bool { waveAge < Self.waveLifetime }
     var onActivity: (() -> Void)?
 
-    func deposit(at ring: Int, angle: CGFloat, weight: CGFloat) {
+    func deposit(at ring: Int, angle: CGFloat, weight: CGFloat, phase: Double = 0) {
         guard slots.indices.contains(ring), angle.isFinite, weight.isFinite, weight > 0 else { return }
         onActivity?()
         let weight = min(1, weight)
         releasing = false
         // 饱和叠加：再长的文字也只趋近上限，不积出无限亮度。
         slots[ring].charge += (1 - slots[ring].charge) * weight * 0.24
-        contacts[ring].append(Contact(angle: angle))
+        contacts[ring].append(Contact(angle: angle, phase: phase))
         if !reduceMotion {
             slots[ring].arrivalTarget += (1 - slots[ring].arrivalTarget) * weight * 0.92
             let first = ring * Self.impactSlotsPerRing
@@ -365,10 +377,15 @@ final class WaveformInkStore {
         }
     }
 
-    func release(strength: CGFloat) {
+    func release(strength: CGFloat, anchor: CGFloat = 0.5) {
         onActivity?()
         let strength = min(1, max(0, strength))
         releasing = true
+        if !reduceMotion {
+            waveAge = 0
+            waveOrigin = min(1, max(0, anchor.isFinite ? anchor : 0.5)) * CGFloat(slots.count - 1)
+            waveStrength = 0.45 + 0.4 * strength
+        }
         releaseFlash = 0
         clearCharge()
         for index in contacts.indices { contacts[index].removeAll(keepingCapacity: true) }
@@ -393,6 +410,7 @@ final class WaveformInkStore {
         for index in contacts.indices { contacts[index].removeAll(keepingCapacity: true) }
         releasing = false
         releaseFlash = 0
+        waveAge = .infinity
         for index in impacts.indices { impacts[index] = Impact() }
     }
 
@@ -444,6 +462,7 @@ final class WaveformInkStore {
             impacts[index].age = min(Self.impactLifetime, impacts[index].age + impactStep)
             if reduceMotion { impacts[index].amplitude = 0 }
         }
+        if waveAge < Self.waveLifetime { waveAge = reduceMotion ? .infinity : waveAge + CGFloat(min(0.05, dt)) }
         let dt = CGFloat(min(0.05, dt))
         let chargeSpread = min(0.20, dt * 0.7)
         let arrivalSpread = min(0.24, dt * 5)
@@ -476,16 +495,37 @@ final class WaveformInkStore {
         }
     }
 
+    /// Stored text energy of one ring: saturating, slowly shared with its neighbors, kept
+    /// until release. The ring-charge attach style draws the load from this alone.
+    func load(at ring: Int) -> CGFloat {
+        guard slots.indices.contains(ring) else { return 0 }
+        return slots[ring].value
+    }
+
     func intensity(at ring: Int) -> CGFloat {
         guard slots.indices.contains(ring) else { return 0 }
         let slot = slots[ring]
-        return min(1, slot.value * 0.78 + slot.arrival * 0.28 + slot.releasePeak * 0.70)
+        // Arrival pulses only faintly: a whole ring jumping on every landing reads as flicker.
+        return min(1, slot.value * 0.78 + slot.arrival * 0.06 + slot.releasePeak * 0.70 + releaseWave(at: ring) * 0.85)
     }
 
     /// 释放余光与文字到达脉冲独立，避免把任意落点错误地画到圆环顶部。
     func accent(at ring: Int) -> CGFloat {
         guard !reduceMotion, slots.indices.contains(ring) else { return 0 }
-        return min(1, slots[ring].releasePeak)
+        return min(1, max(slots[ring].releasePeak, releaseWave(at: ring)))
+    }
+
+    /// 前沿先快后慢（约 0.2s 扫过整条线圈），亮带随传播变宽、变暗。
+    func releaseWave(at ring: Int) -> CGFloat {
+        guard waveAge < Self.waveLifetime else { return 0 }
+        let progress = waveAge / Self.waveLifetime
+        let front = CGFloat(slots.count) * 1.15 * (1 - pow(1 - progress, 2.2))
+        let width = 1.6 + 1.8 * progress
+        let distance = abs(CGFloat(ring) - waveOrigin) - front
+        let fade = pow(1 - progress, 3)
+        // Ramp in as the front leaves the pull point, so the release never pins a hot spot there.
+        let departure = min(1, front / 5)
+        return waveStrength * fade * departure * exp(-distance * distance / (width * width))
     }
 
     func impact(at ring: Int, slot: Int) -> Impact? {
@@ -511,6 +551,7 @@ final class SpectrumStore: ObservableObject {
     private var peakHoldUntil: CFTimeInterval = 0
     private var noiseTime: Double = 0
     private var lastTick: CFTimeInterval = 0
+    private var lastHitchLog: CFTimeInterval = 0
     private var displayLink: CADisplayLink?
     private var visible = false
     private var activeUntil: CFTimeInterval = 0
@@ -635,6 +676,11 @@ final class SpectrumStore: ObservableObject {
         let now = CACurrentMediaTime()
         let elapsed = lastTick == 0 ? 1.0 / 60.0 : max(0, now - lastTick)
         let dt = min(0.05, elapsed)
+        // Main-thread stalls freeze the coil and then jump it; log them, at most once a second.
+        if elapsed > 0.05, now - lastHitchLog > 1 {
+            lastHitchLog = now
+            IMicLog.write("iphone.visual", String(format: "frame hitch %.0fms", elapsed * 1000))
+        }
         lastTick = now
         let ambient = ambientEnabled && !ambientReduced
             ? ambientMotion.advance(at: now, dt: dt) : 0

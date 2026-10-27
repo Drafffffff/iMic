@@ -8,6 +8,32 @@ final class InputRangeTests: XCTestCase {
         XCTAssertFalse(InputTarget.clearRoleAllowed("AXWebArea", valueSettable: true))
         XCTAssertFalse(InputTarget.clearRoleAllowed("AXTextArea", valueSettable: false))
         XCTAssertFalse(InputTarget.clearRoleAllowed(nil, valueSettable: true))
+        XCTAssertTrue(InputTarget.clearRoleAllowed("AXTextArea", valueSettable: false, selectedTextSettable: true))
+        XCTAssertFalse(InputTarget.clearRoleAllowed("AXWebArea", valueSettable: false, selectedTextSettable: true))
+        XCTAssertFalse(InputTarget.clearRoleAllowed("AXTextField", valueSettable: true, subrole: "AXSecureTextField"))
+        XCTAssertFalse(InputTarget.clearRoleAllowed("AXTextArea", valueSettable: true, editable: false))
+        XCTAssertFalse(InputTarget.clearRoleAllowed("AXTextArea", valueSettable: true, selectedTextSettable: false))
+    }
+
+    func testUnknownKeyboardSelectionDoesNotAcceptGhostCompletion() {
+        XCTAssertEqual(InputTarget.keyboardInitialPreparation(selection: nil), .ready,
+                       "An unreadable editor must receive text without a speculative Right or Tab key")
+        XCTAssertEqual(InputTarget.keyboardInitialPreparation(selection: CFRange(location: 12, length: 0)), .ready)
+        XCTAssertEqual(InputTarget.keyboardInitialPreparation(selection: CFRange(location: 4, length: 3)), .collapseSelection)
+    }
+
+    func testClearRequiresTheCompleteUnchangedFieldSelection() {
+        let text = "清空👨‍👩‍👧‍👦这个输入框"
+        XCTAssertTrue(InputTarget.clearSelectionMatches(original: text, current: text,
+            selected: CFRange(location: 0, length: text.utf16.count)))
+        XCTAssertFalse(InputTarget.clearSelectionMatches(original: text, current: text,
+            selected: CFRange(location: 0, length: text.count)), "AX ranges use UTF-16, not graphemes")
+        XCTAssertFalse(InputTarget.clearSelectionMatches(original: text, current: text,
+            selected: CFRange(location: 1, length: text.utf16.count - 1)))
+        XCTAssertFalse(InputTarget.clearSelectionMatches(original: text, current: text + "用户新输入",
+            selected: CFRange(location: 0, length: text.utf16.count)))
+        XCTAssertFalse(InputTarget.clearSelectionMatches(original: text, current: nil, selected: nil))
+        XCTAssertFalse(InputTarget.clearSelectionMatches(original: "", current: "", selected: CFRange(location: 0, length: 0)))
     }
 
     func testSelectionFailureRecoversBeforeKeyboardFallbackWithoutWriting() {

@@ -39,6 +39,9 @@ struct PairingSheet: View {
                                 PolishPreferencesSection()
                                     .padding(.vertical, 24)
                                 Hairline()
+                                DisplayPreferencesSection()
+                                    .padding(.vertical, 24)
+                                Hairline()
                                 footer
                                     .padding(.top, 12)
                             }
@@ -54,6 +57,7 @@ struct PairingSheet: View {
                         Rectangle().fill(Theme.line).frame(height: 1)
                     }
                 }
+                .modifier(PhosphorNativeGlass())
                 .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
                 .presentationBackground(Theme.ink)

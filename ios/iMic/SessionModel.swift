@@ -209,31 +209,38 @@ final class SessionModel: ObservableObject {
         guard !audio.isRunning else { return true }
         audioGeneration &+= 1
         let generation = audioGeneration
-        do {
-            try audio.start(
-                onChunk: { [weak self] data in
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self, self.audioGeneration == generation else { return }
-                        self.handleLiveAudio(data)
-                    }
-                },
-                onBuffer: { [preview = speechPreview] buffer in
-                    preview.append(buffer)
-                },
-                onFailure: { [weak self] message in
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self, self.audioGeneration == generation else { return }
-                        self.handleAudioFailure(message)
-                    }
+        // Starts in the background: capture begins at once and PCM flows when the engine is up.
+        audio.start(
+            onChunk: { [weak self] data in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.audioGeneration == generation else { return }
+                    self.handleLiveAudio(data)
                 }
-            )
-            // 重启触感引擎，但不更改已运行的 playAndRecord 音频会话。
-            Haptics.shared.prepare(force: true)
-            return true
-        } catch {
-            audioGeneration &+= 1
-            return false
-        }
+            },
+            onBuffer: { [preview = speechPreview] buffer in
+                preview.append(buffer)
+            },
+            onFailure: { [weak self] message in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.audioGeneration == generation else { return }
+                    self.handleAudioFailure(message)
+                }
+            },
+            completion: { [weak self] error in
+                // AudioCapture delivers this on the main queue.
+                MainActor.assumeIsolated {
+                    guard let self, self.audioGeneration == generation else { return }
+                    if error != nil {
+                        self.audioGeneration &+= 1
+                        self.handleAudioFailure("麦克风启动失败")
+                        return
+                    }
+                    // 重启触感引擎，但不更改已运行的 playAndRecord 音频会话。
+                    Haptics.shared.prepare(force: true)
+                }
+            }
+        )
+        return true
     }
 
     /// A short lease retains 150ms pre-roll for consecutive utterances; it never

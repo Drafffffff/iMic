@@ -30,6 +30,7 @@ final class Haptics {
         case pairingFailed
 
         case result
+        case polishReady
         case warning
         case error
         case copy
@@ -233,6 +234,8 @@ final class Haptics {
         patterns[.pairingFailed] = pattern([(0, 0.5, 0.3), (0.08, 0.3, 0.2)])
 
         patterns[.result] = pattern([(0, 0.4, 0.4), (0.09, 0.6, 0.35)])
+        // 润色完成、可以发射：一记实打实的重击，再一记更脆的确认，带短促余震。
+        patterns[.polishReady] = pattern([(0, 1.0, 0.55), (0.085, 0.9, 0.95)], continuous: (0.085, 0.09, 0.4, 0.6))
         patterns[.warning] = pattern([(0, 0.4, 0.3), (0.08, 0.3, 0.2)])
         patterns[.error] = pattern([
             (0, 0.6, 0.2), (0.08, 0.4, 0.15), (0.16, 0.3, 0.1)
@@ -308,6 +311,11 @@ final class Haptics {
             }
         case .pairingSuccess, .result:
             notification.notificationOccurred(.success)
+        case .polishReady:
+            heavy.impactOccurred(intensity: 1)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.085) { [weak self] in
+                self?.rigid.impactOccurred(intensity: 0.9)
+            }
         case .connectionLost, .pairingFailed, .error:
             notification.notificationOccurred(.error)
         case .codeDigit, .selection:

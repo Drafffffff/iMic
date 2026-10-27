@@ -22,7 +22,7 @@ struct PolishPreferencesSection: View {
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 8) {
                         PixelText(text: "POLISH", cell: 2.1, color: Theme.ivory, tracking: 1.5)
-                        Text("AI 润色")
+                        Text("AI 润色与转换")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(Theme.ivory)
                             .accessibilityAddTraits(.isHeader)
@@ -41,8 +41,7 @@ struct PolishPreferencesSection: View {
                         .padding(.horizontal, 8)
                         .frame(minWidth: 76, minHeight: 44, alignment: .trailing)
                         .tint(Theme.orange)
-                        .disabled(!isAvailable)
-                        .allowsHitTesting(!link.polishPreferencesSaving)
+                        .disabled(!isAvailable || link.polishPreferencesSaving)
                         .accessibilityHint("保存到当前连接的 Mac，等待 Mac 确认后生效")
                     }
                 }
@@ -60,12 +59,11 @@ struct PolishPreferencesSection: View {
 
             if let preferences = displayedPreferences {
                 preferencesEditor(preferences)
-                    .disabled(!isAvailable)
-                    .allowsHitTesting(!link.polishPreferencesSaving)
+                    .disabled(!isAvailable || link.polishPreferencesSaving)
                     .opacity(isAvailable ? 1 : 0.6)
             }
 
-            Text("API Key、模型与服务地址请在 Mac 配置。")
+            Text("转换服务、API Key 与模型请在 Mac 配置。")
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -120,79 +118,74 @@ struct PolishPreferencesSection: View {
     private func preferencesEditor(_ preferences: LinkPolishPreferences) -> some View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 10) {
-                sectionHeading("STRENGTH", title: "润色强度")
-                    .opacity(usesStyle(preferences) ? 1 : 0.5)
-                HStack(spacing: 8) {
-                    ForEach(PolishStrength.allCases, id: \.self) { strength in
-                        let selected = preferences.options.strength == strength
-                        Button {
-                            update { $0.options.strength = strength }
-                        } label: {
-                            optionLabel(strength.title, selected: selected)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("润色强度，\(strength.title)")
-                        .accessibilityValue(selected ? "已选择" : "未选择")
-                        .accessibilityAddTraits(selected ? .isSelected : [])
-                    }
+                sectionHeading("MODE", title: "转换模式")
+                optionsGrid(PolishMode.allCases, selected: preferences.options.mode, title: { $0.title }) { mode in
+                    update { $0.options.mode = mode }
                 }
-                .disabled(!usesStyle(preferences))
-                .opacity(usesStyle(preferences) ? 1 : 0.5)
+                optionDetail(preferences.options.mode.detail)
             }
-
             VStack(alignment: .leading, spacing: 10) {
-                sectionHeading("SCENARIO", title: "使用场景")
-                    .opacity(usesStyle(preferences) ? 1 : 0.5)
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                    ForEach(PolishScenario.allCases, id: \.self) { scenario in
-                        let selected = preferences.options.scenario == scenario
-                        Button {
-                            update { $0.options.scenario = scenario }
-                        } label: {
-                            optionLabel(scenario.title, selected: selected)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("使用场景，\(scenario.title)")
-                        .accessibilityValue(selected ? "已选择" : "未选择")
-                        .accessibilityAddTraits(selected ? .isSelected : [])
-                    }
+                sectionHeading("TONE", title: "表达语气")
+                optionsGrid(PolishTone.allCases, selected: preferences.options.tone, title: { $0.title }) { tone in
+                    update { $0.options.tone = tone }
                 }
-                .disabled(!usesStyle(preferences))
-                .opacity(usesStyle(preferences) ? 1 : 0.5)
-            }
-
-            if link.polishOutputSupported {
-                VStack(alignment: .leading, spacing: 10) {
-                    sectionHeading("OUTPUT", title: "输出")
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                        ForEach(PolishOutput.allCases, id: \.self) { output in
-                            let selected = preferences.options.output == output
-                            Button {
-                                update { $0.options.output = output }
-                            } label: {
-                                optionLabel(output.title, selected: selected)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("输出，\(output.title)")
-                            .accessibilityValue(selected ? "已选择" : "未选择")
-                            .accessibilityAddTraits(selected ? .isSelected : [])
-                        }
-                    }
+                .disabled(preferences.options.isCommand)
+                .opacity(preferences.options.isCommand ? 0.45 : 1)
+                if preferences.options.isCommand {
+                    optionDetail("终端命令专注操作，不叠加语气；切回文字模式后恢复选择。")
+                } else {
+                    optionDetail(preferences.options.tone.detail)
+                    Text("例如：\(preferences.options.tone.example)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.ivory)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Theme.ivory.opacity(0.035))
+                        .accessibilityIdentifier("polish-tone-example")
                 }
             }
-
+            VStack(alignment: .leading, spacing: 10) {
+                sectionHeading("LANGUAGE", title: "输出语言")
+                optionsGrid(PolishOutput.languages, selected: preferences.options.output, title: { $0.title }) { output in
+                    update { $0.options.output = output }
+                }
+                .disabled(preferences.options.isCommand)
+                .opacity(preferences.options.isCommand ? 0.45 : 1)
+                optionDetail(preferences.options.isCommand
+                    ? "命令语法固定为 zsh，不受输出语言影响；语言选择会保留。"
+                    : "用所选语言呈现模式和语气，原文已是该语言也会转换。")
+            }
             Text(link.polishPreferencesSaving ? "正在提交以上选择，等待 Mac 确认后生效。"
-                 : (preferences.enabled ? preferences.options.summary : "当前未启用；强度与场景仍保存在 Mac。"))
+                 : (preferences.enabled ? preferences.options.summary : "当前未启用；模式、语气与语言已保存在 Mac。"))
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(minHeight: 44, alignment: .topLeading)
+                .frame(minHeight: 32, alignment: .topLeading)
+                .accessibilityIdentifier("polish-summary")
         }
     }
 
-    /// 终端命令不使用强度与场景。
-    private func usesStyle(_ preferences: LinkPolishPreferences) -> Bool {
-        preferences.options.output != .command
+    private func optionsGrid<Value: Hashable>(_ values: [Value], selected: Value,
+        title: @escaping (Value) -> String, select: @escaping (Value) -> Void) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+            ForEach(values, id: \.self) { value in
+                Button { select(value) } label: {
+                    optionLabel(title(value), selected: selected == value)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(title(value))
+                .accessibilityValue(selected == value ? "已选择" : "未选择")
+                .accessibilityAddTraits(selected == value ? .isSelected : [])
+            }
+        }
+    }
+
+    private func optionDetail(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(Theme.muted)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func optionLabel(_ title: String, selected: Bool) -> some View {
@@ -246,7 +239,7 @@ struct PolishPreferencesSection: View {
             }
         }
         guard link.polishPreferencesSupported else {
-            return ("这台 Mac 暂不支持手机设置", "请更新 Mac 端 iMic；当前无法从 iPhone 读取或修改润色偏好。")
+            return ("这台 Mac 暂不支持手机设置", "请更新 Mac 端 iMic，以支持模式、语气和输出语言设置。")
         }
         if link.polishPreferencesSaving {
             return ("等待 Mac 确认 · 尚未保存", "")

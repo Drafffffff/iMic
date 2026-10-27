@@ -14,8 +14,20 @@ public enum DeepSeekPolicy {
 
     /// 译文中的问句标记：各语言问号，以及日语、韩语、中文常见的句末疑问词。
     private static let translatedQuestionMarkers = [
-        "?", "？", "か", "까", "나요", "니", "吗", "呢"
+        "?", "？", "か", "까", "나요", "니", "吗", "呢", "乎", "耶", "否"
     ]
+
+    /// 文言文允许凝练压缩；其他模式沿用翻译守门，终端始终使用单行校验。
+    public static func isAcceptable(raw: String, polished: String, options: PolishOptions) -> Bool {
+        if options.isCommand { return isAcceptable(raw: raw, polished: polished, output: .command) }
+        if options.mode != .classical || options.output != .chinese {
+            return isAcceptable(raw: raw, polished: polished, output: options.output)
+        }
+        let source = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let result = polished.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !source.isEmpty, !result.isEmpty else { return false }
+        return isAcceptableTranslation(source: source, result: result, minimumRatio: 0.12)
+    }
 
     public static func isAcceptable(raw: String, polished: String, output: PolishOutput = .original) -> Bool {
         let source = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -67,8 +79,8 @@ public enum DeepSeekPolicy {
     }
 
     /// 跨语言时字符数不可比（中文一字三字节、英文一词多字母），用 UTF-8 字节量判断是否被总结或代答。
-    static func isAcceptableTranslation(source: String, result: String) -> Bool {
-        if source.count >= 12, Double(result.utf8.count) < Double(source.utf8.count) * 0.3 {
+    static func isAcceptableTranslation(source: String, result: String, minimumRatio: Double = 0.3) -> Bool {
+        if source.count >= 12, Double(result.utf8.count) < Double(source.utf8.count) * minimumRatio {
             return false
         }
         // 只看问号与句末语气词；「怎么」「如何」常出现在陈述句里，译文没有问号也属正常。

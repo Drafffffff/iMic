@@ -59,6 +59,7 @@ struct DeviceSelectionView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.ink.ignoresSafeArea())
+        .modifier(PhosphorNativeGlass())
         .navigationTitle("连接电脑")
         .navigationBarTitleDisplayMode(.inline)
         .tint(Theme.orange)

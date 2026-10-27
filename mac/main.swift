@@ -72,9 +72,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var polishAddressHint: NSTextField!
     var editingPolishProvider = DeepSeekConfiguration.provider
     var polishDrafts: [PolishProvider: (model: String, endpoint: String, key: String)] = [:]
-    var polishStrengthButtons: NSSegmentedControl!
-    var polishScenarioButtons: NSSegmentedControl!
+    var polishToneButtons: NSSegmentedControl!
+    var polishModeButtons: NSSegmentedControl!
     var polishOptionsHint: NSTextField!
+    var polishModeHint: NSTextField!
+    var polishToneHint: NSTextField!
     var polishOutputPicker: NSPopUpButton!
     var livePreviewCheck: NSButton!
     var polishSweepCheck: NSButton!
@@ -246,11 +248,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.handle(message)
         }
         link.onPolishPreferences = { [weak self] preferences, features in
-            var preferences = preferences
-            // 旧版手机不认识输出模式，保存时会带回默认值；保留 Mac 当前的翻译 / 命令设置。
-            if features & IMicLink.polishOutputFeature == 0 {
-                preferences.options.output = DeepSeekConfiguration.options.output
-            }
+            let preferences = LinkPolishPreferences(enabled: DeepSeekConfiguration.enabled, options: DeepSeekConfiguration.options)
+                .applying(preferences, features: features)
             self?.applyPolishPreferences(preferences, confirmingSave: true)
         }
         link.onAudio = { [weak self] packet in
@@ -354,6 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             | IMicLink.polishPreferencesFeature
             | IMicLink.gestureControlFeature
             | IMicLink.polishOutputFeature
+            | IMicLink.polishModesFeature
     }
 
     private var polishPreferences: LinkPolishPreferences {
@@ -373,19 +373,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         defaults.set(preferences.options.strength.rawValue, forKey: "deepseekStrength")
         defaults.set(preferences.options.scenario.rawValue, forKey: "deepseekScenario")
         defaults.set(preferences.options.output.rawValue, forKey: "polishOutput")
+        defaults.set(preferences.options.mode.rawValue, forKey: "polishMode")
+        defaults.set(preferences.options.tone.rawValue, forKey: "polishTone")
         let saved = polishPreferences
         deepseekCheck?.state = saved.enabled ? .on : .off
-        if let index = PolishStrength.allCases.firstIndex(of: saved.options.strength) {
-            polishStrengthButtons?.selectedSegment = index
-        }
-        if let index = PolishScenario.allCases.firstIndex(of: saved.options.scenario) {
-            polishScenarioButtons?.selectedSegment = index
-        }
-        if let index = PolishOutput.allCases.firstIndex(of: saved.options.output) {
-            polishOutputPicker?.selectItem(at: index)
-        }
+        polishToneButtons?.selectedSegment = PolishTone.allCases.firstIndex(of: saved.options.tone) ?? 0
+        polishModeButtons?.selectedSegment = PolishMode.allCases.firstIndex(of: saved.options.mode) ?? 0
+        polishOutputPicker?.selectItem(at: PolishOutput.languages.firstIndex(of: saved.options.output) ?? 0)
         updatePolishOptionControls(saved.options)
-        IMicLog.write("mac.settings", "polish source=\(confirmingSave ? "phone" : "mac") enabled=\(saved.enabled) strength=\(saved.options.strength.rawValue) scenario=\(saved.options.scenario.rawValue) output=\(saved.options.output.rawValue)")
+        IMicLog.write("mac.settings", "polish source=\(confirmingSave ? "phone" : "mac") enabled=\(saved.enabled) mode=\(saved.options.mode.rawValue) tone=\(saved.options.tone.rawValue) output=\(saved.options.output.rawValue)")
         if confirmingSave {
             link.send(.polishSaved(features: featureMask, polish: saved))
         } else {
@@ -814,7 +810,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         asr = nil
         setStatus("正在润色…")
-        IMicLog.write("mac.session", "polish session=\(session) provider=\(provider.rawValue) chars=\(raw.count) strength=\(options.strength.rawValue) scenario=\(options.scenario.rawValue) output=\(options.output.rawValue)")
+        IMicLog.write("mac.session", "polish session=\(session) provider=\(provider.rawValue) chars=\(raw.count) mode=\(options.mode.rawValue) tone=\(options.tone.rawValue) output=\(options.output.rawValue)")
         // URLSession's request timeout is not a hard wall-clock deadline when
         // a server keeps sending bytes. The utterance has its own terminal gate.
         let deadline = DispatchWorkItem { [weak self] in
@@ -1380,34 +1376,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func changePolishOptions(_ sender: NSSegmentedControl) {
-        let strengths = PolishStrength.allCases
-        let scenarios = PolishScenario.allCases
-        guard strengths.indices.contains(polishStrengthButtons.selectedSegment),
-              scenarios.indices.contains(polishScenarioButtons.selectedSegment) else { return }
-        let strength = strengths[polishStrengthButtons.selectedSegment]
-        let scenario = scenarios[polishScenarioButtons.selectedSegment]
-        let outputs = PolishOutput.allCases
-        let outputIndex = polishOutputPicker?.indexOfSelectedItem ?? -1
-        let output = outputs.indices.contains(outputIndex) ? outputs[outputIndex] : DeepSeekConfiguration.options.output
-        applyPolishPreferences(
-            LinkPolishPreferences(
-                enabled: DeepSeekConfiguration.enabled,
-                options: PolishOptions(strength: strength, scenario: scenario, output: output)
-            ),
-            confirmingSave: false
-        )
+        let modes = PolishMode.allCases
+        let tones = PolishTone.allCases
+        guard modes.indices.contains(polishModeButtons.selectedSegment),
+              tones.indices.contains(polishToneButtons.selectedSegment) else { return }
+        let languages = PolishOutput.languages
+        let index = polishOutputPicker?.indexOfSelectedItem ?? -1
+        let output = languages.indices.contains(index) ? languages[index] : DeepSeekConfiguration.options.output
+        applyPolishPreferences(LinkPolishPreferences(enabled: DeepSeekConfiguration.enabled,
+            options: PolishOptions(output: output, mode: modes[polishModeButtons.selectedSegment],
+                                   tone: tones[polishToneButtons.selectedSegment])), confirmingSave: false)
     }
 
     @objc func changePolishOutput(_ sender: NSPopUpButton) {
-        changePolishOptions(polishScenarioButtons)
+        changePolishOptions(polishModeButtons)
     }
 
-    /// 终端命令不使用强度与场景，禁用对应控件以免误以为生效。
     func updatePolishOptionControls(_ options: PolishOptions) {
-        let usesStyle = options.output != .command
-        polishStrengthButtons?.isEnabled = usesStyle
-        polishScenarioButtons?.isEnabled = usesStyle
-        polishOptionsHint?.stringValue = options.summary
+        polishToneButtons?.isEnabled = !options.isCommand
+        polishOutputPicker?.isEnabled = !options.isCommand
+        polishModeHint?.stringValue = options.mode.detail
+        polishToneHint?.stringValue = options.isCommand
+            ? "终端命令不叠加语气；切回文字模式后恢复选择。"
+            : "\(options.tone.detail)\n例如：\(options.tone.example)"
+        polishOptionsHint?.stringValue = options.isCommand
+            ? "命令语法固定为 zsh，不受输出语言影响；语言选择会保留。"
+            : options.summary
     }
 
     @objc func toggleLivePreview() {

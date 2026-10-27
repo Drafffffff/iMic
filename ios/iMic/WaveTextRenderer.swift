@@ -90,6 +90,10 @@ final class WaveTextRenderer {
     private let device: MTLDevice
     private let queue: MTLCommandQueue
     private let pipeline: MTLRenderPipelineState
+    private let displayPipeline: MTLRenderPipelineState
+    private let compositor: PhosphorCompositor
+    private let glyphDepth: MTLDepthStencilState
+    private let metrics=PhosphorMetrics()
     private let pass = MTLRenderPassDescriptor()
     private let slots = DispatchSemaphore(value: 3)
     private var buffers: [MTLBuffer] = []
@@ -99,6 +103,10 @@ final class WaveTextRenderer {
     private var glyphs: [Character: WaveGlyphTexture] = [:]
     private var pages: [MTLTexture] = []
     private var uploads: [Upload] = []
+    /// New pages are zeroed before any glyph copy: mip filtering reaches across cell edges,
+    /// and private textures otherwise start with undefined contents.
+    private var clears: [MTLTexture] = []
+    private var zeroPage: MTLBuffer?
     private var pageCounts: [Int] = []
     private var pageStarts: [Int] = []
     private var pageCursors: [Int] = []
@@ -113,6 +121,7 @@ final class WaveTextRenderer {
     private static let tileRowBytes = 256
     private static let columns = pageSide / cellSide
     private static let cellsPerPage = columns * columns
+    private static let mipLevels = 5
 
     init(view: WaveTextCanvas) throws {
         assert(MemoryLayout<WaveGlyphInstance>.stride == 48)
@@ -127,7 +136,7 @@ final class WaveTextRenderer {
         rasterizer = WaveGlyphRasterizer(device: device, side: Self.cellSide, rowBytes: Self.tileRowBytes,
                                          font: UIFont.systemFont(ofSize: 88, weight: .medium))
         view.metalLayer.device = device
-        view.metalLayer.pixelFormat = .bgra8Unorm
+        view.metalLayer.pixelFormat = .bgra8Unorm_srgb
         view.metalLayer.framebufferOnly = true
         view.metalLayer.isOpaque = false
         view.isOpaque = false
@@ -149,8 +158,33 @@ final class WaveTextRenderer {
         descriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
         descriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
         pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
+        let display=MTLRenderPipelineDescriptor()
+        display.vertexFunction=vertex
+        display.fragmentFunction=library.makeFunction(name:"waveGlyphDisplayFragment")
+        display.depthAttachmentPixelFormat = .depth32Float
+        for index in 0...1 {
+            let attachment=display.colorAttachments[index]!
+            attachment.pixelFormat = .rgba16Float
+            attachment.isBlendingEnabled=true
+            attachment.sourceRGBBlendFactor = .one
+            attachment.destinationRGBBlendFactor = index==0 ? .oneMinusSourceAlpha:.one
+            attachment.sourceAlphaBlendFactor = .one
+            attachment.destinationAlphaBlendFactor = index==0 ? .oneMinusSourceAlpha:.one
+        }
+        displayPipeline=try device.makeRenderPipelineState(descriptor:display)
+        compositor=try PhosphorCompositor(device:device,library:library)
+        let depth=MTLDepthStencilDescriptor()
+        depth.depthCompareFunction = .lessEqual;depth.isDepthWriteEnabled=false
+        guard let glyphDepth=device.makeDepthStencilState(descriptor:depth)else{throw RenderError.allocation}
+        self.glyphDepth=glyphDepth
         try reserve(instances: 1024, samples: 1024)
     }
+
+    func setArtwork(_ image:CGImage,status:CGRect,action:CGRect)throws {
+        try compositor.setArtwork(image,status:status,action:action)
+    }
+    func setClearArtwork(_ image:CGImage)throws{try compositor.setClearArtwork(image)}
+    func replaceArtwork(_ image:CGImage,at origin:(x:Int,y:Int))throws{try compositor.replaceArtwork(image,at:origin)}
 
     func prepare(_ character: Character) {
         guard glyphs[character] == nil, prepared[character] == nil, !failed.contains(character),
@@ -173,10 +207,18 @@ final class WaveTextRenderer {
         let cell = ordinal % Self.cellsPerPage
         if page == pages.count {
             let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-                pixelFormat: .r8Unorm, width: Self.pageSide, height: Self.pageSide, mipmapped: false)
+                pixelFormat: .r8Unorm, width: Self.pageSide, height: Self.pageSide, mipmapped: true)
+            // 2048 → 128: enough for 7pt launch glyphs; deeper levels would bleed between cells.
+            descriptor.mipmapLevelCount = Self.mipLevels
             descriptor.storageMode = .private
             descriptor.usage = .shaderRead
             guard let texture = device.makeTexture(descriptor: descriptor) else { throw RenderError.allocation }
+            if zeroPage == nil {
+                // Shared buffers are zero-filled on allocation; one is reused for every page.
+                zeroPage = device.makeBuffer(length: Self.pageSide * Self.pageSide, options: .storageModeShared)
+            }
+            guard zeroPage != nil else { throw RenderError.allocation }
+            clears.append(texture)
             pages.append(texture)
             pageCounts.append(0)
             pageStarts.append(0)
@@ -223,21 +265,36 @@ final class WaveTextRenderer {
         glyphs.removeAll(keepingCapacity: true)
         pages.removeAll(keepingCapacity: true)
         uploads.removeAll(keepingCapacity: true)
+        clears.removeAll(keepingCapacity: true)
         pageCounts.removeAll(keepingCapacity: true)
         pageStarts.removeAll(keepingCapacity: true)
         pageCursors.removeAll(keepingCapacity: true)
     }
 
     @discardableResult
-    func draw(_ draws: [WaveGlyphDraw], samples: [WaveGlyphSample] = [], size: CGSize) -> Bool {
+    func draw(_ draws: [WaveGlyphDraw], samples: [WaveGlyphSample] = [], size: CGSize,
+              scene: PhosphorScene? = nil) -> Bool {
         guard size.width > 0, size.height > 0, draws.count <= capacity, samples.count <= sampleCapacity,
               slots.wait(timeout: .now()) == .success else { return false }
         guard let drawable = view.metalLayer.nextDrawable(),
               let command = queue.makeCommandBuffer() else { slots.signal(); return false }
         pass.colorAttachments[0].texture = drawable.texture
         let semaphore = slots
-        command.addCompletedHandler { _ in semaphore.signal() }
-        if !uploads.isEmpty, let blit = command.makeBlitCommandEncoder() {
+        let metrics=metrics
+        command.addCompletedHandler { command in
+            metrics.record(start:command.gpuStartTime,end:command.gpuEndTime)
+            semaphore.signal()
+        }
+        if !uploads.isEmpty || !clears.isEmpty, let blit = command.makeBlitCommandEncoder() {
+            if let zeroPage {
+                for page in clears {
+                    blit.copy(from: zeroPage, sourceOffset: 0, sourceBytesPerRow: Self.pageSide,
+                              sourceBytesPerImage: Self.pageSide * Self.pageSide,
+                              sourceSize: MTLSize(width: Self.pageSide, height: Self.pageSide, depth: 1),
+                              to: page, destinationSlice: 0, destinationLevel: 0,
+                              destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0))
+                }
+            }
             for upload in uploads {
                 blit.copy(from: upload.bytes, sourceOffset: 0, sourceBytesPerRow: Self.tileRowBytes,
                           sourceBytesPerImage: Self.tileRowBytes * Self.cellSide,
@@ -245,9 +302,21 @@ final class WaveTextRenderer {
                           to: upload.texture, destinationSlice: 0, destinationLevel: 0,
                           destinationOrigin: upload.origin)
             }
+            // Only pages that received glyphs this frame; ordered after the copies above.
+            var touched: [ObjectIdentifier] = []
+            for upload in uploads where !touched.contains(ObjectIdentifier(upload.texture)) {
+                touched.append(ObjectIdentifier(upload.texture))
+                blit.generateMipmaps(for: upload.texture)
+            }
             blit.endEncoding()
         }
-        guard let encoder = command.makeRenderCommandEncoder(descriptor: pass) else {
+        let encoder:MTLRenderCommandEncoder?
+        if let scene {
+            do { try compositor.begin(command:command,drawable:drawable.texture,scene:scene,size:size,now:CACurrentMediaTime()) }
+            catch { slots.signal();IMicLog.write("iphone.visual","HDR frame failed: \(error)");return false }
+            encoder=compositor.glyphEncoder(command)
+        } else { encoder=command.makeRenderCommandEncoder(descriptor:pass) }
+        guard let encoder else {
             slots.signal()
             return false
         }
@@ -272,7 +341,8 @@ final class WaveTextRenderer {
                 memcpy(buffer.contents().advanced(by: sampleOffset), base, bytes.count)
             }
         }
-        encoder.setRenderPipelineState(pipeline)
+        encoder.setRenderPipelineState(scene == nil ? pipeline:displayPipeline)
+        if scene != nil { encoder.setDepthStencilState(glyphDepth) }
         encoder.setFragmentBuffer(buffer, offset: sampleOffset, index: 0)
         var viewport = SIMD2<Float>(Float(size.width), Float(size.height))
         encoder.setVertexBytes(&viewport, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
@@ -282,9 +352,11 @@ final class WaveTextRenderer {
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: pageCounts[page])
         }
         encoder.endEncoding()
+        if scene != nil { compositor.finish(command:command,drawable:drawable.texture) }
         command.present(drawable)
         command.commit()
         uploads.removeAll(keepingCapacity: true)
+        clears.removeAll(keepingCapacity: true)
         return true
     }
 }

@@ -91,21 +91,25 @@ payload[length]
 
 ### 润色偏好与能力协商
 
-协议版本仍为 `1`，不改变握手、密钥派生或帧格式。Mac 在 `ready` 后通过加密 `settings` 发送当前功能位与已保存的完整润色偏好：
+协议版本仍为 `1`，不改变握手、密钥派生或帧格式。Mac 在 `ready` 后通过加密 `settings` 发送当前功能位与已保存的完整偏好。下面的 `208` 为 bit4、bit6、bit7 的并集，其他功能位按实际状态叠加：
 
 ```json
-{"t":"settings","features":31,"polish":{"enabled":true,"options":{"strength":"medium","scenario":"agent"}}}
+{"t":"settings","features":208,"polish":{"enabled":true,"options":{"strength":"medium","scenario":"agent","mode":"waffle","tone":"moe","output":"japanese"}}}
 ```
 
-- `IMicLink.polishPreferencesFeature = 1 << 4`：声明支持手机设置润色偏好。声明 bit4 的 `settings` 必须携带非空、完整且合法的 `polish`，否则拒绝解码；旧 Mac 不声明 bit4 且省略 `polish` 的 `settings` 仍可解码，手机明确显示不支持，不推断默认值。
-- `polish.enabled` 为必填布尔值。`polish.options` 必填，其 `strength` 只允许 `light` / `medium` / `heavy`，`scenario` 只允许 `general` / `chat` / `email` / `notes` / `agent`。即使关闭润色也必须提供完整选项；缺失、`null`、类型错误或非法枚举均拒绝，不做静默降级。
-- `polish.options.output` 是后加的可选字段，取值 `original` / `chinese` / `english` / `japanese` / `korean` / `command`：
-  - 缺失、`null` 或未来版本的未知字符串按 `original` 处理，保证新旧两端互通；非字符串类型仍拒绝解码。
-  - `IMicLink.polishOutputFeature = 1 << 6`：Mac 在 `settings` / `polish.saved` 中声明支持输出模式，未声明时手机不显示该项；iPhone 在 `polish.settings` 的 `features` 中声明理解该字段。Mac 收到未声明 bit6 的保存请求（旧版手机）时保留自己当前的 `output`，不被旧手机的默认值覆盖。
-  - 翻译模式先按强度与场景整理，再译为目标语言；仍不得代答、执行。`command` 只输出一行 zsh 命令，忽略强度与场景；Mac 拒绝多行或含控制字符的结果，润色失败或被拒绝时输入 `# 原话` 单行注释。iMic 不会自动按回车执行命令。
-- iPhone 仅在链路已 `ready`、Mac 声明 bit4 且没有在途保存时发送 `{"t":"polish.settings","polish":{...}}`。命令必须包含完整 `polish`，不支持局部更新。保存期间禁用控件；Mac 保存后回传完整 `polish.saved`，且值与请求一致，才表示保存成功，不能仅凭发送成功或普通 `settings` 广播显示已保存。确认必须携带 bit4 与完整偏好；若实际保存值不同，手机显示 Mac 的实际值并明确提示。断线则等待重连读取状态，不自动重发旧 Mac 的修改。
-- 偏好归当前连接的 Mac 所有。手机不持久化第二套偏好，切换 Mac 后以新 Mac 的状态为准；Mac 本地更改也通过完整 `settings` 回显。
-- 手机只接触开关、强度与场景。API Key、AI 服务来源和地址不进入这些消息。命令必须经过原有六位码或令牌认证，使用会话密钥下的 AES-GCM combined 帧及逐帧随机 nonce；明文或未认证连接不能设置偏好。
+- `IMicLink.polishPreferencesFeature = 1 << 4`：支持手机设置润色偏好。声明 bit4 的 `settings` 必须携带非空、完整、合法的 `polish`。`polish.settings` / `polish.saved` 同样必须携带完整偏好，保存确认必须声明 bit4。
+- `polish.enabled` 为必填布尔值；`options` 必填。旧字段 `strength`（`light` / `medium` / `heavy`）与 `scenario`（`general` / `chat` / `email` / `notes` / `agent`）保留用于旧版解码器，仍严格校验，缺失、null、类型错误或非法枚举均拒绝。这两个字段不再参与转换提示词，也不出现在新设置页。
+- `IMicLink.polishModesFeature = 1 << 7`：支持新的模式、语气与输出语言。新手机要求 Mac 声明 bit4 和 bit7 才允许编辑，并在保存请求声明 bit6 与 bit7。
+  - `mode`：`agent`（Agent 指令）、`terminal`（终端命令）、`classical`（文言文）、`waffle`（废话文学）、`dubbed`（翻译腔）。
+  - `tone`：`normal`（正经说话）、`sarcastic`（阴阳怪气）、`moe`（萌系暴击）、`rant`（暴躁吐槽）。
+  - `output`：`chinese` / `english` / `japanese` / `korean`，只表示语言，默认 `chinese`；新界面没有“保持原语言”。
+  - bit7 消息必须完整提供三个新字段；缺失、null、非法枚举、类型错误全部拒绝。即使没有声明 bit7，只要出现 `mode` 或 `tone`，也必须完整提供合法的三字段组合，不能提交半份设置。
+- `IMicLink.polishOutputFeature = 1 << 6` 保留为旧版输出模式能力位。没有新字段的旧偏好仍可解码：旧 `output=command` 迁移到 `mode=terminal`，旧 `original`、缺失、null 或未知字符串迁移到中文，非字符串类型仍拒绝；旧场景迁移为 Agent 指令、语气为正经说话。Mac 读取已有本地偏好使用相同迁移规则，保留有效的四种语言。
+- 新 Mac 收到没有 bit7 的旧手机请求时只更新 `enabled`，保留 Mac 当前完整模式、语气和语言，回传实际保存状态，避免旧手机把新选项覆盖为默认值。新手机连接旧 Mac 时提示更新，不能提交新模式。
+- `terminal` 使用独立提示词，只输出一行 zsh 命令；语气与语言选项保留但不参与命令转换。不会自动按回车执行。多行、控制字符等结果被拒绝；无法生成命令、超时或失败时输入 `# 原话` 单行注释。其他模式失败时回退完整原文，可能保留原语言。
+- 普通文字均按最小改动整理，不大幅扩写或重组；模式决定局部文体，语气决定情绪与措辞，输出语言决定最终语言；问题仍为问题、请求仍为请求，不代答、不执行。文言文中文输出允许凝练压缩与古汉语疑问词，避免被普通文本的长度守门误拒绝。
+- 保存中锁定交互；Mac 原子保存后回传完整 `polish.saved`，且值与请求一致，才表示成功。普通 `settings` 状态广播不能确认在途保存。断线、换机、失败不重放请求，重连后读取 Mac 权威状态。手机不持久化第二套偏好；Mac 本地修改同步广播。
+- API Key、来源、模型与地址只在 Mac 配置，不进入这些消息。消息仍须经过六位码或令牌认证，使用会话密钥下的 AES-GCM combined 帧与逐帧随机 nonce；明文或未认证连接不能设置偏好。
 
 
 ### 手势就绪与清空（bit5）
@@ -113,7 +117,7 @@ payload[length]
 - `IMicLink.gestureControlFeature = 1 << 5`。声明后 Mac 在连接完成、会话开始及最终结束/取消时发送加密 `input.state(seq, status)`；每次发布状态都推进 `seq`，租约仅在 `ready` 时有效。手机还要求本地不在录音/上传/识别中，才接受拉弦。旧 Mac 不声明 bit5 时手机停用弦控制并提示更新，不用计时猜测已完成。
 - Mac 的 `busy` 覆盖录音、百炼、润色、OCR 定位、扫光动画、最终输入/确认以及写后释放收尾动画。只有这些处理清理完成、`result` 或 `failure` 已发送后才发布 `ready`；清空在执行期间也撤销租约。两端均拦截忙碌、旧代际及跨连接的手势；处理期间开始的触摸必须抬手后重新开始，不能等解锁后自动续拉。
 - 新手机的全部 `input` 带当前 `seq`；`clear` 缺少非负 `seq` 拒绝解码。旧手机的四种单键命令仍可解码，但 Mac 忙碌时同样拒绝。`input.state` 缺少代际、代际为负或状态非法均拒绝；`input.result` 只接受 `clear`、非负 `seq` 和 `applied/rejected`。iPhone 不得伪造 Mac 的状态和确认。
-- 用户上拉进入屏幕顶部清空区后，一次触摸只发送一次 `input(action=clear, seq)`。Mac 先撤销旧租约，再只对当前前台、焦点未变化且 AXValue 可写的文本输入控件执行整框清空；这是用户明确请求的手动全框操作，与实时预览的尾部修订分离。不盲发全选删除，不回退到窗口、页面或终端输出区；无法核验时返回 `rejected`。读取到输入框为空后才返回 `applied`；手机仅处理与本次在途代际一致的确认，收到成功才清掉手机视觉文字，并等新 `ready` 再开放手势。
+- 用户上拉进入屏幕顶部清空区后，一次触摸只发送一次 `input(action=clear, seq)`。Mac 先撤销旧租约，只对当前前台、焦点未变化、内容可读且可编辑的文本控件执行整框清空。优先写空 AXValue；编辑器不支持或忽略写值时，发送全选后先核验选区从 0 开始、长度等于完整原文的 UTF-16 长度、原文仍未变化，才发送删除，并核验结果为空。这是用户明确请求的手动全框操作，与实时预览的尾部修订分离；用户按键、点击或切换应用会中止。拒绝密码框、只读字段、窗口、页面、终端输出区及不可核验的选区；无法核验时返回 `rejected`。读取到输入框为空后才返回 `applied`；手机仅处理与本次在途代际一致的确认，收到成功才清掉手机视觉文字，并等新 `ready` 再开放手势。
 - 手势消息继续使用 AES-GCM combined 格式及逐帧随机 nonce；不修改配对、密钥或帧边界。断线清除租约和在途状态，不重发清空命令。
 
 

@@ -6,8 +6,14 @@ struct HomeView: View {
     @EnvironmentObject private var session: SessionModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(PhosphorEffect.preferenceKey) private var displayMaterial = PhosphorEffect.crt.rawValue
+    @AppStorage(PhosphorAttachStyle.preferenceKey) private var attachStyle = PhosphorAttachStyle.charge.rawValue
 
     @State private var pressing = false
+    /// The current load has been shot or cleared: nothing is left to fire until the next take.
+    @State private var loadSpent = false
+    /// DEBUG flight preview only: 1 simulates polishing, 2 the armed state.
+    @State private var debugStringStatus = 0
     @State private var cancelArmed = false
     @State private var showPairing = false
     @State private var interactionStart = false
@@ -60,7 +66,7 @@ struct HomeView: View {
                         .position(x: geometry.size.width / 2, y: height * 0.145 + 74)
                     GeometryReader { torus in
                         Color.clear
-                        .contentShape(Rectangle())
+                        .contentShape(WaveformHitArea())
                         .gesture(stringGesture(width: torus.size.width, height: torus.size.height,
                             frame: torus.frame(in: .global)))
                         .simultaneousGesture(
@@ -72,27 +78,18 @@ struct HomeView: View {
                         )
                     }
                     .frame(width: width, height: instrumentHeight)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("弦控制")
+                    .accessibilityHint("\(stringControlHint)。\(secondaryGestureHint)")
+                    .accessibilityValue(stringHint ?? "")
                     .anchorPreference(key: ReceiverAnchorsKey.self, value: .bounds) {
                         ReceiverAnchors(torus: $0)
                     }
                     .position(x: geometry.size.width / 2, y: instrumentCenter)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(stringControlHint)
-                        Text(secondaryGestureHint)
-                    }
-                    .modifier(InstrumentHint())
-                    .frame(width: max(1, width - 40), height: 38, alignment: .topLeading)
-                    .position(x: geometry.size.width / 2,
-                              y: instrumentCenter + instrumentHeight / 2 + 17)
                     VStack(spacing: 0) {
-                        HStack {
-                            HUDLabel(text: "TX / VOICE")
-                            Rectangle().fill(Theme.line).frame(width: 73, height: 0.5)
-                                .padding(.leading, 8)
-                            Spacer()
-                            HUDLabel(text: "PRESS + HOLD", color: Theme.orange.opacity(0.7))
-                        }
-                        .frame(height: 12)
+                        HoldBarRail(notice: cancelArmed ? "松开取消" : session.notice,
+                                    noticeColor: cancelArmed ? Theme.ivory : Theme.muted)
+                            .animation(.easeOut(duration: 0.18), value: session.notice)
                         holdBar(width: width)
                             .anchorPreference(key: ReceiverAnchorsKey.self, value: .bounds) {
                                 ReceiverAnchors(source: $0)
@@ -104,42 +101,13 @@ struct HomeView: View {
                     .position(x: geometry.size.width / 2, y: height - 64)
                 }
                 .frame(width: geometry.size.width, height: height)
-                .overlay(alignment: .bottom) {
-                    if cancelArmed {
-                        Text("松开取消")
-                            .font(.system(size: 10, weight: .regular))
-                            .foregroundStyle(Theme.ivory)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Theme.panel)
-                            .overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
-                            .padding(.bottom, 106)
-                            .transition(.opacity)
-                    } else if let notice = session.notice {
-                        Text(notice)
-                            .font(.system(size: 10, weight: .regular))
-                            .foregroundStyle(Theme.muted)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Theme.panel)
-                            .overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
-                            .padding(.bottom, 106)
-                            .transition(.opacity)
-                    } else if let hint = stringHint {
-                        Text(hint)
-                            .font(.system(size: 10, weight: .regular))
-                            .foregroundStyle(Theme.orange)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Theme.panel)
-                            .overlay(Rectangle().stroke(Theme.orange.opacity(0.7), lineWidth: 1))
-                            .padding(.bottom, 106)
-                            .transition(.opacity)
-                    }
+                .transformAnchorPreference(key: ReceiverAnchorsKey.self, value: .bounds) { value, anchor in
+                    value.content = anchor
                 }
 
                 if showResult {
                     resultOverlay
+                        .modifier(PhosphorNativeGlass())
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
                         .zIndex(10)
                 }
@@ -150,14 +118,28 @@ struct HomeView: View {
                 GeometryReader { proxy in
                     if !showResult, let torus = anchors.torus, let source = anchors.source {
                         ZStack {
+                            if !receiver.unifiedAvailable {
                             TorusView(store: session.spectrumStore, dimmed: session.phase == .idle && !canRecordNow,
                                       instrumentHUD: true,
                                       channelLabel: linkReady ? "CH 01" : (canRecordNow ? "BUFFER" : "NO LINK"),
                                       viewportFrame: proxy[torus])
+                            }
                             ReceiverFlowView(store: receiver, spectrum: session.spectrumStore,
-                                             torusFrame: proxy[torus], sourceFrame: proxy[source])
+                                             torusFrame: proxy[torus], sourceFrame: proxy[source],
+                                             artwork: receiver.unifiedAvailable ? artwork(size: proxy.size,
+                                                content: anchors.content.map { proxy[$0] } ?? CGRect(origin:.zero,size:proxy.size),
+                                                torus: proxy[torus]) : nil,
+                                             dimmed: session.phase == .idle && !canRecordNow,
+                                             effect: PhosphorEffect(rawValue: displayMaterial) ?? .crt,
+                                             clearEnabled: canUseString && session.pullDeleteEnabled,
+                                             pressed: pressing && session.phase == .listening,
+                                             processing: stringProcessing || debugStringStatus == 1,
+                                             ready: stringReady || debugStringStatus == 2,
+                                             attach: PhosphorAttachStyle(rawValue: attachStyle) ?? .charge)
+                            if !receiver.unifiedAvailable {
                             ClearDropZone(motion: stringMotion, distance: max(1, proxy[torus].midY - 84),
                                           enabled: canUseString && session.pullDeleteEnabled)
+                            }
                         }
                     }
                 }
@@ -181,10 +163,13 @@ struct HomeView: View {
                 .environmentObject(session)
         }
         .onAppear {
+            session.spectrumStore.configureAmbientMotion(enabled: true, reducedMotion: reduceMotion)
+            session.spectrumStore.setVisible(scenePhase == .active && !showPairing && !showResult && !showDevices)
             UIApplication.shared.isIdleTimerDisabled = true
             session.prepareHaptics()
             link.start()
             session.activateAudio()
+            warmUpBowSound()
             stringMotion.reduceMotion = reduceMotion
             stringMotion.onFireReturn = { [weak session = session, weak link = link, weak receiver = receiver] in
                 guard let session, let link, link.phase.isReady,
@@ -193,6 +178,7 @@ struct HomeView: View {
                       session.sendInput("return") else { return false }
                 session.showGestureNotice("发射文字")
                 receiver?.fire()
+                loadSpent = true
                 return true
             }
             stringMotion.onRepeatDelete = { [weak session = session, weak link = link] in
@@ -234,6 +220,7 @@ struct HomeView: View {
             #endif
         }
         .onDisappear {
+            session.spectrumStore.setVisible(false)
             UIApplication.shared.isIdleTimerDisabled = false
             stringMotion.cancel()
             receiver.cancelFlight()
@@ -257,26 +244,39 @@ struct HomeView: View {
                     .flatMap { Int($0.replacingOccurrences(of: "--debug-flight-count=", with: "")) } ?? 120
                 let count = min(5000, max(1, requested))
                 let phrase = "把今天讨论的交互细节整理成一页说明重点保留按住说话松开即输入的节奏"
-                try? await Task.sleep(for: .milliseconds(400))
+                let delay = arguments.first { $0.hasPrefix("--debug-flight-delay=") }
+                    .flatMap { Double($0.replacingOccurrences(of: "--debug-flight-delay=", with: "")) } ?? 0.4
+                try? await Task.sleep(for: .seconds(min(10, max(0, delay))))
                 guard !Task.isCancelled else { return }
                 if let value = arguments.first(where: { $0.hasPrefix("--debug-flight-origin=") }),
                    let fraction = Double(value.replacingOccurrences(of: "--debug-flight-origin=", with: "")) {
                     receiver.updateTouch(xFraction: CGFloat(fraction))
                 }
                 receiver.update(text: String(String(repeating: phrase, count: count / phrase.count + 1).prefix(count)))
-                try? await Task.sleep(for: .seconds(3))
+                if arguments.contains("--debug-flight-status") {
+                    try? await Task.sleep(for: .seconds(1))
+                    debugStringStatus = 1
+                    try? await Task.sleep(for: .seconds(2.5))
+                    debugStringStatus = 2
+                    try? await Task.sleep(for: .seconds(2.5))
+                } else {
+                    try? await Task.sleep(for: .seconds(3))
+                }
                 guard !Task.isCancelled else { return }
                 receiver.fire()
+                debugStringStatus = 0
             }
             #endif
         }
         .onChange(of: scenePhase) { _, phase in
+            session.spectrumStore.setVisible(phase == .active && !showPairing && !showResult && !showDevices)
             if phase != .active {
                 stringMotion.cancel()
                 receiver.cancelFlight()
             }
             if phase == .active {
                 session.handleForeground()
+                warmUpBowSound()
             } else if phase == .background {
                 session.handleBackground()
             }
@@ -292,6 +292,7 @@ struct HomeView: View {
                 if stringMotion.isClearing { try? await Task.sleep(for: .milliseconds(300)) }
                 guard session.clearGeneration == generation else { return }
                 receiver.reset()
+                loadSpent = true
             }
         }
         .onChange(of: link.phase) { _, phase in
@@ -319,10 +320,15 @@ struct HomeView: View {
             }
         }
         .onChange(of: session.phase) { _, phase in
+            if phase == .listening { loadSpent = false }
             if phase == .listening || phase == .idle {
                 if !stringMotion.isClearing { receiver.reset() }
                 showResult = false
             }
+        }
+        .onChange(of: stringReady) { _, ready in
+            // Polished and typed on the Mac: the moment the load can be shot.
+            if ready { Haptics.shared.play(.polishReady) }
         }
         .onChange(of: session.liveTranscript) { _, text in
             receiver.update(text: text)
@@ -336,10 +342,11 @@ struct HomeView: View {
         }
         .onChange(of: showPairing) { _, presented in
             if presented { stringMotion.cancel() }
-            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showDevices)
+            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showResult && !showDevices)
         }
         .onChange(of: showResult) { _, presented in
             if presented { stringMotion.cancel() }
+            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showPairing && !showDevices)
         }
         .onChange(of: session.pullDeleteEnabled) { _, enabled in
             if !enabled { stringMotion.cancel() }
@@ -348,6 +355,7 @@ struct HomeView: View {
             if !enabled { stringMotion.cancel() }
         }
         .onChange(of: reduceMotion) { _, reduced in
+            session.spectrumStore.configureAmbientMotion(enabled: true, reducedMotion: reduced)
             stringMotion.reduceMotion = reduced
         }
         .onReceive(stringMotion.$hint.removeDuplicates()) { hint in
@@ -374,6 +382,19 @@ struct HomeView: View {
 
     // MARK: - Header
 
+    private func artwork(size: CGSize, content: CGRect, torus: CGRect) -> PhosphorArtworkState {
+        let width=max(1,size.width-contentInset*2)
+        return PhosphorArtworkState(size:size,content:content,torus:torus,
+            connection:connectionLabel,connectionColor:connectionColor,
+            channel:linkReady ? "CH 01" : (canRecordNow ? "BUFFER" : "NO LINK"),
+            status:statusWord,statusLine:statusLine,statusCell:statusCell(width:width),statusColor:statusColor,
+            barLabel:barLabel,barCell:barCell(width:width),barFill:barFill,barText:barTextColor,
+            canRecord:canRecordNow,listening:session.phase == .listening,
+            elapsed:String(format:"%.1f s",session.elapsed),hasResult:hasResultText,
+            notice:cancelArmed ? "松开取消":session.notice,
+            noticeColor:cancelArmed ? Theme.ivory:Theme.muted)
+    }
+
     private var header: some View {
         HStack(alignment: .top, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
@@ -381,7 +402,8 @@ struct HomeView: View {
                     .renderingMode(.original)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 90, height: 26, alignment: .leading)
+                    .frame(width: HoldBarLayout.wordmark.width, height: HoldBarLayout.wordmark.height,
+                           alignment: .leading)
                     .blendMode(.screen)
                     .accessibilityLabel("iMic")
                 HUDLabel(text: "SYS 01")
@@ -436,6 +458,7 @@ struct HomeView: View {
                 .padding(.bottom, 13)
             PixelText(text: statusWord, cell: statusCell(width: width),
                       color: statusColor, tracking: 2.8)
+                .modifier(PhosphorReadout(color: statusColor))
                 .frame(height: 30, alignment: .center)
             Text(statusLine)
                 .modifier(InstrumentHint())
@@ -539,26 +562,28 @@ struct HomeView: View {
                 )
                 .overlay(alignment: .leading) {
                     Rectangle().fill(barTextColor.opacity(0.32))
-                        .frame(width: 2, height: 30).padding(.leading, 11)
+                        .frame(width: 2, height: HoldBarLayout.tickHeight).padding(.leading, 11)
                 }
                 .overlay(alignment: .trailing) {
-                    Rectangle().fill(barTextColor.opacity(0.16))
-                        .frame(width: 0.7, height: 42).padding(.trailing, 50)
+                    Rectangle().fill(barTextColor.opacity(0.18))
+                        .frame(width: 0.7, height: HoldBarLayout.separatorHeight)
+                        .padding(.trailing, HoldBarLayout.accessoryWidth)
                 }
             HStack(spacing: 0) {
                 PixelText(
                     text: barLabel,
                     cell: barCell(width: width),
                     color: barTextColor,
-                    tracking: 2.2
+                    tracking: HoldBarLayout.labelTracking
                 )
-                Spacer(minLength: 12)
-                if session.phase == .listening {
-                    Text(String(format: "%.1f s", session.elapsed))
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundStyle(barTextColor.opacity(0.8))
-                } else {
-                    if canRecordNow {
+                Spacer(minLength: HoldBarLayout.labelGap)
+                ZStack {
+                    if session.phase == .listening {
+                        Text(String(format: "%.1f s", session.elapsed))
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundStyle(barTextColor.opacity(0.8))
+                            .minimumScaleFactor(0.8)
+                    } else if canRecordNow {
                         PixelSymbol(kind: .microphone, color: barTextColor)
                             .frame(width: 14, height: 24)
                     } else {
@@ -567,10 +592,12 @@ struct HomeView: View {
                             .foregroundStyle(barTextColor.opacity(0.9))
                     }
                 }
+                .frame(width: HoldBarLayout.accessoryWidth)
             }
-            .padding(.horizontal, 24)
+            .padding(.leading, HoldBarLayout.leading)
         }
-        .frame(width: width, height: 68)
+        .frame(width: width, height: HoldBarLayout.height)
+        .modifier(PhosphorSurface(strength: 0.8))
         .contentShape(Rectangle())
         .scaleEffect(pressing && session.phase == .listening ? 0.986 : 1)
         .animation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.7), value: pressing)
@@ -725,7 +752,7 @@ struct HomeView: View {
             session.openMicrophoneSettings()
             return
         }
-        if session.phase == .transcribing {
+        if stringProcessing {
             return
         }
         if session.phase == .error || session.phase == .result {
@@ -738,8 +765,6 @@ struct HomeView: View {
 
     private var footer: some View {
         HStack {
-            Text("松开输入 · 上滑取消")
-                .modifier(InstrumentHint())
             Spacer()
             ZStack(alignment: .trailing) {
                 HUDLabel(text: "PCM / 16K")
@@ -759,10 +784,41 @@ struct HomeView: View {
                 .accessibilityHidden(!hasResultText)
                 .accessibilityLabel("查看识别结果")
             }
-            .frame(width: 98, height: 14, alignment: .trailing)
+            .frame(width: 98, height: 32, alignment: .trailing)
         }
-        .frame(height: 14)
-        .padding(.top, 12)
+        .frame(height: 32)
+        .padding(.top, 3)
+    }
+
+    /// After audio activation settles and outside a gesture, never on the first pull.
+    private func warmUpBowSound(attempt: Int = 0) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            guard scenePhase == .active else { return }
+            guard !stringTouchActive, !pressing else {
+                // Busy: try again shortly rather than stall the gesture in progress.
+                if attempt < 5 { warmUpBowSound(attempt: attempt + 1) }
+                return
+            }
+            BowReleaseSound.shared.warmUp()
+        }
+    }
+
+    /// The result is back on the phone but the Mac is still polishing, animating or typing it.
+    /// The Mac rejects a new session until it reports ready, so the bar waits with it.
+    private var macFinishing: Bool {
+        (session.phase == .result && linkReady && link.gestureSupported && !link.gestureReady)
+            || debugStringStatus == 1
+    }
+
+    /// From release until the Mac has received, polished and typed the load. The bar's
+    /// disabled state, the coil's reading sweep and the status word all follow this one value.
+    private var stringProcessing: Bool {
+        session.phase == .transcribing || macFinishing
+    }
+
+    /// Polished and typed: pulling the string now shoots it. Not after the load has gone.
+    private var stringReady: Bool {
+        session.phase == .result && canUseString && session.snapReturnEnabled && !loadSpent
     }
 
     private var hasResultText: Bool {
@@ -797,10 +853,10 @@ struct HomeView: View {
     private var statusWord: String {
         switch session.phase {
         case .listening: return "LISTEN"
-        case .transcribing: return "SENDING"
-        case .result: return "DONE"
+        case .transcribing: return session.isUploading ? "SENDING" : "POLISH"
+        case .result: return macFinishing ? "POLISH" : "DONE"
         case .error: return "ERROR"
-        case .idle: break
+        case .idle: if debugStringStatus == 1 { return "POLISH" }
         }
         if !canRecordNow {
             switch link.phase {
@@ -819,6 +875,9 @@ struct HomeView: View {
     }
 
     private var statusLine: String {
+        if canUseString, session.snapReturnEnabled, stringMotion.armed, stringMotion.chargeTension > 0 {
+            return "松手弹射想法"
+        }
         switch session.phase {
         case .listening:
             if !linkReady { return "正在连接 Mac · 先说着，连上即发送" }
@@ -827,10 +886,10 @@ struct HomeView: View {
             if !linkReady { return "正在连接 Mac，连接后立即发送" }
             return session.message ?? (session.isUploading ? "正在上传音频…" : "正在把语音变成文字")
         case .result:
-            if session.pasted, let target = session.target {
-                return "已填入 \(target)"
-            }
-            return "文字已回传到 iPhone"
+            if macFinishing { return "等待电脑完成润色与输入" }
+            let done = session.pasted ? session.target.map { "已填入 \($0)" } : nil
+            if stringReady { return (done.map { $0 + " · " } ?? "") + "下拉松手发射" }
+            return done ?? "文字已回传到 iPhone"
         case .error:
             return session.message ?? "请再试一次"
         case .idle:
@@ -851,6 +910,7 @@ struct HomeView: View {
     }
 
     private var barFill: Color {
+        if macFinishing { return Theme.orangeDeep }
         switch session.phase {
         case .transcribing: return Theme.orangeDeep
         case .listening: return cancelArmed ? Theme.ivory : Theme.orange
@@ -859,8 +919,8 @@ struct HomeView: View {
     }
 
     private var barTextColor: Color {
-        if session.phase == .listening || session.phase == .transcribing {
-            return session.phase == .transcribing ? Theme.ivory : Theme.ink
+        if session.phase == .listening || stringProcessing {
+            return stringProcessing ? Theme.ivory : Theme.ink
         }
         return canRecordNow ? Theme.ink : Theme.orange
     }
@@ -870,17 +930,15 @@ struct HomeView: View {
         switch session.phase {
         case .listening: return cancelArmed ? "RELEASE TO CANCEL" : "RELEASE TO SEND"
         case .transcribing: return "TRANSCRIBING"
-        case .result: return "HOLD TO SPEAK AGAIN"
+        case .result: return macFinishing ? "POLISHING" : "HOLD TO SPEAK AGAIN"
         case .error: return "TRY AGAIN"
-        case .idle: break
+        case .idle: if macFinishing { return "POLISHING" }
         }
         return canRecordNow ? "HOLD TO SPEAK" : "LINK TO MAC"
     }
 
     private func barCell(width: CGFloat) -> CGFloat {
-        let accessory: CGFloat = session.phase == .listening ? 54 : 14
-        let available = max(80, width - 48 - accessory - 12)
-        return min(2.55, PixelFont.fittedCell(for: barLabel, width: available, tracking: 2.2))
+        min(2.3, PixelFont.fittedCell(for: barLabel, width: HoldBarLayout.labelWidth(barWidth: width), tracking: HoldBarLayout.labelTracking))
     }
 
     private var stringControlHint: String {
@@ -903,7 +961,18 @@ struct HomeView: View {
     }
 }
 
+/// Only a touch that starts on the waveform grabs the string: the band between the ruler
+/// ends, not the empty instrument space above it or the gap down to the hold bar.
+/// Mirrors `TorusGeometry.Layout`'s `baseRy` and ruler extent.
+private struct WaveformHitArea: Shape {
+    func path(in rect: CGRect) -> Path {
+        let half = min(rect.height * 0.23, max(0, rect.height / 2 - 16)) * 1.42
+        return Path(CGRect(x: rect.minX, y: rect.midY - half, width: rect.width, height: half * 2))
+    }
+}
+
 private struct ReceiverAnchors {
+    var content: Anchor<CGRect>?
     var torus: Anchor<CGRect>?
     var source: Anchor<CGRect>?
 }
@@ -912,6 +981,7 @@ private struct ReceiverAnchorsKey: PreferenceKey {
     static var defaultValue = ReceiverAnchors()
     static func reduce(value: inout ReceiverAnchors, nextValue: () -> ReceiverAnchors) {
         let next = nextValue()
+        if let content = next.content { value.content = content }
         if let torus = next.torus { value.torus = torus }
         if let source = next.source { value.source = source }
     }

@@ -5,6 +5,8 @@ struct WaveGlyphInstance {
     var bounds: SIMD4<Float>
     var uvRect: SIMD4<Float>
     var sampleRange: SIMD2<UInt32>
+    var depth: Float = 0
+    var reserved: Float = 0 // style: 1 dark ink, 0..<0.5 extra glow
 }
 
 struct WaveGlyphSample {

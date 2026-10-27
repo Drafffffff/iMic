@@ -1,11 +1,14 @@
 import SwiftUI
 import UIKit
 import QuartzCore
+import simd
 
 /// Visual history is independent of the complete recognition result. Corrections never
 /// pull a launched word backwards; every newly appended grapheme enters the next load.
 @MainActor
 final class ReceiverFlowStore: ObservableObject {
+    @Published private(set) var unifiedAvailable = true
+    fileprivate func unavailable() { unifiedAvailable = false }
     fileprivate weak var renderer: ReceiverFlowSurface?
     private var previous = ""
     private var previousCount = 0
@@ -76,7 +79,16 @@ struct ReceiverFlowView: UIViewRepresentable {
     let spectrum: SpectrumStore
     let torusFrame: CGRect
     let sourceFrame: CGRect
+    var artwork: PhosphorArtworkState? = nil
+    var dimmed = false
+    var effect: PhosphorEffect = .crt
+    var clearEnabled = false
+    var pressed = false
+    var processing = false
+    var ready = false
+    var attach: PhosphorAttachStyle = .charge
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func makeUIView(context: Context) -> ReceiverFlowSurface {
         let view = ReceiverFlowSurface()
@@ -86,7 +98,10 @@ struct ReceiverFlowView: UIViewRepresentable {
 
     func updateUIView(_ view: ReceiverFlowSurface, context: Context) {
         view.configure(store: store, spectrum: spectrum, torus: torusFrame,
-                       source: sourceFrame, reduced: reduceMotion)
+                       source: sourceFrame, reduced: reduceMotion, artwork: artwork,
+                       dimmed: dimmed, effect: effect, reduceTransparency: reduceTransparency,
+                       clearEnabled: clearEnabled, pressed: pressed,
+                       processing: processing, ready: ready, attach: attach)
     }
 
     static func dismantleUIView(_ view: ReceiverFlowSurface, coordinator: ()) { view.detach() }
@@ -98,13 +113,18 @@ struct ReceiverFlowView: UIViewRepresentable {
 final class ReceiverFlowSurface: UIView, StringMotionRendering {
     var needsStringMotionFrames: Bool {
         guard drawing != nil, window != nil, positioned else { return false }
-        return store?.hasPending == true || particles.contains { $0.phase != .attached }
+        return store?.hasPending == true || spectrum?.ink.releaseWaveActive == true
+            || (artworkState != nil && scene.needsStatusFrames(at: CACurrentMediaTime()))
+            || particles.contains { $0.phase != .attached || CGFloat(CACurrentMediaTime() - $0.started) < $0.duration + 0.3 }
     }
 
     func wake() { spectrum?.wake() }
-    nonisolated private static let attachedScale: CGFloat = 0.38
+    // Large enough to read on the coil (≈11.5pt), still smaller than the ring spacing.
+    nonisolated private static let attachedScale: CGFloat = 0.72
     nonisolated private static let entryScale: CGFloat = 2.4
     nonisolated private static let baseSide: CGFloat = 16
+    // A glyph shot from its arc starts small and grows into the readable exit size.
+    nonisolated private static let launchSide: CGFloat = 7
 
     private enum Phase { case incoming, attached, projectile }
     private struct Particle {
@@ -128,14 +148,37 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         var launchRotation: CGFloat = 0
         var flightTilt: CGFloat = 0
         var flightBend: CGFloat = 0
+        var flightSpin: CGFloat = 0
         var exitScale: CGFloat = ReceiverFlowSurface.attachedScale
         var emphasis: CGFloat = 1
+        var squash: CGFloat = 1
+        var thickness: CGFloat = 1
+        var landPhase: Double = 0
+    }
+
+    /// Where an attached glyph sits on its projected wire. The glyph's up axis follows the
+    /// ring tangent and is foreshortened with it, so text wraps around the coil in 3D.
+    private struct WirePose {
+        var center: CGPoint
+        var rotation: CGFloat
+        var squash: CGFloat
+        var facing: CGFloat
+        var normal: CGVector
     }
 
     private weak var store: ReceiverFlowStore?
     private weak var spectrum: SpectrumStore?
     private let canvas = WaveTextCanvas()
     private var drawing: WaveTextRenderer?
+    private let scene = PhosphorScene()
+    private var artworkState: PhosphorArtworkState?
+    private var pendingArtwork: PhosphorArtworkState?
+    private var artworkFailures=0
+    private var elapsedText=""
+    private var clearArtworkWidth:CGFloat=0
+    private var clearEnabled=false
+    private var dimmed = false
+    private var textClearOpacity: Float = 1
     private var particles: [Particle] = []
     private var draws: [WaveGlyphDraw] = []
     private var exposures: [WaveGlyphSample] = []
@@ -148,7 +191,9 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
     private var hadVisibleText = false
     private var wasPendingReturn = false
     private var ordinal: UInt64 = 0
+    private var placementSeed = UInt64.random(in: .min ... .max)
     private var reportedRenderFailure = false
+    private let cpuMetrics = PhosphorMetrics(label: "frame CPU")
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -171,7 +216,12 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
     }
 
     func configure(store: ReceiverFlowStore, spectrum: SpectrumStore,
-                   torus: CGRect, source: CGRect, reduced: Bool) {
+                   torus: CGRect, source: CGRect, reduced: Bool,
+                   artwork: PhosphorArtworkState? = nil, dimmed: Bool = false,
+                   effect: PhosphorEffect = .crt, reduceTransparency: Bool = false,
+                   clearEnabled:Bool=false, pressed:Bool=false,
+                   processing:Bool=false, ready:Bool=false, attach:PhosphorAttachStyle = .charge) {
+        if scene.attachStyle != attach { scene.attachStyle = attach; spectrum.wake() }
         let changed = self.store !== store || self.spectrum !== spectrum || self.torus != torus
             || self.source != source || self.reduced != reduced
         if self.store !== store || self.spectrum !== spectrum {
@@ -183,6 +233,28 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         }
         self.torus = torus
         self.source = source
+        self.dimmed = dimmed
+        self.clearEnabled=clearEnabled
+        scene.setPressed(pressed,now:CACurrentMediaTime())
+        scene.setStatus(processing:processing,ready:ready,now:CACurrentMediaTime())
+        if scene.needsStatusFrames(at:CACurrentMediaTime()) { spectrum.wake() }
+        let materialChanged = scene.effect != effect || scene.reduceTransparency != reduceTransparency
+        scene.effect = effect
+        scene.reduceTransparency = reduceTransparency
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--debug-display=clean") { scene.effect = .clean }
+        if ProcessInfo.processInfo.arguments.contains("--debug-display=glow") { scene.effect = .glow }
+        #endif
+        if let artwork {
+            if artwork.listening {
+                if elapsedText != artwork.elapsed { elapsedText=artwork.elapsed;spectrum.wake() }
+                for character in "0123456789.s" { drawing?.prepare(character) }
+            }else{elapsedText=""}
+            if artworkState?.sameRaster(as:artwork) != true { pendingArtwork=artwork;spectrum.wake() }
+        }
+        if drawing == nil {
+            DispatchQueue.main.async { [weak store] in store?.unavailable() }
+        }
         spectrum.ink.reduceMotion = reduced
         if self.reduced != reduced {
             self.reduced = reduced
@@ -190,12 +262,14 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
                 particles.removeAll { $0.phase == .projectile }
                 for index in particles.indices where particles[index].phase == .incoming {
                     particles[index].phase = .attached
-                    spectrum.ink.deposit(at: particles[index].ring, angle: particles[index].angle, weight: 0.65)
+                    particles[index].landPhase = spectrum.frame.time
+                    spectrum.ink.deposit(at: particles[index].ring, angle: particles[index].angle, weight: 0.65,
+                                         phase: spectrum.frame.time)
                 }
             }
         }
         positioned = torus.width > 0 && torus.height > 0
-        if changed { spectrum.wake() }
+        if changed || materialChanged { spectrum.wake() }
     }
 
     func detach() {
@@ -208,6 +282,64 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         spectrum = nil
     }
 
+    private func updateArtwork(_ artwork:PhosphorArtworkState,drawing:WaveTextRenderer){
+        guard artwork.size.width>10,artwork.size.height>10 else{return}
+        let began=CACurrentMediaTime()
+        defer{
+            let ms=(CACurrentMediaTime()-began)*1000
+            if ms>8{IMicLog.write("iphone.visual",String(format:"artwork raster %.1fms",ms))}
+        }
+        let scale=window?.screen.scale ?? traitCollection.displayScale
+        if let old=artworkState,clearArtworkWidth==artwork.size.width,let dirty=artwork.dirtyRegions(from:old){
+            do{
+                for region in dirty{ try patchArtwork(artwork,region:region,scale:scale,drawing:drawing) }
+                artworkState=artwork;pendingArtwork=nil;artworkFailures=0
+                return
+            }catch{
+                IMicLog.write("iphone.visual","artwork patch failed, redrawing: \(error)")
+            }
+        }
+        let image=ImageRenderer(content:PhosphorArtwork(state:artwork).environment(\.displayScale,scale))
+        image.scale=scale;image.isOpaque=true;image.colorMode = .nonLinear
+        image.proposedSize=ProposedViewSize(artwork.size)
+        do{
+            guard let cg=image.cgImage else{throw WaveTextRenderer.RenderError.allocation}
+            try drawing.setArtwork(cg,status:artwork.statusBounds,action:artwork.actionBounds)
+            if clearArtworkWidth != artwork.size.width{
+                let clear=ImageRenderer(content:PhosphorClearArtwork(width:artwork.size.width))
+                clear.scale=scale;clear.proposedSize=ProposedViewSize(width:artwork.size.width,height:84)
+                if let cg=clear.cgImage{try drawing.setClearArtwork(cg);clearArtworkWidth=artwork.size.width}
+            }
+            artworkState=artwork;pendingArtwork=nil;artworkFailures=0
+            canvas.metalLayer.isOpaque=true;canvas.isOpaque=true
+        }catch{
+            artworkFailures+=1
+            if artworkFailures==3 {
+                IMicLog.write("iphone.visual","artwork failed at \(artwork.size): \(error)")
+                DispatchQueue.main.async { [weak store] in store?.unavailable() }
+            }
+        }
+    }
+
+    /// Rasterize only `region` of the full artwork: the same view, offset and clipped, so the
+    /// grid and every element stay aligned with the untouched pixels around it.
+    private func patchArtwork(_ artwork:PhosphorArtworkState,region:CGRect,scale:CGFloat,drawing:WaveTextRenderer)throws{
+        let bounds=CGRect(origin:.zero,size:artwork.size)
+        let r=region.intersection(bounds)
+        let snapped=CGRect(x:floor(r.minX),y:floor(r.minY),width:ceil(r.maxX)-floor(r.minX),height:ceil(r.maxY)-floor(r.minY))
+        guard snapped.width>0,snapped.height>0 else{return}
+        let view=PhosphorArtwork(state:artwork).environment(\.displayScale,scale)
+            .frame(width:artwork.size.width,height:artwork.size.height)
+            .offset(x:-snapped.minX,y:-snapped.minY)
+            .frame(width:snapped.width,height:snapped.height,alignment:.topLeading)
+            .clipped()
+        let image=ImageRenderer(content:view)
+        image.scale=scale;image.isOpaque=true;image.colorMode = .nonLinear
+        image.proposedSize=ProposedViewSize(snapped.size)
+        guard let cg=image.cgImage else{throw WaveTextRenderer.RenderError.allocation}
+        try drawing.replaceArtwork(cg,at:(Int((snapped.minX*scale).rounded()),Int((snapped.minY*scale).rounded())))
+    }
+
     func reset() {
         wake()
         particles.removeAll(keepingCapacity: true)
@@ -217,7 +349,8 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         spectrum?.ink.reset()
         wasPendingReturn = false
         ordinal = 0
-        if window != nil { _ = drawing?.draw(draws, size: bounds.size) }
+        placementSeed = .random(in: .min ... .max)
+        if window != nil { _ = drawing?.draw(draws, size: bounds.size, scene: artworkState == nil ? nil:scene) }
         hadVisibleText = false
     }
 
@@ -231,11 +364,42 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         } else {
             for index in rings.indices { rings[index] = layout.ring(at: index) }
         }
+        if artworkState != nil {
+            scene.clearProgress=Float(motion.isClearing ? CGFloat(motion.clearZone)
+                : (clearEnabled ? min(1,max(0,-motion.pull/max(1,torus.midY-84))):0))
+            scene.update(spectrum:spectrum,torus:torus,size:bounds.size,reduced:reduced,
+                         dimmed:dimmed,scale:window?.screen.scale ?? traitCollection.displayScale)
+            if let artworkState {
+                scene.headerSignal(content:artworkState.content,connected:!dimmed,
+                    ambient:spectrum.frame.ambientIntensity,reduced:reduced)
+            }
+        }
     }
 
-    private func attachment(_ particle: Particle) -> CGPoint {
+    private func wirePose(_ particle: Particle) -> WirePose {
+        if artworkState != nil, scene.rings.indices.contains(particle.ring) {
+            // A flowing arc carries its glyph: launch from where the arc is now.
+            let flowing = scene.attachStyle == .flow && particle.phase == .attached
+            let angle = Float(flowing ? PhosphorAttachStyle.flowAngle(particle.angle, phase: particle.landPhase,
+                now: spectrum?.frame.time ?? 0) : particle.angle)
+            let ring = scene.rings[particle.ring]
+            let point = ring.point(angle)
+            let p = scene.camera.project(point)
+            let q = scene.camera.project(point + (-sin(angle) * ring.u + cos(angle) * ring.v))
+            let tangent = SIMD2(q.x - p.x, q.y - p.y)
+            let length = simd_length(tangent)
+            let direction = length > 0.001 ? tangent / length : SIMD2<Float>(0, 1)
+            // Up along the tangent, wrapped so a glyph is never drawn upside down.
+            var rotation = CGFloat(atan2(direction.y, direction.x)) - .pi / 2
+            rotation -= .pi * (rotation / .pi).rounded()
+            return WirePose(center: CGPoint(x: CGFloat(p.x), y: CGFloat(p.y)), rotation: rotation,
+                            squash: CGFloat(min(1, max(0.45, length))), facing: CGFloat(cos(angle)),
+                            normal: CGVector(dx: CGFloat(-direction.y), dy: CGFloat(direction.x)))
+        }
         let point = rings[particle.ring].point(at: particle.angle)
-        return CGPoint(x: torus.minX + point.x, y: torus.minY + point.y)
+        return WirePose(center: CGPoint(x: torus.minX + point.x, y: torus.minY + point.y),
+                        rotation: rings[particle.ring].rotation + sin(particle.angle) * 0.10,
+                        squash: 1, facing: 1, normal: CGVector(dx: 1, dy: 0))
     }
 
     func fire() {
@@ -244,12 +408,12 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         let now = CACurrentMediaTime()
         let strength = motion.releaseStrength
         updateGeometry(spectrum)
-        spectrum.ink.release(strength: strength)
+        spectrum.ink.release(strength: strength, anchor: motion.anchor)
         if reduced {
             particles.removeAll(keepingCapacity: true)
             draws.removeAll(keepingCapacity: true)
             exposures.removeAll(keepingCapacity: true)
-            _ = drawing?.draw(draws, size: bounds.size)
+            _ = drawing?.draw(draws, size: bounds.size, scene: artworkState == nil ? nil:scene)
             hadVisibleText = false
             return
         }
@@ -272,7 +436,8 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
                 particles[index].opacity = 0
                 continue
             }
-            let origin = attachment(particle)
+            let wire = wirePose(particle)
+            let origin = wire.center
             let progress = CGFloat(particle.ring) / CGFloat(TorusGeometry.ringCount - 1)
             let bowVelocity = TorusGeometry.stringDisplacement(
                 progress: progress, anchor: motion.anchor, pull: motion.velocity)
@@ -293,10 +458,12 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
             particle.flightProgress = 0
             particle.startOpacity = max(0.94, particle.opacity)
             particle.opacity = particle.startOpacity
-            particle.rotation = rings[particle.ring].rotation
+            particle.rotation = wire.rotation
             particle.launchRotation = particle.rotation
             particle.flightTilt = layout.tilt(for: shotIndex)
             particle.flightBend = layout.bend(for: shotIndex)
+            particle.flightSpin = layout.spin(for: shotIndex)
+            particle.thickness = 1
             particle.phase = .projectile
             particles[index] = particle
             shotIndex += 1
@@ -305,9 +472,13 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
     }
 
     func renderStringMotion(_ motion: StringMotionStore, now: Double, dt: Double) {
-        canvas.alpha = CGFloat(motion.clearLoadOpacity)
+        let began = CACurrentMediaTime()
+        defer { cpuMetrics.record(start: began, end: CACurrentMediaTime()) }
+        canvas.alpha = 1
+        textClearOpacity = Float(motion.clearLoadOpacity)
         guard window != nil, positioned, let spectrum, let drawing else { return }
-        guard !particles.isEmpty || store?.hasPending == true || hadVisibleText else { return }
+        if let pendingArtwork { updateArtwork(pendingArtwork,drawing:drawing) }
+        guard artworkState != nil || !particles.isEmpty || store?.hasPending == true || hadVisibleText else { return }
         updateGeometry(spectrum)
         // Use the short physical return as the final intake, not an artificial hit-stop.
         if motion.pendingReturn, !wasPendingReturn {
@@ -338,25 +509,25 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
                 }
                 store?.consumeCharacter()
                 ordinal &+= 1
-                let ring = Int((ordinal &* 17) % UInt64(TorusGeometry.ringCount))
-                let angle = CGFloat(ordinal) * 2.399963229728653
-                let seed = CGFloat((ordinal &* 73 &+ 19) % 997) / 996
+                let (ring, angle) = placement()
+                let seed = Self.unit(ordinal ^ placementSeed, stream: 3)
                 let origin = ReceiverEmission.origin(source: source, touchFraction: store?.sourceTouchFraction,
                     glyphSide: Self.baseSide * Self.entryScale, canvasWidth: bounds.width, seed: seed)
                 if reduced {
                     // Keep the whole load visible without entry flight, drift or looping effects.
                     particles.append(Particle(glyph: glyph, ring: ring, angle: angle, seed: seed,
                         phase: .attached, origin: origin, position: origin, started: now, duration: 0))
-                    spectrum.ink.deposit(at: ring, angle: angle, weight: 0.65)
+                    particles[particles.count - 1].landPhase = spectrum.frame.time
+                    spectrum.ink.deposit(at: ring, angle: angle, weight: 0.65, phase: spectrum.frame.time)
                 } else {
                     particles.append(Particle(glyph: glyph, ring: ring,
                         angle: angle, seed: seed, origin: origin, position: origin,
                         started: now + Double(seed) * 0.035,
-                        duration: motion.pendingReturn ? 0.035 : 0.43 + Double(seed) * 0.065))
+                        duration: motion.pendingReturn ? 0.035 : 0.36 + Double(seed) * 0.06))
                 }
             }
-            let sampleBudget = particles.count + 64 * (ReceiverShutter.maximumSamples - 1)
-            try drawing.reserve(instances: max(1024, particles.count), samples: sampleBudget)
+            let sampleBudget = particles.count + 64 * (ReceiverShutter.maximumSamples - 1) + 32
+            try drawing.reserve(instances: max(1024, particles.count + 32), samples: sampleBudget)
             if exposures.capacity < sampleBudget { exposures.reserveCapacity(sampleBudget) }
             if draws.capacity < particles.count {
                 draws.reserveCapacity(max(draws.capacity * 2, particles.count))
@@ -375,9 +546,12 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
             let age = CGFloat(now - particle.started)
             if particle.phase == .projectile {
                 if age < 0 {
+                    // Waiting its turn, the glyph rises out of its arc before it is shot.
                     var waiting = particle
-                    waiting.opacity *= 0.42
-                    append(waiting)
+                    let rise = Self.smooth(1 + age / 0.05)
+                    waiting.opacity = particle.startOpacity * (0.35 + 0.65 * rise)
+                    waiting.thickness = 0.3 + 0.7 * rise
+                    append(waiting, warmth: 1, glow: Float(0.08 + 0.12 * rise))
                     index += 1
                     continue
                 }
@@ -388,7 +562,8 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
                 }
             } else if particle.phase == .incoming {
                 let t = min(1, max(0, age / CGFloat(particle.duration)))
-                let target = attachment(particle)
+                let wire = wirePose(particle)
+                let target = wire.center
                 let travel = t * t * (1.6 - 0.6 * t)
                 let distance = particle.origin.y - target.y
                 let p1 = CGPoint(x: particle.origin.x + (particle.seed - 0.5) * 22,
@@ -399,38 +574,118 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
                 let fusion = Self.smooth(t)
                 particle.scale = particle.startScale + (Self.attachedScale - particle.startScale) * fusion
                 let entrance = particle.startOpacity + (0.98 - particle.startOpacity) * Self.smooth(t / 0.10)
-                particle.opacity = entrance + (0.42 - entrance) * Self.smooth((t - 0.76) / 0.24)
-                particle.rotation = rings[particle.ring].rotation * fusion
+                particle.opacity = entrance
+                // Turn to the wire only on the final approach. The glyph is never squashed:
+                // the arc on the ring carries the 3D fit, a squeezed glyph only aliases.
+                particle.rotation = wire.rotation * Self.smooth((t - 0.6) / 0.4)
+                particle.squash = 1
                 if t >= 1 {
                     particle.phase = .attached
-                    spectrum.ink.deposit(at: particle.ring, angle: particle.angle, weight: 0.65)
+                    particle.landPhase = spectrum.frame.time
+                    spectrum.ink.deposit(at: particle.ring, angle: particle.angle, weight: 0.65,
+                                         phase: spectrum.frame.time)
                 }
-                append(particle, impact: max(0, 1 - abs(t - 0.97) / 0.08))
+                // One monotonic warm-up into the landing: no separate strike spike that could
+                // disagree in timing with the arc's own flash and read as flicker.
+                append(particle, warmth: fusion, glow: Float(0.3 * fusion * fusion), depth: 0.05)
+            } else if artworkState != nil {
+                // The glyph sinks into the light arc the scene draws on the same ring: it shrinks
+                // evenly and fades while the arc grows, so after 0.12s only the arc remains.
+                let wire = wirePose(particle)
+                let collapse = reduced ? 1 : Self.smooth(max(0, age - CGFloat(particle.duration)) / 0.12)
+                particle.position = wire.center
+                particle.rotation = wire.rotation
+                particle.squash = 1
+                particle.thickness = 1
+                particle.scale = Self.attachedScale * (1 - 0.4 * collapse)
+                particle.opacity = 0.98 * pow(1 - collapse, 1.6)
+                if collapse < 1 { append(particle, warmth: 1, glow: Float(0.3 * (1 - collapse)), depth: 0.05) }
             } else {
-                particle.position = attachment(particle)
-                particle.rotation = rings[particle.ring].rotation + sin(particle.angle) * 0.10
-                particle.scale = Self.attachedScale
-                let restingOpacity = 0.30 + spectrum.ink.intensity(at: particle.ring) * 0.12
+                let wire = wirePose(particle)
                 let charge = spectrum.ink.chargeGlow
-                let impact = reduced ? 0 : 1 - Self.smooth(max(0, age - CGFloat(particle.duration)) / 0.13)
-                particle.opacity = restingOpacity + (0.98 - restingOpacity) * max(charge, impact * 0.9)
-                append(particle, charge: charge, impact: impact)
+                let impact = reduced ? 0 : 1 - Self.smooth(max(0, age - CGFloat(particle.duration)) / 0.16)
+                particle.position = wire.center
+                particle.rotation = wire.rotation
+                particle.squash = 1
+                particle.scale = Self.attachedScale
+                let resting = 0.6 + spectrum.ink.intensity(at: particle.ring) * 0.12
+                particle.opacity = min(1, resting + (1 - resting) * max(charge, impact))
+                append(particle, warmth: 0.82 + 0.18 * max(charge, impact))
             }
             particles[index] = particle
             index += 1
         }
-        if !draws.isEmpty || hadVisibleText {
-            _ = drawing.draw(draws, samples: exposures, size: bounds.size)
+        appendElapsed(drawing)
+        if artworkState != nil || !draws.isEmpty || hadVisibleText {
+            _ = drawing.draw(draws, samples: exposures, size: bounds.size, scene: artworkState == nil ? nil:scene)
         }
         hadVisibleText = !draws.isEmpty
+    }
+
+    /// Irregular, not patterned: most glyphs land within reach of the finger, the rest
+    /// anywhere on the coil, and a landing avoids sitting on top of a recent one.
+    private func placement() -> (Int, CGFloat) {
+        let key = ordinal ^ placementSeed
+        let last = CGFloat(TorusGeometry.ringCount - 1)
+        let anchor = (store?.sourceTouchFraction ?? 0.5) * last
+        var best: (Int, CGFloat) = (0, 0)
+        var bestGap: CGFloat = -1
+        for attempt in UInt64(0)..<4 {
+            let stream = attempt * 4
+            let u = Self.unit(key, stream: stream), v = Self.unit(key, stream: stream + 1)
+            let position: CGFloat
+            if Self.unit(key, stream: stream + 2) < 0.68 {
+                // Box-Muller: a soft cluster around the finger, about nine rings wide.
+                let gaussian = sqrt(-2 * log(max(1e-6, u))) * cos(2 * .pi * v)
+                position = anchor + gaussian * 9
+            } else {
+                position = u * last
+            }
+            let ring = Int(min(last, max(0, position.rounded())))
+            let angle = (Self.unit(key, stream: stream + 3) * 2 - 1) * .pi
+            var gap = CGFloat.pi
+            for particle in particles.suffix(96) where particle.phase != .projectile && abs(particle.ring - ring) <= 1 {
+                let delta = abs(remainder(Double(particle.angle - angle), 2 * .pi))
+                gap = min(gap, CGFloat(delta) + CGFloat(abs(particle.ring - ring)) * 0.35)
+            }
+            if gap > bestGap { best = (ring, angle); bestGap = gap }
+            if gap > 0.55 { break }
+        }
+        return best
+    }
+
+    private static func unit(_ key: UInt64, stream: UInt64) -> CGFloat {
+        var value = key &+ (stream &+ 1) &* 0x9E3779B97F4A7C15
+        value = (value ^ (value >> 30)) &* 0xBF58476D1CE4E5B9
+        value = (value ^ (value >> 27)) &* 0x94D049BB133111EB
+        value ^= value >> 31
+        return CGFloat(Double(value >> 11) / 9_007_199_254_740_992)
     }
 
     private func projectilePose(_ particle: Particle, at age: CGFloat) -> ReceiverFlightPose {
         particle.arrow.pose(at: age, origin: particle.origin,
             velocity: CGPoint(x: particle.velocity.dx, y: particle.velocity.dy),
             exitSide: Self.baseSide * particle.exitScale, emphasis: particle.emphasis,
+            launchSide: Self.launchSide, spin: particle.flightSpin,
             rotation: particle.launchRotation, tilt: particle.flightTilt, opacity: particle.startOpacity,
             bend: particle.flightBend)
+    }
+
+    private func appendElapsed(_ drawing:WaveTextRenderer){
+        guard let artworkState,artworkState.listening,!elapsedText.isEmpty else{return}
+        let scale=CGFloat(scene.pressScale(at:CACurrentMediaTime()))
+        let advance:CGFloat=7.2,side:CGFloat=12*128/88*scale
+        // Centered in the bar's accessory zone, clear of its separator.
+        let center=artworkState.actionBounds.maxX-HoldBarLayout.accessoryWidth/2
+        let start=center-CGFloat(elapsedText.count-1)*advance/2
+        for (i,char) in elapsedText.enumerated() where !char.isWhitespace{
+            guard let glyph=try? drawing.texture(for:char)else{continue}
+            let x=artworkState.actionBounds.midX+(start+CGFloat(i)*advance-artworkState.actionBounds.midX)*scale
+            let pose=ReceiverFlightPose(center:CGPoint(x:x,y:artworkState.actionBounds.midY),
+                size:CGSize(width:side,height:side),rotation:0,opacity:0.8,warmth:0)
+            let offset=exposures.count;exposures.append(WaveGlyphSample(pose))
+            appendDraw(glyph,bounds:pose.bounds,sampleOffset:offset,sampleCount:1,depth:0.02,style:1)
+        }
     }
 
     /// Full transforms are evaluated at each subframe, just like a layer shutter.
@@ -444,30 +699,48 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         for index in 0..<count {
             let pose = projectilePose(particle, at: shutter.sampleAge(index, count: count, at: age))
             swept = swept.union(pose.bounds)
-            exposures.append(WaveGlyphSample(pose))
+            var sample=WaveGlyphSample(pose)
+            sample.appearance.z *= textClearOpacity
+            exposures.append(sample)
         }
         // The shutter can still see a glyph whose current position has left the screen.
         guard swept.maxY >= 0 else {
             exposures.removeLast(count)
             return false
         }
-        appendDraw(particle.glyph, bounds: swept, sampleOffset: offset, sampleCount: count)
+        // The release flash blooms for the first frames of flight, then the glyph is plain ink.
+        appendDraw(particle.glyph, bounds: swept, sampleOffset: offset, sampleCount: count,
+                   style: Float(0.24 * max(0, 1 - age / 0.12)))
         return true
     }
 
-    private func append(_ particle: Particle, charge: CGFloat = 0, impact: CGFloat = 0) {
+    /// `depth` pins a glyph in front of the wires. Landing glyphs use it: occlusion by
+    /// neighboring rings that breathe with the audio would cut pieces in and out each frame.
+    private func append(_ particle: Particle, warmth: CGFloat, glow: Float = 0, depth fixedDepth: Float? = nil) {
         let side = Self.baseSide * particle.scale
-        let pose = ReceiverFlightPose(center: particle.position, size: CGSize(width: side, height: side),
-            rotation: particle.rotation, opacity: particle.opacity, warmth: max(charge * 0.28, impact * 0.75))
+        let pose = ReceiverFlightPose(center: particle.position,
+            size: CGSize(width: side * particle.thickness, height: side * particle.squash),
+            rotation: particle.rotation, opacity: particle.opacity, warmth: warmth)
         let offset = exposures.count
-        exposures.append(WaveGlyphSample(pose))
-        appendDraw(particle.glyph, bounds: pose.bounds, sampleOffset: offset, sampleCount: 1)
+        var sample=WaveGlyphSample(pose)
+        sample.appearance.z *= textClearOpacity
+        exposures.append(sample)
+        var depth:Float=0.05
+        if fixedDepth == nil, artworkState != nil, scene.rings.indices.contains(particle.ring) {
+            let target=scene.camera.depth(scene.rings[particle.ring].point(Float(particle.angle)))
+            let fusion=Float(min(1,max(0,(Self.entryScale-particle.scale)/(Self.entryScale-Self.attachedScale))))
+            depth=0.05+(target-0.05)*fusion
+        }
+        appendDraw(particle.glyph, bounds: pose.bounds, sampleOffset: offset, sampleCount: 1, depth:depth,
+                   style: min(0.45, max(0, glow)))
     }
 
-    private func appendDraw(_ glyph: WaveGlyphTexture, bounds: CGRect, sampleOffset: Int, sampleCount: Int) {
-        let instance = WaveGlyphInstance(
+    private func appendDraw(_ glyph: WaveGlyphTexture, bounds: CGRect, sampleOffset: Int, sampleCount: Int, depth: Float = 0.05, style: Float = 0) {
+        var instance = WaveGlyphInstance(
             bounds: SIMD4(Float(bounds.minX), Float(bounds.minY), Float(bounds.width), Float(bounds.height)),
             uvRect: glyph.uv, sampleRange: SIMD2(UInt32(sampleOffset), UInt32(sampleCount)))
+        instance.depth=depth
+        instance.reserved=style
         draws.append(WaveGlyphDraw(instance: instance, page: glyph.page))
     }
 

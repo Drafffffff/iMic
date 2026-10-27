@@ -47,6 +47,40 @@ final class PolishProviderTests: XCTestCase {
         return try JSONSerialization.data(withJSONObject: ["choices": [["message": message, "finish_reason": finish]]])
     }
 
+    func testOldPreferencesMigrateAndNewSelectionsSurviveReload() {
+        XCTAssertEqual(DeepSeekConfiguration.options(in: defaults), .default)
+        defaults.set("command", forKey: "polishOutput")
+        XCTAssertTrue(DeepSeekConfiguration.options(in: defaults).isCommand)
+        defaults.set("original", forKey: "polishOutput")
+        XCTAssertEqual(DeepSeekConfiguration.options(in: defaults).output, .chinese)
+        defaults.set("dubbed", forKey: "polishMode")
+        defaults.set("sarcastic", forKey: "polishTone")
+        defaults.set("japanese", forKey: "polishOutput")
+        let options = DeepSeekConfiguration.options(in: defaults)
+        XCTAssertEqual(options.mode, .dubbed)
+        XCTAssertEqual(options.tone, .sarcastic)
+        XCTAssertEqual(options.output, .japanese)
+    }
+
+    func testNewModesUseRealRequestAndResultPolicy() throws {
+        for mode in PolishMode.allCases {
+            let options = PolishOptions(output: .korean, mode: mode, tone: .moe)
+            let request = try DeepSeekClient.request(text: raw, key: officialKey, model: "deepseek-flash",
+                endpoint: PolishProvider.deepseek.defaultEndpoint, provider: .deepseek, options: options)
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Any])
+            XCTAssertEqual(body["temperature"] as? Double, options.temperature)
+            XCTAssertEqual(body["top_p"] as? Double, options.topP)
+        }
+        let terminal = PolishOptions(output: .japanese, mode: .terminal, tone: .rant)
+        XCTAssertEqual(DeepSeekClient.acceptedContent(data: try response(content: "ls -la"), status: 200,
+            raw: "列出当前目录所有文件包括隐藏的", options: terminal), "ls -la")
+        XCTAssertNil(DeepSeekClient.acceptedContent(data: try response(content: "ls\npwd"), status: 200,
+            raw: "列出当前目录", options: terminal))
+        XCTAssertEqual(DeepSeekClient.acceptedContent(data: try response(content: "今日劳甚，欲早归。"), status: 200,
+            raw: "我今天实在是觉得特别特别疲惫，所以我想要比平时更早一点下班回去。",
+            options: PolishOptions(mode: .classical)), "今日劳甚，欲早归。")
+    }
+
     func testExistingOfficialSettingsSurviveProviderRoundTrip() throws {
         defaults.set("existing-official-model", forKey: "deepseekModel")
         defaults.set(true, forKey: "deepseekEnabled")

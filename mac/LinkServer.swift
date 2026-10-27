@@ -236,6 +236,8 @@ final class LinkServer {
                     }
                 }
                 if message.t == "polish.settings", let preferences = message.polish {
+                    // LinkMessage 已验证 bit7 请求包含合法的完整模式、语气与语言。
+                    // 将能力位一并交给 Mac 保存层，旧手机只能改开关，不覆盖新选项。
                     let features = message.features ?? 0
                     DispatchQueue.main.async { [weak self] in
                         guard let self, self.queue.sync(execute: { self.active === peer }) else { return }

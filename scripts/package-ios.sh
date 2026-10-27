@@ -33,6 +33,9 @@ mkdir -p "$WORK/source/ios" "$WORK/package/Payload"
 cp "$ROOT/ios/project.yml" "$WORK/source/ios/project.yml"
 cp "$ROOT/ios/Info.plist" "$WORK/source/ios/Info.plist"
 /usr/bin/ditto "$ROOT/shared" "$WORK/source/shared"
+# The generated scheme also references the development-only UI test target.
+# Keep its sources available to XcodeGen; they are not bundled in the Release app.
+/usr/bin/ditto "$ROOT/tests/iOSUI" "$WORK/source/tests/iOSUI"
 
 (
   cd "$WORK/source/ios"

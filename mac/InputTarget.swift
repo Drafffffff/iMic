@@ -49,35 +49,116 @@ enum InputTailTransaction {
 /// Prefer verified AX ranges; keyboard compatibility is explicitly authorized for
 /// unreadable/unreliable targets and stops on any external input or app switch.
 final class InputTarget {
-    /// Explicit whole-field clear, separate from streaming tail revisions. Never
-    /// issue a blind Select All against an unreadable editor, page or terminal.
+    /// Explicit whole-field clear, separate from streaming tail revisions. A keyboard
+    /// fallback deletes only after the complete, unchanged editable field is selected.
     static func clearFocusedText(pid: pid_t, completion: @escaping (Bool) -> Void) {
-        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
-              let element = focusedElement(pid: pid) else { completion(false); return }
-        var role: CFTypeRef?
-        _ = AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
-        guard clearRoleAllowed(role as? String, valueSettable: isSettable(kAXValueAttribute, on: element)),
-              focusedElement(pid: pid).map({ CFEqual($0, element) }) == true,
-              AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, "" as CFString) == .success else {
-            completion(false); return
+        let target = capture(pid: pid)
+        func finish(_ applied: Bool, _ reason: String) {
+            IMicLog.write("mac.input", "clear applied=\(applied) reason=\(reason)")
+            completion(applied)
         }
-        let deadline = Date().addingTimeInterval(0.35)
-        func verify() {
-            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
-                  focusedElement(pid: pid).map({ CFEqual($0, element) }) == true else { completion(false); return }
-            var value: CFTypeRef?
-            if AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value) == .success,
-               let text = value as? String, text.isEmpty { completion(true); return }
-            guard Date() < deadline else { completion(false); return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: verify)
+        func acquire() {
+            guard !target.userIntervened, target.compatibilityFocusMatches(),
+                  let element = focusedElement(pid: pid) else { finish(false, "focus_unavailable"); return }
+            func attribute(_ name: String) -> String? {
+                var value: CFTypeRef?
+                guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
+                return value as? String
+            }
+            let valueSettable = isSettable(kAXValueAttribute, on: element)
+            let selectedTextSettable = isSettable(kAXSelectedTextAttribute, on: element)
+            var editable: CFTypeRef?
+            _ = AXUIElementCopyAttributeValue(element, kAXIsEditableAttribute as CFString, &editable)
+            guard clearRoleAllowed(attribute(kAXRoleAttribute), valueSettable: valueSettable,
+                      selectedTextSettable: selectedTextSettable,
+                      subrole: attribute(kAXSubroleAttribute), editable: editable as? Bool),
+                  let original = attribute(kAXValueAttribute) else { finish(false, "not_readable_editable_text"); return }
+            guard !original.isEmpty else { finish(true, "already_empty"); return }
+            func owns() -> Bool { target.isFocused(element) }
+            func post(_ key: CGKeyCode, flags: CGEventFlags = []) -> Bool {
+                guard owns(), let source = CGEventSource(stateID: .privateState),
+                      let down = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true),
+                      let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) else { return false }
+                for event in [down, up] {
+                    event.flags = flags
+                    event.setIntegerValueField(.eventSourceUserData, value: keyboardEventTag)
+                    event.postToPid(pid)
+                }
+                return true
+            }
+            func verifyEmpty(until deadline: Date, keyboard: Bool) {
+                guard owns() else { finish(false, "user_or_focus_changed"); return }
+                if attribute(kAXValueAttribute)?.isEmpty == true { finish(true, keyboard ? "verified_keyboard" : "verified_value"); return }
+                guard Date() < deadline else { finish(false, "empty_not_confirmed"); return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { verifyEmpty(until: deadline, keyboard: keyboard) }
+            }
+            func selectAndClear() {
+                guard owns(), attribute(kAXValueAttribute) == original, target.inputMonitor != nil,
+                      let previousSelection = selectedRange(element), post(0, flags: .maskCommand) else {
+                    finish(false, "selection_fallback_unavailable"); return
+                }
+                let deadline = Date().addingTimeInterval(0.4)
+                func verifySelection() {
+                    guard owns(), attribute(kAXValueAttribute) == original else { finish(false, "user_or_text_changed"); return }
+                    if clearSelectionMatches(original: original, current: attribute(kAXValueAttribute), selected: selectedRange(element)) {
+                        guard post(51) else { finish(false, "delete_unavailable"); return }
+                        verifyEmpty(until: Date().addingTimeInterval(0.4), keyboard: true)
+                        return
+                    }
+                    guard Date() < deadline else {
+                        // Restore our selection without touching text. Do not move a caret
+                        // after the user or another application has taken control.
+                        if owns(), attribute(kAXValueAttribute) == original {
+                            _ = setRange(previousSelection, on: element)
+                        }
+                        finish(false, "whole_field_selection_not_confirmed"); return
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.03, execute: verifySelection)
+                }
+                verifySelection()
+            }
+            guard owns() else { finish(false, "focus_changed"); return }
+            guard valueSettable else { selectAndClear(); return }
+            let result = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, "" as CFString)
+            let deadline = Date().addingTimeInterval(0.2)
+            func verifyValue() {
+                guard owns() else { finish(false, "user_or_focus_changed"); return }
+                let current = attribute(kAXValueAttribute)
+                if current?.isEmpty == true { finish(true, "verified_value"); return }
+                guard current == original else { finish(false, "text_changed_after_value_write"); return }
+                if result != .success || Date() >= deadline { selectAndClear(); return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.03, execute: verifyValue)
+            }
+            verifyValue()
         }
-        verify()
+        // Electron's documented switch exposes a real text field instead of an
+        // opaque web surface. This requests app AX support, never TCC permission.
+        let application = AXUIElementCreateApplication(pid)
+        if focusedElement(pid: pid) == nil,
+           AXUIElementSetAttributeValue(application, "AXManualAccessibility" as CFString, kCFBooleanTrue) == .success {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: acquire)
+        } else { acquire() }
     }
 
-    static func clearRoleAllowed(_ role: String?, valueSettable: Bool) -> Bool {
-        valueSettable && [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole].contains(role ?? "")
+    static func clearRoleAllowed(_ role: String?, valueSettable: Bool,
+                                 selectedTextSettable: Bool? = nil, subrole: String? = nil,
+                                 editable: Bool? = nil) -> Bool {
+        editable != false && (valueSettable || selectedTextSettable == true)
+            && (editable == true || selectedTextSettable != false) && subrole != "AXSecureTextField"
+            && [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole].contains(role ?? "")
+    }
+
+    static func clearSelectionMatches(original: String, current: String?, selected: CFRange?) -> Bool {
+        guard !original.isEmpty, current == original, let selected else { return false }
+        return selected.location == 0 && selected.length == original.utf16.count
     }
     enum InitialPreparation { case ready, collapseSelection, changed }
+
+    static func keyboardInitialPreparation(selection: CFRange?) -> InitialPreparation {
+        // Unknown is not selected. A speculative Right key can accept an editor's
+        // ghost completion before the first dictated character reaches it.
+        selection.map { $0.length > 0 ? .collapseSelection : .ready } ?? .ready
+    }
     enum Validation {
         case ready
         case waiting(String)
@@ -187,10 +268,7 @@ final class InputTarget {
         guard !userIntervened else { return .changed }
         if mode == .keyboard {
             guard compatibilityFocusMatches() else { return .changed }
-            // Unknown selections must be collapsed, not replaced. A known
-            // collapsed selection needs no Right key (which could move a TUI cursor).
-            guard let element, let range = Self.selectedRange(element) else { return .collapseSelection }
-            return range.length == 0 ? .ready : .collapseSelection
+            return Self.keyboardInitialPreparation(selection: element.flatMap(Self.selectedRange))
         }
         guard let element else { return .collapseSelection }
         guard isFocused(element) else { return .changed }

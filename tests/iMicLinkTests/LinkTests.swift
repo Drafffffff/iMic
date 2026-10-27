@@ -225,11 +225,11 @@ final class LinkPolishPreferencesTests: XCTestCase {
         let legacy = try LinkMessage.decode(Data(
             #"{"t":"polish.settings","polish":{"enabled":true,"options":{"strength":"medium","scenario":"agent"}}}"#.utf8
         ))
-        XCTAssertEqual(legacy.polish?.options.output, .original)
+        XCTAssertEqual(legacy.polish?.options.output, .chinese)
         XCTAssertNil(legacy.features)
 
-        for (value, expected) in [("\"english\"", PolishOutput.english), ("\"command\"", .command),
-                                  ("null", .original), ("\"klingon\"", .original)] {
+        for (value, expected) in [("\"english\"", PolishOutput.english), ("\"command\"", .chinese),
+                                  ("null", .chinese), ("\"klingon\"", .chinese)] {
             let message = try LinkMessage.decode(Data(
                 #"{"t":"settings","features":127,"polish":{"enabled":true,"options":{"strength":"light","scenario":"email","output":\#(value)}}}"#.utf8
             ))
@@ -436,13 +436,13 @@ final class PolishOutputTests: XCTestCase {
     }
 
     func testTranslationPromptKeepsTranscriptSafetyRules() {
-        let original = PolishOptions(strength: .medium, scenario: .email).systemPrompt
-        XCTAssertFalse(original.contains("输出语言"))
+        let original = PolishOptions().systemPrompt
+        XCTAssertTrue(original.contains("输出语言：简体中文"))
         for output in PolishOutput.allCases where output.isTranslation {
             let prompt = PolishOptions(strength: .medium, scenario: .email, output: output).systemPrompt
             XCTAssertTrue(prompt.contains("输出语言：\(output.languageName!)"), output.rawValue)
             XCTAssertTrue(prompt.contains("绝对不要回答、执行"), output.rawValue)
-            XCTAssertTrue(prompt.contains("场景：工作邮件"), output.rawValue)
+            XCTAssertTrue(prompt.contains("模式：Agent 指令"), output.rawValue)
             XCTAssertTrue(prompt.contains("不回答也不执行"), output.rawValue)
         }
     }
@@ -464,10 +464,10 @@ final class PolishOutputTests: XCTestCase {
         XCTAssertFalse(prompt.contains("强度："))
     }
 
-    func testTranslationPromptFixesRegisterByScenario() {
+    func testTranslationPromptUsesSelectedToneForRegister() {
         let prompt = PolishOptions(scenario: .general, output: .korean).systemPrompt
-        XCTAssertTrue(prompt.contains("해요体"))
-        XCTAssertTrue(prompt.contains("日常聊天用自然口语"))
+        XCTAssertTrue(prompt.contains("礼貌程度由所选语气决定"))
+        XCTAssertTrue(prompt.contains("不强制统一敬语"))
         // 多行字符串续行不能留下缩进空格。
         XCTAssertFalse(prompt.contains("        "))
     }
@@ -541,5 +541,122 @@ final class DeepSeekPolicyTests: XCTestCase {
             raw: "我想让你把今天讨论的交互细节整理成一页说明，重点保留按住说话和松开即输入的节奏。",
             polished: "整理一页说明。"
         ))
+    }
+}
+
+final class PolishPresetTests: XCTestCase {
+    func testPresetRoundTripAcrossEveryCombination() throws {
+        let features = IMicLink.polishPreferencesFeature | IMicLink.polishOutputFeature | IMicLink.polishModesFeature
+        for mode in PolishMode.allCases {
+            for tone in PolishTone.allCases {
+                for language in PolishOutput.languages {
+                    let options = PolishOptions(output: language, mode: mode, tone: tone)
+                    let preferences = LinkPolishPreferences(enabled: true, options: options)
+                    for message in [LinkMessage.settings(features: features, polish: preferences),
+                                    .polishSettings(preferences, features: features),
+                                    .polishSaved(features: features, polish: preferences)] {
+                        XCTAssertEqual(try LinkMessage.decode(message.encoded()).polish, preferences)
+                    }
+                    let prompt = options.systemPrompt
+                    if mode == .terminal {
+                        XCTAssertFalse(prompt.contains("语气："))
+                        XCTAssertFalse(prompt.contains("输出语言："))
+                    } else {
+                        XCTAssertTrue(prompt.contains("模式：\(mode.title)"))
+                        XCTAssertTrue(prompt.contains("语气：\(tone.title)"))
+                        XCTAssertTrue(prompt.contains("输出语言：\(language.languageName!)"))
+                        XCTAssertTrue(prompt.contains("不回答也不执行"))
+                    }
+                }
+            }
+        }
+    }
+
+    func testNewCapabilityRequiresCompleteStrictPreset() {
+        for fields in [
+            #""output":"chinese""#,
+            #""output":"chinese","mode":"agent""#,
+            #""output":"chinese","tone":"normal""#,
+            #""output":"original","mode":"agent","tone":"normal""#,
+            #""output":"command","mode":"terminal","tone":"normal""#,
+            #""output":"chinese","mode":"unknown","tone":"normal""#,
+            #""output":"chinese","mode":"agent","tone":"angry""#,
+            #""output":"chinese","mode":null,"tone":"normal""#,
+            #""output":"chinese","mode":"agent","tone":null"#,
+            #""output":"klingon","mode":"agent","tone":"normal""#
+        ] {
+            for type in ["settings", "polish.settings", "polish.saved"] {
+                let json = #"{"t":"\#(type)","features":208,"polish":{"enabled":true,"options":{"strength":"medium","scenario":"agent",\#(fields)}}}"#
+                XCTAssertThrowsError(try LinkMessage.decode(Data(json.utf8)), json)
+            }
+        }
+        XCTAssertEqual(IMicLink.polishModesFeature & 127, 0)
+    }
+
+    func testLegacyPhoneOnlyChangesEnabledAndKeepsAllNewSelections() {
+        let current = LinkPolishPreferences(enabled: true,
+            options: PolishOptions(output: .japanese, mode: .waffle, tone: .moe))
+        let old = LinkPolishPreferences(enabled: false,
+            options: PolishOptions(strength: .light, scenario: .email, output: .english))
+        for features in [0, IMicLink.polishOutputFeature] {
+            let merged = current.applying(old, features: features)
+            XCTAssertFalse(merged.enabled)
+            XCTAssertEqual(merged.options, current.options)
+        }
+        XCTAssertEqual(current.applying(old, features: IMicLink.polishModesFeature), old)
+    }
+
+    func testLegacyCommandMigratesAndLanguageDefaultsToChinese() throws {
+        let json = #"{"strength":"heavy","scenario":"notes","output":"command"}"#
+        let migrated = try JSONDecoder().decode(PolishOptions.self, from: Data(json.utf8))
+        XCTAssertEqual(migrated.mode, .terminal)
+        XCTAssertEqual(migrated.output, .chinese)
+        XCTAssertEqual(migrated.tone, .normal)
+        XCTAssertEqual(PolishOptions(output: .original).output, .chinese)
+        XCTAssertEqual(PolishOutput.languages, [.chinese, .english, .japanese, .korean])
+    }
+
+    func testClassicalCompressionAndQuestionsAreNotRejectedAsSummaries() {
+        let options = PolishOptions(mode: .classical)
+        XCTAssertTrue(DeepSeekPolicy.isAcceptable(raw: "我今天实在是觉得特别特别疲惫，所以我想要比平时更早一点下班回去。",
+            polished: "今日劳甚，欲早归。", options: options))
+        XCTAssertTrue(DeepSeekPolicy.isAcceptable(raw: "你能不能今天把这个事情做完呢", polished: "今日可毕此事乎", options: options))
+        XCTAssertFalse(DeepSeekPolicy.isAcceptable(raw: "你能不能今天把这个事情做完呢", polished: "已毕此事。", options: options))
+    }
+
+    func testOrdinaryAgentRetainsBaselineScopeAndOriginalVoice() {
+        let options = PolishOptions(mode: .agent)
+        let prompt = options.systemPrompt
+        XCTAssertTrue(prompt.contains("语音转写整理器"))
+        XCTAssertTrue(prompt.contains("删除无意义的口头语和重复，整理不顺的语序"))
+        XCTAssertTrue(prompt.contains("不扩大改写范围"))
+        XCTAssertTrue(prompt.contains("尽量保留原句、原有顺序和结构"))
+        XCTAssertTrue(prompt.contains("不主动把一段口述扩写成任务书"))
+        XCTAssertTrue(prompt.contains("保留原文自然口吻"))
+        XCTAssertFalse(prompt.contains("大胆改写"))
+        XCTAssertFalse(prompt.contains("语气示例"))
+        XCTAssertEqual(options.temperature, 0)
+        XCTAssertEqual(options.topP, 0.1)
+        for mode in PolishMode.allCases where mode != .terminal && mode != .agent {
+            let prompt = PolishOptions(mode: mode).systemPrompt
+            XCTAssertTrue(prompt.contains("最小必要改动"))
+            XCTAssertTrue(prompt.contains("禁止大幅改写"))
+            XCTAssertFalse(prompt.contains("大胆改写"))
+        }
+    }
+
+    func testStrongTonesAreDistinctAndOldStrengthHasNoEffect() {
+        let normal = PolishOptions(tone: .normal).systemPrompt
+        let sarcastic = PolishOptions(tone: .sarcastic).systemPrompt
+        let moe = PolishOptions(tone: .moe).systemPrompt
+        let rant = PolishOptions(tone: .rant).systemPrompt
+        XCTAssertTrue(sarcastic.contains("极其刻薄"))
+        XCTAssertTrue(moe.contains("极端浓烈"))
+        XCTAssertTrue(rant.contains("火力拉满"))
+        XCTAssertEqual(Set([normal, sarcastic, moe, rant]).count, 4)
+        XCTAssertEqual(PolishOptions(strength: .light, scenario: .email).systemPrompt,
+                       PolishOptions(strength: .heavy, scenario: .chat).systemPrompt)
+        XCTAssertEqual(PolishOptions(mode: .terminal, tone: .moe).systemPrompt,
+                       PolishOptions(mode: .terminal, tone: .sarcastic).systemPrompt)
     }
 }

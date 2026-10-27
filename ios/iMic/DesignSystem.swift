@@ -52,6 +52,7 @@ struct TechBackground: View {
                 context.stroke(grid, with: .color(Color.white.opacity(0.065)), lineWidth: pixel)
 
             }
+            .modifier(PhosphorSurface(strength: 0.35))
             .ignoresSafeArea()
         }
     }
@@ -292,6 +293,7 @@ struct TorusView: View {
     }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         Canvas { context, size in
@@ -301,6 +303,7 @@ struct TorusView: View {
                 draw(context: drawingContext, size: frame.size)
             } else { draw(context: drawingContext, size: size) }
         }
+        .modifier(PhosphorSurface())
         .accessibilityHidden(true)
         .onAppear {
             store.configureAmbientMotion(enabled: instrumentHUD, reducedMotion: reduceMotion)
@@ -373,142 +376,164 @@ struct TorusView: View {
         }
 
         // 上下轨道沿同一固定端弦形弯曲，不能再整块平移。
+        var waveContext = context
+        waveContext.opacity *= motionStore.clearOpacity
+        if !dimmed, !reduceTransparency {
+            // Filter one combined wave layer, not 44 separate ring shadows.
+            // The original sharp strokes are included in both shadow filters.
+            waveContext.addFilter(.shadow(color: Theme.orange.opacity(0.14), radius: 5))
+            waveContext.addFilter(.shadow(color: Theme.orange.opacity(0.30), radius: 1.5))
+        }
+        waveContext.drawLayer { context in
+            let orbitHeight = layout.orbitHeight * (1 - layout.longStretch * 0.94)
+            for offset in [CGFloat(-0.62), CGFloat(0.62)] {
+                let separation = offset * baseRy * (0.72 + 0.28 * relief.presence) * (1 - layout.longStretch * 0.94)
+                var previous: CGPoint?
+                for index in 0...TorusGeometry.orbitSamples.count {
+                    let sample = TorusGeometry.orbitSamples[index % TorusGeometry.orbitSamples.count]
+                    let x = cx + sample.x * bar / 2
+                    let point = CGPoint(x: x, y: layout.stringY(at: x) + separation + sample.y * orbitHeight / 2)
+                    if let previous {
+                        var segment = Path()
+                        segment.move(to: previous); segment.addLine(to: point)
+                        let angle = (CGFloat(index)-0.5) * 2 * .pi / CGFloat(TorusGeometry.orbitSamples.count)
+                        context.stroke(segment, with: .color(color.opacity(0.26 * PhosphorOrbitLight.depthGain(angle))), lineWidth: 0.7)
+                    }
+                    previous = point
+                }
+                if ambient > 0 {
+                    let direction: CGFloat = offset < 0 ? 1 : -1
+                    let head = phase * .pi * 2 * direction
+                    var last: CGPoint?
+                    for sample in 0...PhosphorOrbitLight.segments {
+                        let t = CGFloat(sample) / CGFloat(PhosphorOrbitLight.segments)
+                        let a = PhosphorOrbitLight.angle(head: head, direction: direction, progress: t)
+                        let x = cx + cos(a) * bar / 2
+                        let point = CGPoint(x: x, y: layout.stringY(at: x) + separation + sin(a) * orbitHeight / 2)
+                        if let last {
+                            var segment = Path()
+                            segment.move(to: last); segment.addLine(to: point)
+                            let alpha = 0.9 * ambient * PhosphorOrbitLight.tailGain(t) * PhosphorOrbitLight.depthGain(a)
+                            context.stroke(segment, with: .color(color.opacity(alpha)), lineWidth: 0.8 + 0.7 * t)
+                        }
+                        last = point
+                    }
+                }
+            }
+
+            // 圆环展示当前频谱，峰谷控制半径；线宽永远固定 1.3pt。
+            for index in 0..<TorusGeometry.ringCount {
+                let ring = layout.ring(at: index)
+                let ink = dimmed ? 0 : store.ink.intensity(at: index)
+                let distance = CGFloat(index) / CGFloat(TorusGeometry.ringCount - 1) - phase
+                let scan = exp(-distance * distance / 0.004) * 0.20 * ambient
+                let opacity = min(1, ring.opacity + (instrumentHUD ? 0.12 : 0)
+                                  + (1 - ring.opacity) * ink * 0.82 + scan)
+                var ringContext = context
+                ringContext.translateBy(x: ring.center.x, y: ring.center.y)
+                ringContext.rotate(by: .radians(Double(ring.rotation)))
+                let path = Path(ellipseIn: CGRect(
+                    x: -ring.radiusX, y: -ring.radiusY,
+                    width: ring.radiusX * 2, height: ring.radiusY * 2))
+                ringContext.stroke(path, with: .color(color.opacity(opacity)), lineWidth: 1.3)
+
+                // 暖白只落在短弧上；不把蓄力扩成整图泛白或背景辉光。
+                let accent = reduceMotion || dimmed ? 0 : store.ink.accent(at: index)
+                if accent > 0.01 {
+                    var highlight = Path()
+                    for sample in 0...8 {
+                        let angle = -CGFloat.pi / 2 - 0.28 + CGFloat(sample) * 0.07
+                        let point = CGPoint(x: cos(angle) * ring.radiusX, y: sin(angle) * ring.radiusY)
+                        if sample == 0 { highlight.move(to: point) } else { highlight.addLine(to: point) }
+                    }
+                    ringContext.stroke(
+                        highlight, with: .color(Theme.ivory.opacity(accent * 0.68)), lineWidth: 1.3)
+                }
+
+                // Reawaken every retained landing, not the three short-lived impact slots.
+                // One batched path per ring keeps dense transcripts from stacking white flashes.
+                if charge > 0.001, store.ink.contactCount(at: index) > 0 {
+                    var chargedContacts = Path()
+                    for slot in 0..<store.ink.contactCount(at: index) {
+                        guard let contact = store.ink.contact(at: index, slot: slot) else { continue }
+                        chargedContacts.move(to: CGPoint(
+                            x: contact.start.x * ring.radiusX, y: contact.start.y * ring.radiusY))
+                        chargedContacts.addQuadCurve(
+                            to: CGPoint(x: contact.end.x * ring.radiusX, y: contact.end.y * ring.radiusY),
+                            control: CGPoint(x: contact.control.x * ring.radiusX, y: contact.control.y * ring.radiusY))
+                    }
+                    ringContext.stroke(chargedContacts, with: .color(Theme.orange.opacity(charge * 0.18)),
+                                       style: StrokeStyle(lineWidth: 3.2, lineCap: .round))
+                    ringContext.stroke(chargedContacts, with: .color(Theme.ivory.opacity(charge * 0.62)),
+                                       style: StrokeStyle(lineWidth: 1.45, lineCap: .round))
+                }
+
+                if !reduceMotion, !dimmed {
+                    for slot in 0..<WaveformInkStore.impactSlotsPerRing {
+                        guard let impact = store.ink.impact(at: index, slot: slot) else { continue }
+                        let intensity = impact.intensity
+                        var contact = Path()
+                        for sample in 0...8 {
+                            let angle = impact.angle - impact.halfWidth
+                                + CGFloat(sample) * impact.halfWidth / 4
+                            let point = CGPoint(x: cos(angle) * ring.radiusX, y: sin(angle) * ring.radiusY)
+                            if sample == 0 { contact.move(to: point) } else { contact.addLine(to: point) }
+                        }
+                        ringContext.stroke(contact, with: .color(Theme.orange.opacity(intensity * 0.32)),
+                                           style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        ringContext.stroke(contact, with: .color(Theme.ivory.opacity(intensity * 0.95)),
+                                           style: StrokeStyle(lineWidth: 1.9, lineCap: .round))
+                        let progress = min(1, impact.age / WaveformInkStore.impactLifetime)
+                        let reach = 3 + 10 * progress * (2 - progress)
+                        let center = CGPoint(x: impact.unit.dx * ring.radiusX, y: impact.unit.dy * ring.radiusY)
+                        var sparks = Path()
+                        for side in 0..<2 {
+                            let direction: CGFloat = side == 0 ? -1 : 1
+                            sparks.move(to: CGPoint(
+                                x: center.x + impact.unit.dx * direction * (2 + progress * 4),
+                                y: center.y + impact.unit.dy * direction * (2 + progress * 4)))
+                            sparks.addLine(to: CGPoint(
+                                x: center.x + impact.unit.dx * direction * reach,
+                                y: center.y + impact.unit.dy * direction * reach))
+                        }
+                        ringContext.stroke(sparks, with: .color(Theme.ivory.opacity(intensity * 0.8)),
+                                           style: StrokeStyle(lineWidth: 1, lineCap: .round))
+                    }
+                }
+            }
+
+            // A fine structural spine; the rings, not a glowing travelling wave, are the hero.
+            var stringPath = Path()
+            var first = true
+            var x = leftRail
+            while x < rightRail {
+                let point = CGPoint(x: x, y: layout.stringY(at: x))
+                if first {
+                    stringPath.move(to: point)
+                    first = false
+                } else {
+                    stringPath.addLine(to: point)
+                }
+                x += 2
+            }
+            stringPath.addLine(to: CGPoint(x: rightRail, y: layout.stringY(at: rightRail)))
+            let stringBoost = motionStore.armed ? 1.0 : (0.35 + 0.65 * level)
+            context.stroke(stringPath, with: .color(color.opacity(0.08 + 0.10 * stringBoost)), lineWidth: 3)
+            context.stroke(stringPath, with: .color(color.opacity(0.38 + 0.40 * stringBoost)), lineWidth: 0.8)
+
+            // 两个连接点始终钉在标尺中线，不随声音、拖动或弹簧余振移动。
+            for point in [
+                CGPoint(x: leftRail, y: cy),
+                CGPoint(x: rightRail, y: cy)
+            ] {
+                context.fill(
+                    Path(CGRect(x: point.x - 2.5, y: point.y - 2.5, width: 5, height: 5)),
+                    with: .color(color)
+                )
+            }
+        }
         var context = context
         context.opacity *= motionStore.clearOpacity
-        let orbitHeight = layout.orbitHeight * (1 - layout.longStretch * 0.94)
-        for offset in [CGFloat(-0.62), CGFloat(0.62)] {
-            let separation = offset * baseRy * (0.72 + 0.28 * relief.presence) * (1 - layout.longStretch * 0.94)
-            var path = Path()
-            for (index, sample) in TorusGeometry.orbitSamples.enumerated() {
-                let x = cx + sample.x * bar / 2
-                let point = CGPoint(x: x, y: layout.stringY(at: x) + separation + sample.y * orbitHeight / 2)
-                if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
-            }
-            path.closeSubpath()
-            context.stroke(path, with: .color(color.opacity(0.26)), lineWidth: 0.7)
-            if ambient > 0 {
-                let angle = phase * .pi * 2 * (offset < 0 ? 1 : -1)
-                var glint = Path()
-                for sample in 0...9 {
-                    let a = angle + CGFloat(sample) * 0.006
-                    let x = cx + cos(a) * bar / 2
-                    let point = CGPoint(x: x, y: layout.stringY(at: x) + separation + sin(a) * orbitHeight / 2)
-                    if sample == 0 { glint.move(to: point) } else { glint.addLine(to: point) }
-                }
-                context.stroke(glint, with: .color(Theme.orange.opacity(0.72 * ambient)), lineWidth: 1.25)
-            }
-        }
-
-        // 圆环展示当前频谱，峰谷控制半径；线宽永远固定 1.3pt。
-        for index in 0..<TorusGeometry.ringCount {
-            let ring = layout.ring(at: index)
-            let ink = dimmed ? 0 : store.ink.intensity(at: index)
-            let distance = CGFloat(index) / CGFloat(TorusGeometry.ringCount - 1) - phase
-            let scan = exp(-distance * distance / 0.004) * 0.20 * ambient
-            let opacity = min(1, ring.opacity + (instrumentHUD ? 0.12 : 0)
-                              + (1 - ring.opacity) * ink * 0.82 + scan)
-            var ringContext = context
-            ringContext.translateBy(x: ring.center.x, y: ring.center.y)
-            ringContext.rotate(by: .radians(Double(ring.rotation)))
-            let path = Path(ellipseIn: CGRect(
-                x: -ring.radiusX, y: -ring.radiusY,
-                width: ring.radiusX * 2, height: ring.radiusY * 2))
-            ringContext.stroke(path, with: .color(color.opacity(opacity)), lineWidth: 1.3)
-
-            // 暖白只落在短弧上；不把蓄力扩成整图泛白或背景辉光。
-            let accent = reduceMotion || dimmed ? 0 : store.ink.accent(at: index)
-            if accent > 0.01 {
-                var highlight = Path()
-                for sample in 0...8 {
-                    let angle = -CGFloat.pi / 2 - 0.28 + CGFloat(sample) * 0.07
-                    let point = CGPoint(x: cos(angle) * ring.radiusX, y: sin(angle) * ring.radiusY)
-                    if sample == 0 { highlight.move(to: point) } else { highlight.addLine(to: point) }
-                }
-                ringContext.stroke(
-                    highlight, with: .color(Theme.ivory.opacity(accent * 0.68)), lineWidth: 1.3)
-            }
-
-            // Reawaken every retained landing, not the three short-lived impact slots.
-            // One batched path per ring keeps dense transcripts from stacking white flashes.
-            if charge > 0.001, store.ink.contactCount(at: index) > 0 {
-                var chargedContacts = Path()
-                for slot in 0..<store.ink.contactCount(at: index) {
-                    guard let contact = store.ink.contact(at: index, slot: slot) else { continue }
-                    chargedContacts.move(to: CGPoint(
-                        x: contact.start.x * ring.radiusX, y: contact.start.y * ring.radiusY))
-                    chargedContacts.addQuadCurve(
-                        to: CGPoint(x: contact.end.x * ring.radiusX, y: contact.end.y * ring.radiusY),
-                        control: CGPoint(x: contact.control.x * ring.radiusX, y: contact.control.y * ring.radiusY))
-                }
-                ringContext.stroke(chargedContacts, with: .color(Theme.orange.opacity(charge * 0.18)),
-                                   style: StrokeStyle(lineWidth: 3.2, lineCap: .round))
-                ringContext.stroke(chargedContacts, with: .color(Theme.ivory.opacity(charge * 0.62)),
-                                   style: StrokeStyle(lineWidth: 1.45, lineCap: .round))
-            }
-
-            if !reduceMotion, !dimmed {
-                for slot in 0..<WaveformInkStore.impactSlotsPerRing {
-                    guard let impact = store.ink.impact(at: index, slot: slot) else { continue }
-                    let intensity = impact.intensity
-                    var contact = Path()
-                    for sample in 0...8 {
-                        let angle = impact.angle - impact.halfWidth
-                            + CGFloat(sample) * impact.halfWidth / 4
-                        let point = CGPoint(x: cos(angle) * ring.radiusX, y: sin(angle) * ring.radiusY)
-                        if sample == 0 { contact.move(to: point) } else { contact.addLine(to: point) }
-                    }
-                    ringContext.stroke(contact, with: .color(Theme.orange.opacity(intensity * 0.32)),
-                                       style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    ringContext.stroke(contact, with: .color(Theme.ivory.opacity(intensity * 0.95)),
-                                       style: StrokeStyle(lineWidth: 1.9, lineCap: .round))
-                    let progress = min(1, impact.age / WaveformInkStore.impactLifetime)
-                    let reach = 3 + 10 * progress * (2 - progress)
-                    let center = CGPoint(x: impact.unit.dx * ring.radiusX, y: impact.unit.dy * ring.radiusY)
-                    var sparks = Path()
-                    for side in 0..<2 {
-                        let direction: CGFloat = side == 0 ? -1 : 1
-                        sparks.move(to: CGPoint(
-                            x: center.x + impact.unit.dx * direction * (2 + progress * 4),
-                            y: center.y + impact.unit.dy * direction * (2 + progress * 4)))
-                        sparks.addLine(to: CGPoint(
-                            x: center.x + impact.unit.dx * direction * reach,
-                            y: center.y + impact.unit.dy * direction * reach))
-                    }
-                    ringContext.stroke(sparks, with: .color(Theme.ivory.opacity(intensity * 0.8)),
-                                       style: StrokeStyle(lineWidth: 1, lineCap: .round))
-                }
-            }
-        }
-
-        // A fine structural spine; the rings, not a glowing travelling wave, are the hero.
-        var stringPath = Path()
-        var first = true
-        var x = leftRail
-        while x < rightRail {
-            let point = CGPoint(x: x, y: layout.stringY(at: x))
-            if first {
-                stringPath.move(to: point)
-                first = false
-            } else {
-                stringPath.addLine(to: point)
-            }
-            x += 2
-        }
-        stringPath.addLine(to: CGPoint(x: rightRail, y: layout.stringY(at: rightRail)))
-        let stringBoost = motionStore.armed ? 1.0 : (0.35 + 0.65 * level)
-        context.stroke(stringPath, with: .color(color.opacity(0.08 + 0.10 * stringBoost)), lineWidth: 3)
-        context.stroke(stringPath, with: .color(color.opacity(0.38 + 0.40 * stringBoost)), lineWidth: 0.8)
-
-        // 两个连接点始终钉在标尺中线，不随声音、拖动或弹簧余振移动。
-        for point in [
-            CGPoint(x: leftRail, y: cy),
-            CGPoint(x: rightRail, y: cy)
-        ] {
-            context.fill(
-                Path(CGRect(x: point.x - 2.5, y: point.y - 2.5, width: 5, height: 5)),
-                with: .color(color)
-            )
-        }
         for point in [
             CGPoint(x: leftRail, y: rulerTop),
             CGPoint(x: rightRail, y: rulerTop),
@@ -524,10 +549,10 @@ struct TorusView: View {
         if instrumentHUD {
             let labelColor = Theme.muted.opacity(dimmed ? 0.5 : 1)
             for (label, x, y, anchor) in [
-                ("RX / 01", leftRail + 10, rulerTop - 14, UnitPoint.leading),
-                (channelLabel, rightRail - 10, rulerTop - 14, UnitPoint.trailing),
-                ("44 BANDS", leftRail + 10, rulerBottom + 14, UnitPoint.leading),
-                ("16 kHz", rightRail - 10, rulerBottom + 14, UnitPoint.trailing)
+                ("RX / 01", leftRail, rulerTop - 14, UnitPoint.leading),
+                (channelLabel, rightRail, rulerTop - 14, UnitPoint.trailing),
+                ("44 BANDS", leftRail, rulerBottom + 14, UnitPoint.leading),
+                ("16 kHz", rightRail, rulerBottom + 14, UnitPoint.trailing)
             ] {
                 context.draw(Text(label).font(.system(size: 8, weight: .regular, design: .monospaced))
                     .foregroundStyle(label == channelLabel && !dimmed ? Theme.orange.opacity(0.7) : labelColor),

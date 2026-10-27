@@ -18,6 +18,7 @@ final class BowReleaseSound {
     private var engine: CHHapticEngine?
     private var corePlayers: [CHHapticPatternPlayer] = []
     private var corePrepared = false
+    private var coreStarting = false
     private var activeCoreIndex: Int?
     private var resourceIDs: [CHHapticAudioResourceID] = []
     private var resourceDirectory: URL?
@@ -67,6 +68,21 @@ final class BowReleaseSound {
         prepareCorePlayers()
         // 即使声音不可用，也保留真实的单次系统触觉；不阻塞 Return。
         prepared = true
+    }
+
+    /// Builds every expensive resource at a quiet moment after the home screen appears, so the
+    /// first pull past the threshold no longer generates PCM, creates players and starts an
+    /// engine on the main thread mid-gesture (a visible hitch on the first drag after launch).
+    /// It does not arm a shot; `prepare()` still does that and is cheap once this has run.
+    func warmUp() {
+        guard UIApplication.shared.applicationState == .active, !interrupted else { return }
+        if waves.isEmpty {
+            waves = (0..<Self.variantCount).map {
+                Self.makeWave(strength: Float($0) / Float(Self.variantCount - 1))
+            }
+        }
+        prepareAudioPlayers()
+        prepareCorePlayers()
     }
 
     func play(strength: Float) {
@@ -166,7 +182,7 @@ final class BowReleaseSound {
     private func prepareCorePlayers() {
         let capabilities = CHHapticEngine.capabilitiesForHardware()
         guard capabilities.supportsHaptics, capabilities.supportsAudio else { return }
-        if corePrepared { return }
+        if corePrepared || coreStarting { return }
         invalidateCore()
         let currentGeneration = generation
         do {
@@ -191,7 +207,28 @@ final class BowReleaseSound {
                     if shouldPrepare { self.prepareCorePlayers() }
                 }
             }
-            try engine.start()
+            // Asynchronous start: until it completes, a release uses the existing fallback.
+            coreStarting = true
+            engine.start { [weak self] error in
+                Task { @MainActor in
+                    guard let self, self.generation == currentGeneration, self.engine === engine else { return }
+                    self.coreStarting = false
+                    if let error {
+                        IMicLog.write("iphone.bow", "coordinated preparation unavailable; using fallback: \(error.localizedDescription)")
+                        self.invalidateCore()
+                    } else {
+                        self.registerCorePlayers(engine)
+                    }
+                }
+            }
+        } catch {
+            IMicLog.write("iphone.bow", "coordinated preparation unavailable; using fallback: \(error.localizedDescription)")
+            invalidateCore()
+        }
+    }
+
+    private func registerCorePlayers(_ engine: CHHapticEngine) {
+        do {
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("imic-bow-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -217,6 +254,7 @@ final class BowReleaseSound {
 
     private func invalidateCore() {
         corePrepared = false
+        coreStarting = false
         activeCoreIndex = nil
         generation &+= 1
         let oldEngine = engine

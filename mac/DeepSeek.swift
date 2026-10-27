@@ -55,12 +55,14 @@ enum DeepSeekConfiguration {
         defaults.set(model.trimmingCharacters(in: .whitespacesAndNewlines), forKey: provider.modelKey)
         defaults.set(endpoint.trimmingCharacters(in: .whitespacesAndNewlines), forKey: provider.endpointKey)
     }
-    static var options: PolishOptions {
-        let defaults = UserDefaults.standard
+    static var options: PolishOptions { options(in: .standard) }
+    static func options(in defaults: UserDefaults) -> PolishOptions {
         return PolishOptions(
             strength: defaults.string(forKey: "deepseekStrength").flatMap(PolishStrength.init(rawValue:)) ?? PolishOptions.default.strength,
             scenario: defaults.string(forKey: "deepseekScenario").flatMap(PolishScenario.init(rawValue:)) ?? PolishOptions.default.scenario,
-            output: defaults.string(forKey: "polishOutput").flatMap(PolishOutput.init(rawValue:)) ?? PolishOptions.default.output
+            output: defaults.string(forKey: "polishOutput").flatMap(PolishOutput.init(rawValue:)) ?? .chinese,
+            mode: defaults.string(forKey: "polishMode").flatMap(PolishMode.init(rawValue:)),
+            tone: defaults.string(forKey: "polishTone").flatMap(PolishTone.init(rawValue:)) ?? .normal
         )
     }
 }
@@ -149,8 +151,8 @@ enum DeepSeekClient {
                 ["role": "system", "content": options.systemPrompt],
                 ["role": "user", "content": "<transcript>\n\(text)\n</transcript>"]
             ],
-            "temperature": 0,
-            "top_p": 0.1,
+            "temperature": options.temperature,
+            "top_p": options.topP,
             "stream": false,
             "max_tokens": 2048
         ]
@@ -185,7 +187,7 @@ enum DeepSeekClient {
         let diagnosticModel = modelIsSafe ? model : "redacted"
         let task = (session ?? Self.session).dataTask(with: request) { data, response, error in
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            let result = error == nil ? acceptedContent(data: data, status: status, raw: text, output: options.output) : nil
+            let result = error == nil ? acceptedContent(data: data, status: status, raw: text, options: options) : nil
             let milliseconds = Int(Date().timeIntervalSince(started) * 1000)
             // Never log endpoints, response bodies, error descriptions or credentials.
             let code = (error as NSError?)?.code ?? 0
@@ -196,7 +198,7 @@ enum DeepSeekClient {
         return task
     }
 
-    static func acceptedContent(data: Data?, status: Int, raw: String, output: PolishOutput = .original) -> String? {
+    static func acceptedContent(data: Data?, status: Int, raw: String, output: PolishOutput = .original, options: PolishOptions? = nil) -> String? {
         guard (200..<300).contains(status), let data,
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               object["error"] == nil,
@@ -209,9 +211,10 @@ enum DeepSeekClient {
               functionCall == nil || functionCall is NSNull,
               let content = message["content"] as? String else { return nil }
         // reasoning_content is deliberately ignored. Reject inline thinking rather than insert it.
-        let result = output == .command ? cleanCommand(content) : clean(content)
+        let result = (options?.isCommand ?? (output == .command)) ? cleanCommand(content) : clean(content)
         guard result.range(of: #"</?(think|thinking|reasoning)(?:\s|>)"#, options: [.regularExpression, .caseInsensitive]) == nil,
-              DeepSeekPolicy.isAcceptable(raw: raw, polished: result, output: output) else { return nil }
+              (options.map { DeepSeekPolicy.isAcceptable(raw: raw, polished: result, options: $0) }
+                ?? DeepSeekPolicy.isAcceptable(raw: raw, polished: result, output: output)) else { return nil }
         return result
     }
 

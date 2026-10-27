@@ -795,6 +795,7 @@ final class LinkClient: ObservableObject {
             guard ready else { return }
             let features = message.features ?? 0
             let supported = features & IMicLink.polishPreferencesFeature != 0
+                && features & IMicLink.polishModesFeature != 0
             supportsPolishPreferences = supported
             let preferences = supported ? message.polish : nil
             let pending = pendingPolishPreferences
@@ -1268,7 +1269,7 @@ final class LinkClient: ObservableObject {
             self.polishSaveGeneration &+= 1
             let generation = self.polishSaveGeneration
             self.pendingPolishPreferences = preferences
-            self.sendSealed(.polishSettings(preferences, features: IMicLink.polishOutputFeature)) { [weak self] success in
+            self.sendSealed(.polishSettings(preferences, features: IMicLink.polishOutputFeature | IMicLink.polishModesFeature)) { [weak self] success in
                 guard let self, !success, epoch == self.currentEpoch(),
                       generation == self.polishSaveGeneration, self.pendingPolishPreferences != nil else { return }
                 self.pendingPolishPreferences = nil

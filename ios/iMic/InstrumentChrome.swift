@@ -60,6 +60,45 @@ struct PixelSymbol: View {
     }
 }
 
+/// One layout for the hold bar, shared by the Metal artwork and the native fallback.
+/// The accessory (microphone, link or elapsed time) owns a fixed zone on the right whose
+/// left edge carries the separator, so neither the label nor the timer can cross it.
+enum HoldBarLayout {
+    static let height: CGFloat = 68
+    static let leading: CGFloat = 28
+    static let accessoryWidth: CGFloat = 60
+    static let labelGap: CGFloat = 16
+    static let labelTracking: CGFloat = 1.8
+    static let separatorHeight: CGFloat = 24
+    static let tickHeight: CGFloat = 20
+    static let wordmark = CGSize(width: 76, height: 22)
+
+    static func labelWidth(barWidth: CGFloat) -> CGFloat {
+        max(80, barWidth - leading - accessoryWidth - labelGap)
+    }
+}
+
+/// The line above the bar: label, a rule that keeps clear of both ends, and a right slot
+/// that shows a transient notice in place of the hint instead of a box floating over it.
+struct HoldBarRail: View {
+    var notice: String?
+    var noticeColor: Color = Theme.muted
+
+    var body: some View {
+        HStack(spacing: 10) {
+            HUDLabel(text: "TX / VOICE")
+            Rectangle().fill(Theme.line).frame(height: 0.5).frame(maxWidth: .infinity)
+            if let notice {
+                Text(notice).font(.system(size: 10, weight: .regular)).foregroundStyle(noticeColor)
+                    .lineLimit(1).fixedSize()
+            } else {
+                HUDLabel(text: "PRESS + HOLD", color: Theme.orange.opacity(0.7))
+            }
+        }
+        .frame(height: 12)
+    }
+}
+
 struct RecordingBarShape: Shape {
     func path(in rect: CGRect) -> Path {
         let notch: CGFloat = 8

@@ -8,7 +8,8 @@ func verifyMetalExposure(shaderPath: String) throws {
     guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else {
         fatalError("A Metal device is required to verify shutter integration")
     }
-    let source = try String(contentsOfFile: shaderPath, encoding: .utf8)
+    let shared = try String(contentsOfFile: URL(fileURLWithPath: shaderPath).deletingLastPathComponent().appendingPathComponent("PhosphorResponse.h").path, encoding: .utf8)
+    let source = try String(contentsOfFile: shaderPath, encoding: .utf8).replacingOccurrences(of: "#include \"PhosphorResponse.h\"", with: shared)
     let library = try device.makeLibrary(source: source, options: nil)
     let descriptor = MTLRenderPipelineDescriptor()
     descriptor.vertexFunction = library.makeFunction(name: "waveGlyphVertex")
