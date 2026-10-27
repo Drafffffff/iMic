@@ -3,6 +3,7 @@ import ApplicationServices
 import ScreenCaptureKit
 import Vision
 import CoreText
+import CoreImage
 
 private final class EffectCancellation: @unchecked Sendable {
     private let lock = NSLock()
@@ -53,12 +54,37 @@ final class TextPolishEffect: @unchecked Sendable {
             return false
         }
     }()
-    private static func makeOCRRequest() -> VNRecognizeTextRequest {
+    /// Vision ignores text shorter than 1/32 of the image by default. Tall text
+    /// areas and window-wide fallback crops put ordinary 12pt text below that,
+    /// so the floor is set from pixels instead (about 4pt at the 2x capture).
+    private static func makeOCRRequest(imageHeight: Int = 0) -> VNRecognizeTextRequest {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["zh-Hans", "en-US"]
         request.usesLanguageCorrection = false
+        if imageHeight > 0 { request.minimumTextHeight = Float(min(1.0/32, 8/Double(imageHeight))) }
         return request
+    }
+    private static let imageContext = CIContext(options: [.useSoftwareRenderer: false])
+
+    /// Second OCR pass: grey, higher contrast, dark themes inverted to dark-on-
+    /// light, small crops enlarged. Normalised coordinates are unchanged.
+    private static func enhanced(_ image: CGImage) -> CGImage? {
+        var input = CIImage(cgImage: image)
+        let extent = input.extent
+        var luminance: CGFloat = 1
+        if let average = CIFilter(name: "CIAreaAverage", parameters: [kCIInputImageKey: input, kCIInputExtentKey: CIVector(cgRect: extent)])?.outputImage {
+            var pixel = [UInt8](repeating: 0, count: 4)
+            imageContext.render(average, toBitmap: &pixel, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                                format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
+            luminance = (0.299*CGFloat(pixel[0])+0.587*CGFloat(pixel[1])+0.114*CGFloat(pixel[2]))/255
+        }
+        input = input.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0, kCIInputContrastKey: 1.45])
+        if luminance < 0.45 { input = input.applyingFilter("CIColorInvert") }
+        if extent.height < 900 {
+            input = input.applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: 1.6, kCIInputAspectRatioKey: 1])
+        }
+        return imageContext.createCGImage(input, from: input.extent)
     }
     private struct Target {
         let element: AXUIElement
@@ -106,10 +132,9 @@ final class TextPolishEffect: @unchecked Sendable {
             IMicLog.write("mac.effect", "skipped reason=ineligible enabled=\(Self.enabled) chars=\(text.count)")
             lifecycle.skipVisual(); return
         }
-        guard #available(macOS 14.0, *), CGPreflightScreenCaptureAccess() else {
-            IMicLog.write("mac.effect", "skipped reason=capture_unavailable_or_permission")
-            lifecycle.skipVisual(); return
-        }
+        // AX range geometry needs no screen recording; OCR is only a fallback tier.
+        let canCapture: Bool
+        if #available(macOS 14.0, *) { canCapture = CGPreflightScreenCaptureAccess() } else { canCapture = false }
         let token = EffectCancellation()
         cancellation = token
         let version = generation
@@ -131,6 +156,27 @@ final class TextPolishEffect: @unchecked Sendable {
                 return
             }
             IMicLog.write("mac.effect", "viewport clipped=\(!Self.same(target.elementFrame, target.field)) height=\(Int(target.field.height)) document_height=\(Int(target.elementFrame.height)) single_line=\(target.singleLine)")
+            // Tier 1: the editor's own line geometry. Exact, fast, permission-free.
+            if let layout = Self.rangeLayout(target: target, text: text) {
+                IMicLog.write("mac.effect", "locate source=ax_range lines=\(layout.rows.count)")
+                DispatchQueue.main.async { self.prepared(layout.rows, generation: version, target: target, visibleUnits: layout.visibleUnits) }
+                return
+            }
+            // Tier 3: a single-line field without usable ranges or OCR still has a
+            // reliable vertical centre; estimate the row instead of skipping.
+            let estimate = { () -> Void in
+                guard target.singleLine,
+                      let row = SweepLineLayout.singleLineEstimate(field: target.field, text: text) else {
+                    DispatchQueue.main.async { self.prepared([], generation: version) }; return
+                }
+                IMicLog.write("mac.effect", "locate source=field_estimate")
+                DispatchQueue.main.async { self.prepared([row], generation: version, target: target) }
+            }
+            guard canCapture, #available(macOS 14.0, *) else {
+                IMicLog.write("mac.effect", "ocr skipped reason=capture_permission")
+                estimate(); return
+            }
+            // Tier 2: OCR of the field (or window) with an enhanced retry.
             Task {
                 do {
                     guard !token.cancelled else { return }
@@ -140,14 +186,16 @@ final class TextPolishEffect: @unchecked Sendable {
                             DispatchQueue.main.async { self.prepared([], generation: version) }; return
                         }
                         let start = ProcessInfo.processInfo.systemUptime
-                        let rectangles = Self.recognize(image, field: target.field, expected: text, token: token, allowClipped: target.singleLine)
+                        let rectangles = Self.recognize(image, field: target.field, expected: text, token: token,
+                                                        allowClipped: target.singleLine, fieldScoped: true)
                         let unchanged = Self.valid(target)
                         let result = unchanged && !token.cancelled ? rectangles.rectangles : []
                         IMicLog.write("mac.effect", "ocr lines=\(result.count) ms=\(Int((ProcessInfo.processInfo.systemUptime-start)*1000))")
+                        if result.isEmpty, unchanged, !token.cancelled { estimate(); return }
                         DispatchQueue.main.async { self.prepared(result, generation: version, target: target, visibleUnits: rectangles.visibleUnits) }
                     }
                 } catch {
-                    DispatchQueue.main.async { self.prepared([], generation: version) }
+                    estimate()
                 }
             }
         }
@@ -212,7 +260,7 @@ final class TextPolishEffect: @unchecked Sendable {
 
     private func prepared(_ rectangles: [CGRect], generation version: Int, target: Target? = nil, visibleUnits: Double = 0) {
         guard generation == version, cancellation?.cancelled == false, lifecycle.phase == .locating else { return }
-        regions = SweepLineLayout.rows(in: rectangles)
+        regions = SweepLineLayout.lines(in: rectangles)
         validationTarget = target
         matchedVisibleUnits = visibleUnits
         guard !regions.isEmpty, allowed?() == true, let target else { skipVisual(reason: "no_matching_regions"); return }
@@ -249,7 +297,7 @@ final class TextPolishEffect: @unchecked Sendable {
             view.reframe(size: rect.size, offset: offset)
             let localRows = regions.map { CGRect(x: $0.minX-rect.minX, y: top-$0.maxY-rect.minY, width: $0.width, height: $0.height) }
             let localEnd = endpoint.map { CGPoint(x: $0.x-rect.minX, y: top-$0.y-rect.minY) }
-            view.align(regions: localRows, endpoint: localEnd)
+            view.align(regions: localRows, paragraphEnds: SweepLineLayout.paragraphEnds(regions), endpoint: localEnd)
             return
         }
         let window = panel ?? SweepPanel(contentRect: rect, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -260,7 +308,7 @@ final class TextPolishEffect: @unchecked Sendable {
         let view = SweepView(frame: NSRect(origin: .zero, size: union.size))
         window.contentView = view
         view.install(regions: regions.map { CGRect(x: $0.minX-union.minX, y: union.maxY-$0.maxY, width: $0.width, height: $0.height) },
-                     reduced: reduced, entering: entering)
+                     paragraphEnds: SweepLineLayout.paragraphEnds(regions), reduced: reduced, entering: entering)
         if let endpoint { view.setEndpoint(CGPoint(x: endpoint.x-union.minX, y: union.maxY-endpoint.y)) }
         sweepView = view; panel = window
         window.orderFrontRegardless()
@@ -352,11 +400,12 @@ final class TextPolishEffect: @unchecked Sendable {
         }
         // Some editors expose the new value before updating its line geometry.
         // Do not finalize on that first, stale AX layout immediately after write.
-        if !target.singleLine, attempt >= 2, let rects = Self.finalRows(target: target, text: finalText) {
+        // Single-line fields qualify too: rangeLayout requires a visible tail.
+        if attempt >= 2, let rects = Self.finalRows(target: target, text: finalText) {
             DispatchQueue.main.async {
                 guard self.generation == version, self.lifecycle.phase == .writing, !token.cancelled else { return }
                 self.releaseEndpoint = nil
-                self.regions = SweepLineLayout.rows(in: rects)
+                self.regions = SweepLineLayout.lines(in: rects)
                 self.installPanel(regions: self.regions, entering: false)
                 self.reveal(source: verified ? "confirmed_range_layout" : "readable_layout", burst: true)
             }
@@ -371,14 +420,15 @@ final class TextPolishEffect: @unchecked Sendable {
                 let image = try await Self.capture(fresh)
                 self.queue.async {
                     guard !token.cancelled else { return }
-                    let geometry = Self.recognize(image, field: fresh.field, expected: finalText, token: token, requireTail: true, allowClipped: fresh.singleLine)
+                    let geometry = Self.recognize(image, field: fresh.field, expected: finalText, token: token, requireTail: true,
+                                                  allowClipped: fresh.singleLine, fieldScoped: true)
                     let rects = geometry.rectangles
                     guard Self.valid(fresh) else { return }
                     DispatchQueue.main.async {
                         guard self.generation == version, self.lifecycle.phase == .writing,
                               !token.cancelled, !rects.isEmpty else { return }
                         self.releaseEndpoint = nil
-                        self.regions = SweepLineLayout.rows(in: rects)
+                        self.regions = SweepLineLayout.lines(in: rects)
                         self.installPanel(regions: self.regions, entering: false)
                         self.reveal(source: "ocr_display_match", burst: geometry.includesEnd)
                     }
@@ -419,17 +469,27 @@ final class TextPolishEffect: @unchecked Sendable {
     /// Layout refresh after writing, not permission to edit. If this target's
     /// range geometry is incomplete (e.g. Codex), use the OCR display check.
     private static func finalRows(target: Target, text: String) -> [CGRect]? {
-        guard let value = read(target.element, kAXValueAttribute) as? String,
-              let field = visibleField(target.element, window: target.window), !text.isEmpty else { return nil }
+        rangeLayout(target: target, text: text)?.rows
+    }
+
+    /// Visible line rectangles of the last occurrence of `text`, read from the
+    /// editor's AX line ranges. Rejects geometry that is incomplete, hidden at
+    /// the tail, or implausible (duplicated or field-sized rectangles).
+    private static func rangeLayout(target: Target, text: String) -> (rows: [CGRect], visibleUnits: Double)? {
+        let element = target.element
+        guard let value = read(element, kAXValueAttribute) as? String,
+              let field = visibleField(element, window: target.window), !text.isEmpty else { return nil }
         let span = (value as NSString).range(of: text, options: .backwards)
         guard span.location != NSNotFound else { return nil }
         func parameter(_ name: String, _ input: CFTypeRef) -> CFTypeRef? {
             var result: CFTypeRef?
-            return AXUIElementCopyParameterizedAttributeValue(target.element, name as CFString, input, &result) == .success ? result : nil
+            return AXUIElementCopyParameterizedAttributeValue(element, name as CFString, input, &result) == .success ? result : nil
         }
         var cursor = span.location
         var result: [CGRect] = []
         var terminalVisible = false
+        var visibleUnits = 0.0
+        var seen = Set<[Int]>()
         while cursor < NSMaxRange(span), result.count < 64 {
             guard let line = parameter(kAXLineForIndexParameterizedAttribute, NSNumber(value: cursor)),
                   let raw = parameter(kAXRangeForLineParameterizedAttribute, line),
@@ -449,14 +509,21 @@ final class TextPolishEffect: @unchecked Sendable {
             var rect = CGRect.zero
             guard AXValueGetType(rectValue) == .cgRect, AXValueGetValue(rectValue, .cgRect, &rect),
                   rect.width > 1, rect.height > 1 else { return nil }
+            // Some editors answer every range with the element or one stale line box.
+            let key = [Int(rect.minX), Int(rect.minY), Int(rect.width), Int(rect.height)]
+            guard seen.insert(key).inserted, rect.height <= max(64, field.height*0.5) || target.singleLine,
+                  !same(rect, target.elementFrame) else { return nil }
             let visible = rect.intersection(field)
-            if visible.width > 1, visible.height > 1 { result.append(visible) }
+            if visible.width > 1, visible.height > 1 {
+                result.append(visible)
+                visibleUnits += PolishEndpointEstimate.units(in: (value as NSString).substring(with: NSRange(location: cursor, length: end-cursor)))
+            }
             if end == NSMaxRange(span) {
                 terminalVisible = visible.width > 1 && visible.height >= rect.height*0.8
             }
             cursor = end
         }
-        return cursor == NSMaxRange(span) && terminalVisible && !result.isEmpty ? result : nil
+        return cursor == NSMaxRange(span) && terminalVisible && !result.isEmpty ? (result, visibleUnits) : nil
     }
 
     private static func read(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
@@ -571,11 +638,21 @@ final class TextPolishEffect: @unchecked Sendable {
         var visibleUnits: Double = 0
         var includesEnd = false
     }
-    private static func recognize(_ image: CGImage, field: CGRect, expected: String, token: EffectCancellation, requireTail: Bool = false, allowClipped: Bool = false) -> RecognizedRegions {
+    private static func recognize(_ image: CGImage, field: CGRect, expected: String, token: EffectCancellation,
+                                  requireTail: Bool = false, allowClipped: Bool = false, fieldScoped: Bool = false) -> RecognizedRegions {
         guard !token.cancelled else { return RecognizedRegions() }
         _ = ocrWarmup
+        let first = recognizePass(image, field: field, expected: expected, token: token, requireTail: requireTail,
+                                  allowClipped: allowClipped, fieldScoped: fieldScoped, pass: 1)
+        guard first.rectangles.isEmpty, !token.cancelled, let retry = enhanced(image) else { return first }
+        return recognizePass(retry, field: field, expected: expected, token: token, requireTail: requireTail,
+                             allowClipped: allowClipped, fieldScoped: fieldScoped, pass: 2)
+    }
+
+    private static func recognizePass(_ image: CGImage, field: CGRect, expected: String, token: EffectCancellation,
+                                      requireTail: Bool, allowClipped: Bool, fieldScoped: Bool, pass: Int) -> RecognizedRegions {
         guard !token.cancelled else { return RecognizedRegions() }
-        let request = makeOCRRequest()
+        let request = makeOCRRequest(imageHeight: image.height)
         do { try VNImageRequestHandler(cgImage: image).perform([request]) } catch { return RecognizedRegions() }
         let observations = (request.results ?? []).sorted {
             abs($0.boundingBox.midY-$1.boundingBox.midY) > 0.015 ? $0.boundingBox.midY > $1.boundingBox.midY : $0.boundingBox.minX < $1.boundingBox.minX
@@ -583,10 +660,12 @@ final class TextPolishEffect: @unchecked Sendable {
         let candidates = observations.compactMap { $0.topCandidates(1).first }
         if requireTail, !allowClipped, TextRegionMatcher.match(expected: String(expected.suffix(24)), fragments: candidates.map(\.string),
                                                cancelled: { token.cancelled }) == nil { return RecognizedRegions() }
-        guard let match = TextRegionMatcher.locate(expected: expected, fragments: candidates.map(\.string), allowClipped: allowClipped, cancelled: { token.cancelled }) else {
-            if !token.cancelled { IMicLog.write("mac.effect", "ocr unmatched expected_chars=\(expected.count) fragments=\(candidates.count)") }
+        guard let match = TextRegionMatcher.locate(expected: expected, fragments: candidates.map(\.string), allowClipped: allowClipped,
+                                                   fieldScoped: fieldScoped, cancelled: { token.cancelled }) else {
+            if !token.cancelled { IMicLog.write("mac.effect", "ocr unmatched pass=\(pass) expected_chars=\(expected.count) fragments=\(candidates.count)") }
             return RecognizedRegions()
         }
+        if pass > 1 { IMicLog.write("mac.effect", "ocr matched pass=\(pass)") }
         let spans = match.spans
         let visibleUnits = spans.reduce(0.0) { total, span in
             total+PolishEndpointEstimate.units(in: (candidates[span.fragment].string as NSString).substring(with: span.range))
@@ -609,29 +688,39 @@ private final class SweepPanel: NSPanel {
 }
 
 private final class SweepView: NSView {
-    private let ember = NSColor(srgbRed: 1, green: 0.29, blue: 0, alpha: 1)
-    private let white = NSColor.white
+    /// Tokens from docs/design/2026-10-27-ui-direction.md: orange marks only the
+    /// active focus (one endpoint per paragraph), near-white is the line core,
+    /// black keylines keep contrast on light and dark editors alike.
+    private let ember = NSColor(srgbRed: 1, green: 0x5B/255.0, blue: 0x18/255.0, alpha: 1)
+    private let lineCore = NSColor(srgbRed: 0xDC/255.0, green: 0xE5/255.0, blue: 0xE4/255.0, alpha: 1)
     private let black = NSColor.black
     private var rowRegions: [CGRect] = []
+    private var paragraphEnds: Set<Int> = []
     private var reducedMotion = false
     private var introRoot: CALayer?
     private var loadingRoot: CALayer?
     private var endpoint: CGPoint?
     private var endpointCore: CALayer?
     private var rails: [CALayer] = []
+    private var caps: [CALayer] = []
     private var alignedAt: CFTimeInterval = 0
 
-    func install(regions: [CGRect], reduced: Bool, entering: Bool = true) {
+    private static let travelTime: CFTimeInterval = 0.2
+    private static let hitStop: CFTimeInterval = 0.045
+    private static let impactTime: CFTimeInterval = SweepLineLayout.lineDuration-travelTime
+
+    func install(regions: [CGRect], paragraphEnds ends: Set<Int>, reduced: Bool, entering: Bool = true) {
         wantsLayer = true
         guard let layer, !regions.isEmpty else { return }
         layer.masksToBounds = false
-        rowRegions = regions; reducedMotion = reduced
+        rowRegions = regions; paragraphEnds = ends; reducedMotion = reduced
         if !entering || reduced { hold(); return }
         let intro = CALayer(); intro.frame = bounds
         layer.addSublayer(intro); introRoot = intro
         let time = CACurrentMediaTime()
         for (row, rect) in regions.enumerated() {
-            installLine(rect, on: intro, time: time+SweepLineLayout.delay(row: row, lineCount: regions.count))
+            installLine(rect, terminal: ends.contains(row), on: intro,
+                        time: time+SweepLineLayout.delay(row: row, lineCount: regions.count))
         }
     }
 
@@ -640,73 +729,159 @@ private final class SweepView: NSView {
         return node
     }
 
-    /// A small white stop stays below the baseline, without a crossing reticle.
-    private func lock(at point: CGPoint) -> CALayer {
-        let node = CALayer(); node.bounds = CGRect(x: 0, y: 0, width: 4, height: 9); node.position = point
+    private func thickness(_ rect: CGRect) -> CGFloat { SweepLineLayout.stroke(lineHeight: rect.height)+2 }
+
+    /// Underline rail: black keyline around a near-white core, never orange.
+    /// Loading rails anchor at their right end so release retracts them into
+    /// the paragraph endpoint; intro rails anchor left and are drawn by the carriage.
+    private func rail(for rect: CGRect, anchorLeft: Bool = false) -> CALayer {
+        let t = thickness(rect)
+        let node = CALayer(); node.bounds = CGRect(x: 0, y: 0, width: rect.width, height: t)
+        node.anchorPoint = CGPoint(x: anchorLeft ? 0 : 1, y: 0.5)
+        node.position = CGPoint(x: anchorLeft ? rect.minX : rect.maxX, y: rect.minY-1-t/2)
         node.addSublayer(block(node.bounds, black))
-        node.addSublayer(block(CGRect(x: 1, y: 1, width: 2, height: 7), white))
+        node.addSublayer(block(CGRect(x: 0, y: 1, width: rect.width, height: t-2), lineCore))
         return node
     }
 
-    private func rail(for rect: CGRect) -> CALayer {
-        let node = CALayer(); node.bounds = CGRect(x: 0, y: 0, width: rect.width, height: 4)
-        node.anchorPoint = CGPoint(x: 0, y: 0.5)
-        node.position = CGPoint(x: rect.minX, y: rect.minY-2)
-        node.addSublayer(block(CGRect(x: 0, y: 0, width: rect.width, height: 3), black))
-        node.addSublayer(block(CGRect(x: 0, y: 1, width: rect.width, height: 1), white))
-        let length = min(24, rect.width*0.25)
-        node.addSublayer(block(CGRect(x: max(0, rect.width-length), y: 0, width: length, height: 3), ember))
+    /// Paragraph endpoint: an orange caret-like bar from the rail up to the row
+    /// top, with a narrow same-colour halo hugging the core (no wide bloom).
+    private func cap(for rect: CGRect, at point: CGPoint? = nil) -> CALayer {
+        let t = thickness(rect)
+        let node = CALayer(); node.bounds = CGRect(x: 0, y: 0, width: t+2, height: rect.height+t+1)
+        node.position = capPosition(for: rect, endpoint: point)
+        node.addSublayer(block(node.bounds, black))
+        let fill = block(node.bounds.insetBy(dx: 1, dy: 1), ember)
+        fill.shadowColor = ember.cgColor; fill.shadowOpacity = 0.85
+        fill.shadowRadius = 2.5; fill.shadowOffset = .zero
+        node.addSublayer(fill)
         return node
     }
 
-    private func installLine(_ rect: CGRect, on root: CALayer, time: CFTimeInterval) {
-        let track = rail(for: rect); root.addSublayer(track)
-        let signal = CAKeyframeAnimation(keyPath: "opacity")
-        signal.values = [0, 1, 1, 0]; signal.keyTimes = [0, 0.08, 0.85, 1]
-        signal.duration = SweepLineLayout.lineDuration; signal.beginTime = time
-        track.opacity = 0; track.add(signal, forKey: "rail-arm")
+    private func capPosition(for rect: CGRect, endpoint point: CGPoint?) -> CGPoint {
+        let t = thickness(rect)
+        return CGPoint(x: (point?.x ?? rect.maxX)+t/2+2, y: (point?.y ?? rect.midY)-(t+1)/2)
+    }
 
-        let clip = CALayer(); clip.frame = rect.insetBy(dx: -2, dy: -4); clip.masksToBounds = true
-        root.addSublayer(clip)
-        let width = min(66, max(28, rect.width*0.12))
-        let carriage = CALayer(); carriage.bounds = CGRect(x: 0, y: 0, width: width, height: clip.bounds.height)
-        carriage.position = CGPoint(x: -width/2, y: clip.bounds.midY)
-        // Opaque plates and narrow gaps replace the old blurred gradient tail.
-        carriage.addSublayer(block(CGRect(x: width-8, y: 0, width: 8, height: clip.bounds.height), black))
-        carriage.addSublayer(block(CGRect(x: width-5, y: 1, width: 3, height: clip.bounds.height-2), white))
-        for i in 0..<3 {
-            let length = width*CGFloat(3-i)/6
-            carriage.addSublayer(block(CGRect(x: width-12-length, y: CGFloat(i)*5+3,
-                                             width: length, height: i == 0 ? 4 : 2), i == 1 ? white : ember))
+    /// Short flat shard with a black keyline, flying from `origin` along `angle`.
+    private func shard(from origin: CGPoint, angle: CGFloat, length: CGFloat, distance: CGFloat,
+                       color: NSColor, on root: CALayer, begin: CFTimeInterval, duration: CFTimeInterval) {
+        let node = CALayer(); node.bounds = CGRect(x: 0, y: 0, width: length, height: 4)
+        node.position = origin; node.opacity = 0
+        node.addSublayer(block(node.bounds, black))
+        node.addSublayer(block(node.bounds.insetBy(dx: 1, dy: 1), color))
+        node.setAffineTransform(CGAffineTransform(rotationAngle: angle))
+        root.addSublayer(node)
+        let travel = CABasicAnimation(keyPath: "position")
+        travel.fromValue = NSValue(point: origin)
+        travel.toValue = NSValue(point: CGPoint(x: origin.x+cos(angle)*distance, y: origin.y+sin(angle)*distance))
+        travel.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
+        let stretch = CAKeyframeAnimation(keyPath: "transform.scale.x")
+        stretch.values = [0.3, 1, 0.15]; stretch.keyTimes = [0, 0.2, 1]
+        let light = CAKeyframeAnimation(keyPath: "opacity")
+        light.values = [0, 1, 1, 0]; light.keyTimes = [0, 0.05, 0.6, 1]
+        let group = CAAnimationGroup(); group.animations = [travel, stretch, light]
+        for animation in group.animations! { animation.duration = duration }
+        group.beginTime = begin; group.duration = duration
+        node.add(group, forKey: "shard")
+    }
+
+    /// One-to-two frame near-white flash: the "contact" frame of an impact.
+    private func flash(at point: CGPoint, size: CGSize, on root: CALayer, begin: CFTimeInterval) {
+        let node = block(CGRect(origin: .zero, size: size), lineCore)
+        node.position = point; node.opacity = 0
+        root.addSublayer(node)
+        let light = CAKeyframeAnimation(keyPath: "opacity")
+        light.values = [1, 1, 0]; light.keyTimes = [0, 0.4, 1]; light.calculationMode = .discrete
+        light.duration = 0.05; light.beginTime = begin
+        node.add(light, forKey: "contact-flash")
+    }
+
+    /// Wind-up, accelerate into the stop, hit-stop, contact flash, squash and
+    /// recoil. Only a paragraph's last row lands on the orange endpoint; other
+    /// rows end with a small near-white tick.
+    private func installLine(_ rect: CGRect, terminal: Bool, on root: CALayer, time: CFTimeInterval) {
+        let travel = Self.travelTime, total = Self.travelTime+Self.hitStop
+        let hitAt = time+travel
+        let wind = 0.035/travel
+        let accelerate = CAMediaTimingFunction(controlPoints: 0.75, 0, 0.95, 0.45)
+        let row = CALayer(); row.frame = root.bounds; root.addSublayer(row)
+
+        let track = rail(for: rect, anchorLeft: true); row.addSublayer(track)
+        let draw = CAKeyframeAnimation(keyPath: "transform.scale.x")
+        draw.values = [0.001, 0.001, 1]; draw.keyTimes = [0, NSNumber(value: wind), 1]
+        draw.timingFunctions = [CAMediaTimingFunction(name: .linear), accelerate]
+        draw.duration = travel; draw.beginTime = time
+        draw.fillMode = .backwards
+        track.add(draw, forKey: "rail-draw")
+
+        let clip = CALayer(); clip.frame = rect.insetBy(dx: -4, dy: -4); clip.masksToBounds = true
+        row.addSublayer(clip)
+        let h = clip.bounds.height
+        let width = min(56, max(22, rect.height*1.6))
+        let carriage = CALayer(); carriage.bounds = CGRect(x: 0, y: 0, width: width, height: h)
+        carriage.anchorPoint = CGPoint(x: 1, y: 0.5)
+        carriage.addSublayer(block(CGRect(x: width-6, y: 0, width: 6, height: h), black))
+        carriage.addSublayer(block(CGRect(x: width-4, y: 1, width: 2, height: h-2), lineCore))
+        for (length, y) in [(width*0.62, h*0.62), (width*0.36, h*0.3)] {
+            carriage.addSublayer(block(CGRect(x: width-8-length, y: y, width: length, height: 2), lineCore))
         }
+        let endX = clip.bounds.width-3
+        carriage.position = CGPoint(x: endX, y: h/2); carriage.opacity = 0
         clip.addSublayer(carriage)
-        let travel = CAKeyframeAnimation(keyPath: "position.x")
-        travel.values = [-width/2, -width/2+3, clip.bounds.width+width/2, clip.bounds.width+width/2]
-        travel.keyTimes = [0, 0.12, 0.8, 1]
-        travel.timingFunctions = [CAMediaTimingFunction(name: .linear),
-                                 CAMediaTimingFunction(controlPoints: 0.6, 0, 0.2, 1),
-                                 CAMediaTimingFunction(name: .linear)]
-        travel.duration = 0.245; travel.beginTime = time
-        travel.fillMode = .forwards; travel.isRemovedOnCompletion = false
-        carriage.add(travel, forKey: "heavy-scan")
+        let move = CAKeyframeAnimation(keyPath: "position.x")
+        move.values = [8, 3, endX, endX]
+        move.keyTimes = [0, NSNumber(value: wind*travel/total), NSNumber(value: travel/total), 1]
+        move.timingFunctions = [CAMediaTimingFunction(name: .easeOut), accelerate, CAMediaTimingFunction(name: .linear)]
+        let visible = CABasicAnimation(keyPath: "opacity"); visible.fromValue = 1; visible.toValue = 1
+        let carry = CAAnimationGroup(); carry.animations = [move, visible]
+        move.duration = total; visible.duration = total
+        carry.duration = total; carry.beginTime = time
+        carriage.add(carry, forKey: "carriage")
 
-        let stop = lock(at: CGPoint(x: rect.maxX, y: rect.midY)); root.addSublayer(stop); stop.opacity = 0
-        let squash = CAKeyframeAnimation(keyPath: "transform.scale.x")
-        squash.values = [1.7, 0.55, 1]; squash.keyTimes = [0, 0.3, 1]
-        let hit = CAKeyframeAnimation(keyPath: "opacity"); hit.values = [1, 1, 1]; hit.keyTimes = [0, 0.3, 1]
-        squash.duration = 0.075; hit.duration = 0.075
-        let impact = CAAnimationGroup(); impact.animations = [squash, hit]
-        impact.beginTime = time+0.245; impact.duration = 0.075
-        impact.fillMode = .forwards; impact.isRemovedOnCompletion = false
-        stop.add(impact, forKey: "mechanical-stop")
+        guard terminal else {
+            let tick = block(CGRect(x: rect.maxX+1, y: rect.minY+rect.height*0.15, width: 2, height: rect.height*0.7), lineCore)
+            tick.opacity = 0; row.addSublayer(tick)
+            let light = CAKeyframeAnimation(keyPath: "opacity")
+            light.values = [0, 1, 0]; light.keyTimes = [0, 0.2, 1]
+            light.duration = 0.09; light.beginTime = hitAt
+            tick.add(light, forKey: "row-tick")
+            return
+        }
+        let endpointCap = cap(for: rect); endpointCap.opacity = 0; row.addSublayer(endpointCap)
+        let appear = CABasicAnimation(keyPath: "opacity"); appear.fromValue = 1; appear.toValue = 1
+        let stretchY = CAKeyframeAnimation(keyPath: "transform.scale.y")
+        stretchY.values = [1.9, 0.6, 1.12, 1]; stretchY.keyTimes = [0, 0.3, 0.65, 1]
+        let stretchX = CAKeyframeAnimation(keyPath: "transform.scale.x")
+        stretchX.values = [0.45, 1.7, 0.92, 1]; stretchX.keyTimes = [0, 0.3, 0.65, 1]
+        let squash = CAAnimationGroup(); squash.animations = [appear, stretchY, stretchX]
+        for animation in squash.animations! { animation.duration = Self.impactTime }
+        squash.duration = Self.impactTime; squash.beginTime = hitAt
+        squash.fillMode = .forwards; squash.isRemovedOnCompletion = false
+        endpointCap.add(squash, forKey: "endpoint-impact")
+
+        let recoil = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        recoil.values = [0, 3, -1.5, 0]; recoil.keyTimes = [0, 0.25, 0.6, 1]
+        recoil.duration = 0.11; recoil.beginTime = hitAt
+        row.add(recoil, forKey: "recoil")
+
+        let origin = endpointCap.position
+        flash(at: origin, size: CGSize(width: endpointCap.bounds.width+6, height: endpointCap.bounds.height+4),
+              on: row, begin: hitAt)
+        for (index, degrees) in [-32.0, 0, 32].enumerated() {
+            shard(from: CGPoint(x: origin.x+2, y: origin.y), angle: CGFloat(degrees * .pi/180),
+                  length: index == 1 ? 9 : 6, distance: index == 1 ? 16 : 11,
+                  color: index == 1 ? ember : lineCore, on: row, begin: hitAt+0.01, duration: 0.11)
+        }
     }
 
     func setEndpoint(_ point: CGPoint) {
         endpoint = point
-        // Estimated and actual layouts can re-anchor the lock without a flyover
-        // across unrelated text. The controller owns the screen coordinates.
+        // Estimated and actual layouts can re-anchor the endpoint without a
+        // flyover across unrelated text. The controller owns screen coordinates.
+        guard let last = rowRegions.last else { return }
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        endpointCore?.position = point
+        endpointCore?.position = capPosition(for: last, endpoint: point)
         CATransaction.commit()
     }
 
@@ -715,23 +890,33 @@ private final class SweepView: NSView {
         introRoot?.removeFromSuperlayer(); introRoot = nil
         let loading = CALayer(); loading.frame = bounds
         layer.addSublayer(loading); loadingRoot = loading
-        for (index, rect) in rowRegions.enumerated() {
+        for rect in rowRegions {
             let line = rail(for: rect); rails.append(line); loading.addSublayer(line)
-            guard index == rowRegions.count-1 else { continue }
-            let core = lock(at: endpoint ?? CGPoint(x: rect.maxX, y: rect.midY))
-            loading.addSublayer(core); endpointCore = core
-            // A restrained three-step status cadence, not a flashing text box.
-            for i in 0..<3 {
-                let cell = block(CGRect(x: -7-CGFloat(i)*5, y: -5, width: 3, height: 3), i == 0 ? ember : white)
-                core.addSublayer(cell)
-                guard !reducedMotion else { continue }
-                cell.opacity = 0.25
-                let step = CAKeyframeAnimation(keyPath: "opacity")
-                step.values = [0.25, 1, 1, 0.25]; step.keyTimes = [0, 0.15, 0.45, 1]
-                step.calculationMode = .discrete; step.duration = 1.2; step.repeatCount = .infinity
-                step.beginTime = CACurrentMediaTime()+Double(i)*0.16
-                cell.add(step, forKey: "status-step")
-            }
+        }
+        installCaps(on: loading)
+        guard let last = rowRegions.last else { return }
+        let core = cap(for: last, at: endpoint)
+        loading.addSublayer(core); endpointCore = core
+        // A restrained three-step status cadence at the single final endpoint.
+        for i in 0..<3 {
+            let cell = block(CGRect(x: -6-CGFloat(i)*5, y: -5, width: 3, height: 3), i == 0 ? ember : lineCore)
+            core.addSublayer(cell)
+            guard !reducedMotion else { continue }
+            cell.opacity = 0.25
+            let step = CAKeyframeAnimation(keyPath: "opacity")
+            step.values = [0.25, 1, 1, 0.25]; step.keyTimes = [0, 0.15, 0.45, 1]
+            step.calculationMode = .discrete; step.duration = 1.2; step.repeatCount = .infinity
+            step.beginTime = CACurrentMediaTime()+Double(i)*0.16
+            cell.add(step, forKey: "status-step")
+        }
+    }
+
+    /// Static endpoints for every paragraph except the last, whose endpoint is
+    /// the movable status core.
+    private func installCaps(on loading: CALayer) {
+        caps.forEach { $0.removeFromSuperlayer() }
+        caps = paragraphEnds.sorted().filter { $0 < rowRegions.count-1 }.map { index in
+            let node = cap(for: rowRegions[index]); loading.addSublayer(node); return node
         }
     }
 
@@ -750,14 +935,15 @@ private final class SweepView: NSView {
         CATransaction.commit()
     }
 
-    func align(regions: [CGRect], endpoint: CGPoint?) {
+    func align(regions: [CGRect], paragraphEnds ends: Set<Int>, endpoint: CGPoint?) {
         guard let loading = loadingRoot, let last = regions.last else { return }
         let duration = reducedMotion ? 0 : 0.18
+        let easing = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
         func move(_ node: CALayer, from position: CGPoint) {
             guard duration > 0 else { return }
             let motion = CABasicAnimation(keyPath: "position")
             motion.fromValue = NSValue(point: position); motion.toValue = NSValue(point: node.position)
-            motion.duration = duration; motion.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
+            motion.duration = duration; motion.timingFunction = easing
             node.add(motion, forKey: "align-position")
         }
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -765,18 +951,18 @@ private final class SweepView: NSView {
         for (index, rect) in regions.enumerated() {
             let old = index < rails.count ? rails[index] : nil
             let previous = old?.presentation() ?? old
-            let start = previous?.position ?? CGPoint(x: rect.minX, y: rect.minY-2)
+            let start = previous?.position ?? CGPoint(x: rect.maxX, y: rect.minY-2)
             let width = previous.map { $0.bounds.width * $0.transform.m11 } ?? 1
             let line = rail(for: rect); loading.addSublayer(line); next.append(line)
             move(line, from: start)
             if duration > 0 {
                 let resize = CABasicAnimation(keyPath: "transform.scale.x")
                 resize.fromValue = max(0.001, width/max(1, rect.width)); resize.toValue = 1
-                resize.duration = duration; resize.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
+                resize.duration = duration; resize.timingFunction = easing
                 line.add(resize, forKey: "align-width")
             }
         }
-        // Removed rows contract to their start rather than leaving the old tail.
+        // Removed rows retract into their endpoint rather than leaving a tail.
         for (index, old) in rails.enumerated() {
             if index < regions.count || duration == 0 { old.removeFromSuperlayer(); continue }
             let collapse = CABasicAnimation(keyPath: "transform.scale.x")
@@ -785,63 +971,66 @@ private final class SweepView: NSView {
             old.add(collapse, forKey: "removed-row")
             DispatchQueue.main.asyncAfter(deadline: .now()+duration) { old.removeFromSuperlayer() }
         }
-        rails = next; rowRegions = regions; self.endpoint = endpoint
+        rails = next; rowRegions = regions; paragraphEnds = ends; self.endpoint = endpoint
+        installCaps(on: loading)
         if let core = endpointCore {
             let start = core.presentation()?.position ?? core.position
-            core.position = endpoint ?? CGPoint(x: last.maxX, y: last.midY)
+            core.position = capPosition(for: last, endpoint: endpoint)
             move(core, from: start)
         }
         alignedAt = CACurrentMediaTime()+duration
         CATransaction.commit()
     }
 
+    /// Rails retract into their endpoints, then the final endpoint punches and
+    /// throws shards forward in the reading direction.
     @discardableResult
     func release(burst: Bool) -> TimeInterval {
-        guard let layer else { return 0.12 }
+        guard let layer, let loading = loadingRoot else { return 0.12 }
         let delay = reducedMotion ? 0 : max(0, alignedAt-CACurrentMediaTime())
-        if let loading = loadingRoot {
+        if reducedMotion {
             loading.opacity = 0
             let cut = CABasicAnimation(keyPath: "opacity"); cut.fromValue = 1; cut.toValue = 0; cut.duration = 0.07
-            cut.beginTime = CACurrentMediaTime()+delay; cut.fillMode = .backwards
             loading.add(cut, forKey: "loading-cut")
+            return 0.12
         }
-        guard burst, !reducedMotion, let rect = rowRegions.last else { return delay+0.12 }
-        let origin = endpoint ?? CGPoint(x: rect.maxX, y: rect.midY)
-        let time = CACurrentMediaTime()+delay
-        let core = lock(at: origin); layer.addSublayer(core); core.opacity = 0
-        let press = CAKeyframeAnimation(keyPath: "transform.scale.x")
-        press.values = [1, 0.35, 2.2, 0.1]; press.keyTimes = [0, 0.22, 0.42, 1]
-        let light = CAKeyframeAnimation(keyPath: "opacity")
-        light.values = [1, 1, 1, 0]; light.keyTimes = [0, 0.22, 0.5, 1]
-        press.duration = 0.2; light.duration = 0.2
-        let snap = CAAnimationGroup(); snap.animations = [press, light]
-        snap.duration = 0.2; snap.beginTime = time
-        core.add(snap, forKey: "lock-release")
-
-        // Directed flat shards: a few deliberate rays carry more weight than
-        // a cloud of dust. Opaque black keylines preserve contrast on any theme.
-        for index in 0..<12 {
-            let angle = CGFloat(index)*(.pi*2/12) + .pi/12
-            let distance: CGFloat = index % 3 == 0 ? 40 : 25
-            let ray = CALayer(); ray.bounds = CGRect(x: 0, y: 0, width: index % 3 == 0 ? 15 : 8, height: 5)
-            ray.position = origin; ray.opacity = 0
-            ray.addSublayer(block(ray.bounds, black))
-            ray.addSublayer(block(ray.bounds.insetBy(dx: 1, dy: 1), index % 3 == 0 ? ember : white))
-            ray.setAffineTransform(CGAffineTransform(rotationAngle: angle))
-            layer.addSublayer(ray)
-            let travel = CABasicAnimation(keyPath: "position")
-            travel.fromValue = NSValue(point: origin)
-            travel.toValue = NSValue(point: CGPoint(x: origin.x+cos(angle)*distance, y: origin.y+sin(angle)*distance*0.8))
-            travel.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
-            let scale = CAKeyframeAnimation(keyPath: "transform.scale.x")
-            scale.values = [0.3, 1, 0.15]; scale.keyTimes = [0, 0.2, 1]
-            let cut = CAKeyframeAnimation(keyPath: "opacity")
-            cut.values = [0, 1, 1, 0]; cut.keyTimes = [0, 0.05, 0.65, 1]
-            for animation in [travel, scale, cut] { animation.duration = 0.17 }
-            let group = CAAnimationGroup(); group.animations = [travel, scale, cut]
-            group.beginTime = time+0.045; group.duration = 0.17
-            ray.add(group, forKey: "directed-shard")
+        let start = CACurrentMediaTime()+delay
+        let retract = 0.09
+        for line in rails {
+            let pull = CABasicAnimation(keyPath: "transform.scale.x")
+            pull.fromValue = 1; pull.toValue = 0.001; pull.duration = retract
+            pull.timingFunction = CAMediaTimingFunction(controlPoints: 0.7, 0, 1, 0.5)
+            pull.beginTime = start; pull.fillMode = .both; pull.isRemovedOnCompletion = false
+            line.add(pull, forKey: "retract")
         }
-        return delay+0.23
+        for node in caps {
+            let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 1; fade.toValue = 0
+            fade.duration = 0.06; fade.beginTime = start+retract*0.6
+            fade.fillMode = .forwards; fade.isRemovedOnCompletion = false
+            node.add(fade, forKey: "cap-out")
+        }
+        guard let core = endpointCore else { return delay+retract+0.08 }
+        let hitAt = start+retract
+        let punchY = CAKeyframeAnimation(keyPath: "transform.scale.y")
+        punchY.values = [1, 1.5, 0.05]; punchY.keyTimes = [0, 0.35, 1]
+        let punchX = CAKeyframeAnimation(keyPath: "transform.scale.x")
+        punchX.values = [1, 0.6, burst ? 2.2 : 1]; punchX.keyTimes = [0, 0.35, 1]
+        let out = CAKeyframeAnimation(keyPath: "opacity")
+        out.values = [1, 1, 0]; out.keyTimes = [0, 0.5, 1]
+        let punch = CAAnimationGroup(); punch.animations = [punchY, punchX, out]
+        for animation in punch.animations! { animation.duration = 0.16 }
+        punch.duration = 0.16; punch.beginTime = hitAt
+        punch.fillMode = .forwards; punch.isRemovedOnCompletion = false
+        core.add(punch, forKey: "endpoint-release")
+        guard burst else { return delay+retract+0.16 }
+        let origin = core.position
+        flash(at: origin, size: CGSize(width: core.bounds.width+8, height: core.bounds.height+6), on: layer, begin: hitAt)
+        for index in 0..<9 {
+            let angle = CGFloat(-70+Double(index)*17.5) * .pi/180
+            let major = index % 3 == 1
+            shard(from: origin, angle: angle, length: major ? 14 : 8, distance: major ? 34 : 22,
+                  color: major ? ember : lineCore, on: layer, begin: hitAt+0.01, duration: 0.18)
+        }
+        return delay+retract+0.2
     }
 }

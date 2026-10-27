@@ -199,6 +199,56 @@ final class PolishEffectTests: XCTestCase {
                     CGRect(x: 10, y: 42, width: 60, height: 18)]
         XCTAssertEqual(SweepLineLayout.rows(in: rows), rows)
     }
+    func testParagraphHasExactlyOneEndpointAtItsLastRow() {
+        // Three wrapped lines, a blank line, then two more lines.
+        let rows = [CGRect(x: 20, y: 100, width: 300, height: 18),
+                    CGRect(x: 20, y: 124, width: 300, height: 18),
+                    CGRect(x: 20, y: 148, width: 120, height: 18),
+                    CGRect(x: 20, y: 196, width: 300, height: 18),
+                    CGRect(x: 20, y: 220, width: 80, height: 18)]
+        XCTAssertEqual(SweepLineLayout.paragraphs(rows), [0..<3, 3..<5])
+        XCTAssertEqual(SweepLineLayout.paragraphEnds(rows), [2, 4])
+        XCTAssertEqual(SweepLineLayout.paragraphEnds(Array(rows.prefix(3))), [2])
+        XCTAssertEqual(SweepLineLayout.paragraphEnds([rows[0]]), [0])
+        XCTAssertTrue(SweepLineLayout.paragraphEnds([]).isEmpty)
+    }
+    func testLinesShareParagraphHeightAndSnapContinuationIndent() {
+        let rows = [CGRect(x: 32, y: 100, width: 260, height: 20),   // first-line indent kept
+                    CGRect(x: 21, y: 125, width: 280, height: 16),   // OCR jitter on left/height
+                    CGRect(x: 20, y: 148, width: 90, height: 18)]
+        let lines = SweepLineLayout.lines(in: rows)
+        XCTAssertEqual(lines.map(\.height), [18, 18, 18])
+        XCTAssertEqual(lines.map(\.maxY), rows.map(\.maxY))
+        XCTAssertEqual(lines[0].minX, 32)
+        XCTAssertEqual(lines[1].minX, 20)
+        XCTAssertEqual(lines[1].maxX, rows[1].maxX)
+    }
+    func testStrokeFollowsTextSize() {
+        XCTAssertEqual(SweepLineLayout.stroke(lineHeight: 11), 1)
+        XCTAssertEqual(SweepLineLayout.stroke(lineHeight: 18), 1)
+        XCTAssertEqual(SweepLineLayout.stroke(lineHeight: 28), 2)
+        XCTAssertEqual(SweepLineLayout.stroke(lineHeight: 80), 2)
+    }
+    func testSingleLineEstimateStaysCentredInsideField() {
+        let field = CGRect(x: 100, y: 50, width: 400, height: 30)
+        let short = try! XCTUnwrap(SweepLineLayout.singleLineEstimate(field: field, text: "搜索 iMic"))
+        XCTAssertEqual(short.midY, field.midY, accuracy: 0.01)
+        XCTAssertTrue(field.contains(short))
+        let long = try! XCTUnwrap(SweepLineLayout.singleLineEstimate(field: field, text: String(repeating: "很长的文字", count: 40)))
+        XCTAssertTrue(field.contains(long))
+        XCTAssertGreaterThan(long.width, short.width)
+        XCTAssertNil(SweepLineLayout.singleLineEstimate(field: CGRect(x: 0, y: 0, width: 400, height: 200), text: "多行"))
+        XCTAssertNil(SweepLineLayout.singleLineEstimate(field: field, text: ""))
+    }
+    func testFieldScopedOCRAllowsInFieldChromeAfterTail() {
+        let text = "这是本轮口述并写入输入框的完整文字需要在字数统计后面依然能够被正确定位"
+        let fragments = [text, "36/2000"]
+        XCTAssertNil(TextRegionMatcher.locate(expected: String(repeating: "已滚出的内容", count: 30)+text, fragments: fragments))
+        XCTAssertNotNil(TextRegionMatcher.locate(expected: String(repeating: "已滚出的内容", count: 30)+text,
+                                                 fragments: fragments, fieldScoped: true))
+        // Ambiguity protection still applies inside a field.
+        XCTAssertNil(TextRegionMatcher.locate(expected: text, fragments: [text, text, "36/2000"], fieldScoped: true))
+    }
     func testRowStaggerIsOrderedAndHandoffRemainsBounded() {
         for count in [1, 3, 8, 40] {
             let delays = (0..<count).map { SweepLineLayout.delay(row: $0, lineCount: count) }

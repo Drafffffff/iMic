@@ -19,6 +19,59 @@ enum SweepLineLayout {
         return result
     }
 
+    /// Same rows with OCR jitter removed per paragraph: one shared line height
+    /// (bottom edges stay put) and continuation lines snapped to the left edge.
+    static func lines(in regions: [CGRect]) -> [CGRect] {
+        let rows = rows(in: regions)
+        var result = rows
+        for paragraph in paragraphs(rows) {
+            let heights = rows[paragraph].map(\.height).sorted()
+            let height = heights[heights.count/2]
+            let left = rows[paragraph].map(\.minX).min() ?? 0
+            for index in paragraph {
+                let row = rows[index]
+                let x = index != paragraph.lowerBound && row.minX-left < height*0.6 ? left : row.minX
+                result[index] = CGRect(x: x, y: row.maxY-height, width: row.maxX-x, height: height)
+            }
+        }
+        return result
+    }
+
+    /// Reading-order rows split where a blank-line sized gap appears.
+    static func paragraphs(_ rows: [CGRect]) -> [Range<Int>] {
+        guard !rows.isEmpty else { return [] }
+        var result: [Range<Int>] = []
+        var start = 0
+        for index in rows.indices.dropFirst() {
+            let previous = rows[index-1], next = rows[index]
+            if next.minY-previous.maxY > max(previous.height, next.height)*0.8 {
+                result.append(start..<index); start = index
+            }
+        }
+        result.append(start..<rows.count)
+        return result
+    }
+
+    /// One orange endpoint per paragraph: the indices of each paragraph's last row.
+    static func paragraphEnds(_ rows: [CGRect]) -> Set<Int> {
+        Set(paragraphs(rows).map { $0.upperBound-1 })
+    }
+
+    /// Keyline core thickness follows the text size so rails sit like underlines.
+    static func stroke(lineHeight: CGFloat) -> CGFloat {
+        min(2, max(1, (lineHeight/14).rounded()))
+    }
+
+    /// Single-line fields centre their text vertically. When neither AX ranges
+    /// nor OCR are usable, approximate the row from the field and transcript.
+    static func singleLineEstimate(field: CGRect, text: String) -> CGRect? {
+        guard field.width > 40, field.height > 12, field.height < 64, !text.isEmpty else { return nil }
+        let height = min(22, field.height*0.6)
+        let inset = min(10, field.width*0.05)
+        let width = min(field.width-inset*2, max(height, CGFloat(PolishEndpointEstimate.units(in: text))*height*0.92))
+        return CGRect(x: field.minX+inset, y: field.midY-height/2, width: width, height: height)
+    }
+
     static func duration(lineCount: Int) -> TimeInterval {
         lineDuration + min(0.12, Double(max(0, lineCount-1))*0.04)
     }
@@ -189,8 +242,11 @@ enum TextRegionMatcher {
         locate(expected: expected, fragments: fragments, cancelled: cancelled)?.spans
     }
 
+    /// `fieldScoped`: the OCR image is the text field itself (AX frame), so the
+    /// transcript tail may be followed by in-field chrome such as counters or
+    /// placeholders. Window-wide OCR keeps requiring the tail to end the image.
     static func locate(expected: String, fragments: [String], allowClipped: Bool = false,
-                       cancelled: () -> Bool = { false }) -> Match? {
+                       fieldScoped: Bool = false, cancelled: () -> Bool = { false }) -> Match? {
         // Bound CPU/memory independently of the maximum ten-minute recording.
         let pattern = Array(tokens([expected]).suffix(1_200))
         let source = Array(tokens(fragments).suffix(4_000))
@@ -228,7 +284,7 @@ enum TextRegionMatcher {
         let consumed = max(bestI - i, bestJ - j)
         guard consumed >= 6, Double(matches) / Double(consumed) >= 0.9 else { return nil }
         let full = Double(bestI - i) / Double(m) >= 0.85
-        let visibleSuffix = bestI == m && bestJ >= n - 2 && matches >= 24
+        let visibleSuffix = bestI == m && (bestJ >= n - 2 || fieldScoped) && matches >= 24
         // Narrow single-line fields may show fewer than 24 characters, or a
         // middle slice. Require a strong match covering most visible OCR text;
         // retain the existing competing-occurrence rejection below.
