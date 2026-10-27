@@ -7,7 +7,9 @@ import CryptoKit
 /// - 控件与音频共用一条 TCP 流，20ms 音频帧天然有序，不需要重传窗口。
 /// - 先用 Curve25519 交换临时密钥，再用六位配对码派生密钥完成首次信任。
 /// - 配对成功后双方保存 32 字节令牌，后续会话密钥 = HKDF(ECDH, salt: 令牌)。
-/// - 每一帧用 AES-GCM 独立封装（随机 nonce），篡改或重放都会被拒绝。
+/// - 每一帧用 AES-GCM 独立封装（随机 nonce），篡改会被拒绝。
+///   会话密钥每次连接重新派生，旧连接的帧无法在新连接中通过校验；但同一连接内
+///   没有帧序号，也不区分方向，不能防止路径上的攻击者重放、丢弃、重排或反射已有帧。
 public enum IMicLink {
     public static let version = 1
     public static let serviceType = "_imic._tcp"
@@ -474,7 +476,7 @@ public enum LinkCrypto {
         peerPublicKey: String,
         code: String
     ) throws -> LinkCipher {
-        guard code.count == 6, code.allSatisfy(\.isNumber) else { throw LinkError.invalidPairingCode }
+        guard PairingCode.isValid(code) else { throw LinkError.invalidPairingCode }
         let salt = Data(SHA256.hash(data: Data(("iMic-pair-v1:" + code).utf8)))
         return try cipher(privateKey: privateKey, peerPublicKey: peerPublicKey, salt: salt, info: "iMic-pair-v1")
     }
@@ -545,7 +547,48 @@ public enum PairingCode {
         return "\(code[..<middle]) \(code[middle...])"
     }
 
-    public static func normalize(_ text: String) -> String {
-        String(text.filter(\.isNumber).prefix(6))
+    /// 只接受 ASCII 0-9；`Character.isNumber` 也会放行「五」「½」「٣」等字符。
+    public static func isValid(_ code: String) -> Bool {
+        code.utf8.count == 6 && code.utf8.allSatisfy { $0 >= 0x30 && $0 <= 0x39 }
     }
+
+    public static func normalize(_ text: String) -> String {
+        String(text.filter { $0.isASCII && $0.isWholeNumber }.prefix(6))
+    }
+}
+
+/// 配对码在线尝试的全局限速。按 Mac 计数而非按连接计数，重连不能清零。
+/// 达到上限后调用方必须轮换配对码；冷却时长逐次翻倍，配对成功或用户在 Mac 上手动换码后复位。
+public struct PairingThrottle: Equatable {
+    public static let failureLimit = 5
+    public static let baseLockout: TimeInterval = 30
+    public static let maxLockout: TimeInterval = 15 * 60
+
+    public private(set) var failures = 0
+    public private(set) var lockouts = 0
+    public private(set) var lockedUntil: Date?
+
+    public init() {}
+
+    /// 冷却剩余秒数；未锁定返回 nil。
+    public func remainingLock(at now: Date) -> TimeInterval? {
+        guard let lockedUntil, now < lockedUntil else { return nil }
+        return lockedUntil.timeIntervalSince(now)
+    }
+
+    /// 记一次配对码错误；本次触发冷却时返回 true，调用方须同时轮换配对码。
+    public mutating func recordFailure(at now: Date) -> Bool {
+        failures += 1
+        guard failures >= Self.failureLimit else { return false }
+        failures = 0
+        let lockout = min(Self.maxLockout, Self.baseLockout * pow(2, Double(lockouts)))
+        lockouts += 1
+        lockedUntil = now.addingTimeInterval(lockout)
+        return true
+    }
+
+    /// 配对码自然过期轮换：旧码上的错误次数作废，冷却与升级保持不变。
+    public mutating func codeRotated() { failures = 0 }
+
+    public mutating func reset() { self = PairingThrottle() }
 }

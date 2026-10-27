@@ -44,13 +44,20 @@ payload[length]
    - `pair_key = HKDF-SHA256(ECDH(...), salt = SHA256("iMic-pair-v1:" + code), info = "iMic-pair-v1")`
    - iPhone 用 `pair_key` 加密 `pair`，内容为设备名与一个新的 32 字节随机 `token`。
    - Mac 解密成功才保存令牌，并用 `pair_key` 回复 `paired`；随后切换为 `session_key`，发送 `ready`。
-   - 错误配对码最多尝试 3 次，随后断开。配对成功后配对码立即轮换。
+   - Mac 在收到每次 `pair` 时按**当前**配对码派生 `pair_key`；等待输入期间配对码过期或被手动更换，也能直接用新码配对。
+   - 单条连接内错误配对码最多尝试 3 次，随后以 `auth` 断开。
+   - 错误次数另按 Mac 全局累计，重连不会清零：累计 5 次后立即轮换配对码并进入冷却，冷却 30 秒起逐次翻倍、上限 15 分钟。冷却期间 Mac 不解密 `pair`，直接回复 `pair_locked`，也不计入错误次数。配对成功或用户在 Mac 上手动换码后复位。
+   - 配对成功后配对码立即轮换。
+   - iPhone 收到 `pair_code` / `pair_locked` 后丢弃已提交的码，重连时不得自动重发。
 
 安全边界：
 
 - ECDH 临时密钥每次连接重新生成，前向保密。
 - 六位码只用于首次信任；之后的连接依赖 32 字节令牌，离线猜解不可行。
-- 每帧 AES-GCM 使用独立随机 nonce，任何篡改、重放都会失败并断开。
+- 每帧 AES-GCM 使用独立随机 nonce，篡改的帧会解密失败并断开。
+- 会话密钥每次连接重新派生，旧连接的帧在新连接上无法通过校验。但**同一连接内**的加密帧没有序号、两个方向共用同一把密钥，能截获流量的攻击者可以重放、丢弃、重排或把帧反射回发送方；音频帧靠自身 `seq` 去重，控制消息没有此保护。修复需要协议升级（帧序号 + 按方向派生密钥）。
+- 配对阶段的 ECDH 本身未经认证：被动监听者无法枚举配对码，但配对时在线的主动中间人截获一帧 `pair` 后可以离线试出六位码。全局限速只限制直接在线猜码，不能防御这种攻击；彻底解决需要改用 PAKE（如 CPace / SPAKE2）。
+- 新连接先完成握手；只有认证或配对成功后才替换当前 iPhone，未认证连接不能挤掉已就绪链路。同时握手的候选连接最多 4 条，超出时淘汰最早的候选。
 - 令牌保存在 iPhone 钥匙串（`AfterFirstUnlockThisDeviceOnly`）与 Mac 的 0600 文件中，不进日志。
 
 ## 消息
@@ -64,7 +71,7 @@ payload[length]
 | `pair` | iPhone → Mac | `device_id, device_name, token` | 首次配对 |
 | `paired` | Mac → iPhone | `mac_id, name` | 配对确认 |
 | `ready` | Mac → iPhone | — | 链路可用 |
-| `error` | 双向 | `code, message` | `pair_code` 可重试，其余通常断开 |
+| `error` | 双向 | `code, message` | `pair_code` 可重试；`pair_locked` 表示配对冷却中，`message` 含剩余秒数，连接保持；其余通常断开 |
 | `audio.start` | iPhone → Mac | `session` | 开始一段输入 |
 | audio 帧 | iPhone → Mac | 二进制 | 见下 |
 | `audio.end` | iPhone → Mac | `session, samples, frames` | 结束并提交识别 |

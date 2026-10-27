@@ -19,24 +19,36 @@ final class LinkServer {
         case ready
     }
 
+    /// 单条 TCP 连接及其握手状态。新连接先作为候选完成握手，
+    /// 认证或配对成功后才替换当前 iPhone，未认证连接不能挤掉已就绪的链路。
+    private final class Peer {
+        let connection: NWConnection
+        var decoder = LinkFrameDecoder()
+        var phase: Phase = .awaitingHello
+        var cipher: LinkCipher?
+        var privateKey: Curve25519.KeyAgreement.PrivateKey?
+        var peerPublicKey: String?
+        var deviceID: String?
+        var name: String?
+        var pairAttempts = 0
+        var lastReceiveAt = Date()
+        var handshakeTimeout: DispatchWorkItem?
+
+        init(connection: NWConnection) {
+            self.connection = connection
+        }
+    }
+
+    /// 同时握手的候选连接上限；超出时淘汰最早的候选，不影响已就绪链路。
+    private static let maxPendingPeers = 4
+
     let store: PairingStore
     private let fixedPort: UInt16?
     private let queue = DispatchQueue(label: "imic.link.server")
     private var listener: NWListener?
-    private var connection: NWConnection?
-    private var decoder = LinkFrameDecoder()
-    private var phase: Phase = .awaitingHello
-    private var cipher: LinkCipher?
-    private var pendingPairCipher: LinkCipher?
-    private var privateKey: Curve25519.KeyAgreement.PrivateKey?
-    private var peerPublicKey: String?
-    private var clientDeviceID: String?
-    private var clientName: String?
-    private var pairAttempts = 0
-    private var lastReceiveAt = Date()
+    private var active: Peer?
+    private var pending: [Peer] = []
     private var heartbeat: DispatchSourceTimer?
-    private var handshakeTimeout: DispatchWorkItem?
-    private var everConnected = false
     private var listenerPort: UInt16?
 
     var onState: ((State) -> Void)?
@@ -47,11 +59,11 @@ final class LinkServer {
     var onDisconnect: (() -> Void)?
 
     var connectedDeviceName: String? {
-        queue.sync { phase == .ready ? clientName : nil }
+        queue.sync { active?.name }
     }
 
     var isConnected: Bool {
-        queue.sync { phase == .ready }
+        queue.sync { active != nil }
     }
 
     /// 本机回环端口，供蓝牙 GATT 兜底桥接使用。
@@ -70,18 +82,16 @@ final class LinkServer {
 
     func stop() {
         queue.async {
-            self.closeConnectionLocked(notify: false)
+            self.closeAllLocked(notify: false)
             self.listener?.cancel()
             self.listener = nil
             self.listenerPort = nil
-            self.heartbeat?.cancel()
-            self.heartbeat = nil
         }
     }
 
     /// 主动断开当前 iPhone（例如用户在设置里解除配对）。
     func disconnect() {
-        queue.async { self.closeConnectionLocked(notify: true) }
+        queue.async { self.closeAllLocked(notify: true) }
     }
 
     private func startLocked() {
@@ -135,84 +145,79 @@ final class LinkServer {
         listener = nil
     }
 
-    private func accept(_ newConnection: NWConnection) {
-        IMicLog.write("mac.link", "accept new connection peer=\(newConnection.endpoint); replacing current")
-        // 同一时间只保留最新连接；旧连接立即释放，避免僵尸链路占用识别通道。
-        closeConnectionLocked(notify: true)
-        connection = newConnection
-        decoder.reset()
-        phase = .awaitingHello
-        cipher = nil
-        pendingPairCipher = nil
-        privateKey = nil
-        peerPublicKey = nil
-        clientDeviceID = nil
-        clientName = nil
-        pairAttempts = 0
-        lastReceiveAt = Date()
-        everConnected = false
+    private func accept(_ connection: NWConnection) {
+        IMicLog.write("mac.link", "accept candidate peer=\(connection.endpoint) pending=\(pending.count) active=\(active != nil)")
+        if pending.count >= Self.maxPendingPeers {
+            closeLocked(pending[0], notify: false)
+        }
+        let peer = Peer(connection: connection)
+        pending.append(peer)
 
-        newConnection.stateUpdateHandler = { [weak self] state in
-            guard let self = self, self.connection === newConnection else { return }
+        connection.stateUpdateHandler = { [weak self, weak peer] state in
+            guard let self, let peer, self.isCurrent(peer) else { return }
             switch state {
             case .ready:
-                self.armHandshakeTimeout()
-                self.receiveLocked()
+                self.armHandshakeTimeout(peer)
+                self.receiveLocked(peer)
             case .failed, .cancelled:
-                self.dropIfCurrent(newConnection)
+                self.closeLocked(peer, notify: true)
             default:
                 break
             }
         }
-        newConnection.start(queue: queue)
+        connection.start(queue: queue)
     }
 
-    private func armHandshakeTimeout() {
-        handshakeTimeout?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self = self, self.phase != .ready else { return }
-            self.sendErrorAndClose("timeout", "连接超时，请重试")
+    private func isCurrent(_ peer: Peer) -> Bool {
+        active === peer || pending.contains { $0 === peer }
+    }
+
+    private func armHandshakeTimeout(_ peer: Peer) {
+        peer.handshakeTimeout?.cancel()
+        let work = DispatchWorkItem { [weak self, weak peer] in
+            guard let self, let peer, self.isCurrent(peer), peer.phase != .ready else { return }
+            self.sendErrorAndClose(peer, "timeout", "连接超时，请重试")
         }
-        handshakeTimeout = work
+        peer.handshakeTimeout = work
         queue.asyncAfter(deadline: .now() + IMicLink.handshakeTimeout, execute: work)
     }
 
-    private func receiveLocked() {
-        guard let connection = connection else { return }
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+    private func receiveLocked(_ peer: Peer) {
+        peer.connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
             guard let self = self else { return }
             self.queue.async {
-                guard self.connection === connection else { return }
-                self.lastReceiveAt = Date()
+                guard self.isCurrent(peer) else { return }
+                peer.lastReceiveAt = Date()
                 if let data = data, !data.isEmpty {
                     do {
-                        let frames = try self.decoder.append(data)
+                        let frames = try peer.decoder.append(data)
                         for frame in frames {
-                            try self.handle(frame, on: connection)
+                            try self.handle(frame, from: peer)
+                            guard self.isCurrent(peer) else { return }
                         }
                     } catch {
-                        self.sendErrorAndClose("protocol", "链路数据无效")
+                        self.sendErrorAndClose(peer, "protocol", "链路数据无效")
                         return
                     }
                 }
                 if isComplete || error != nil {
-                    self.dropIfCurrent(connection)
+                    self.closeLocked(peer, notify: true)
                     return
                 }
-                self.receiveLocked()
+                self.receiveLocked(peer)
             }
         }
     }
 
-    private func handle(_ frame: LinkFrame, on connection: NWConnection) throws {
-        switch phase {
+    private func handle(_ frame: LinkFrame, from peer: Peer) throws {
+        switch peer.phase {
         case .ready:
             guard frame.kind != .json else {
-                sendErrorAndClose("protocol", "已连接后不接受明文帧")
+                sendErrorAndClose(peer, "protocol", "已连接后不接受明文帧")
                 return
             }
-            guard let cipher = cipher else {
-                sendErrorAndClose("protocol", "链路密钥缺失")
+            guard let cipher = peer.cipher else {
+                sendErrorAndClose(peer, "protocol", "链路密钥缺失")
                 return
             }
             let plaintext = try cipher.open(frame.payload)
@@ -225,24 +230,22 @@ final class LinkServer {
                 if message.t == "audio.end" {
                     guard let samples = message.samples, let frames = message.frames,
                           IMicLink.isValidAudioEnd(samples: samples, frames: frames) else {
-                        sendErrorAndClose("audio", "语音结束帧数或采样数无效")
+                        sendErrorAndClose(peer, "audio", "语音结束帧数或采样数无效")
                         return
                     }
                 }
                 if message.t == "polish.settings", let preferences = message.polish {
                     DispatchQueue.main.async { [weak self] in
-                        guard let self,
-                              self.queue.sync(execute: { self.connection === connection && self.phase == .ready }) else { return }
+                        guard let self, self.queue.sync(execute: { self.active === peer }) else { return }
                         self.onPolishPreferences?(preferences)
                     }
                 } else if ["polish.saved", "settings", "input.state", "input.result"].contains(message.t) {
-                    sendErrorAndClose("protocol", "iPhone 不能发送 Mac 的设置状态")
+                    sendErrorAndClose(peer, "protocol", "iPhone 不能发送 Mac 的设置状态")
                 } else if message.t == "ping" {
-                    try sendLocked(.pong(message.ts ?? 0))
+                    try sendLocked(.pong(message.ts ?? 0), to: peer)
                 } else {
                     DispatchQueue.main.async { [weak self] in
-                        guard let self,
-                              self.queue.sync(execute: { self.connection === connection && self.phase == .ready }) else { return }
+                        guard let self, self.queue.sync(execute: { self.active === peer }) else { return }
                         self.onMessage?(message)
                     }
                 }
@@ -250,60 +253,79 @@ final class LinkServer {
                 break
             }
 
-        case .awaitingAuth, .awaitingPair:
-            guard frame.kind == .sealedJSON, let cipher = cipher else {
-                sendErrorAndClose("protocol", "握手帧无效")
+        case .awaitingAuth:
+            guard frame.kind == .sealedJSON, let cipher = peer.cipher else {
+                sendErrorAndClose(peer, "protocol", "握手帧无效")
                 return
             }
-            let message: LinkMessage
+            guard let message = try? LinkMessage.decode(cipher.open(frame.payload)) else {
+                sendErrorAndClose(peer, "auth", "配对码不正确或链路已失效")
+                return
+            }
+            IMicLog.write("mac.link", "handshake message=\(message.t)")
+            guard message.t == "auth", message.deviceID == nil || message.deviceID == peer.deviceID else {
+                sendErrorAndClose(peer, "auth", "设备令牌不匹配")
+                return
+            }
+            becomeReady(peer)
+
+        case .awaitingPair:
+            guard frame.kind == .sealedJSON,
+                  let key = peer.privateKey,
+                  let peerPublic = peer.peerPublicKey,
+                  let deviceID = peer.deviceID else {
+                sendErrorAndClose(peer, "protocol", "握手帧无效")
+                return
+            }
+            // 冷却期间不解密，也不计入错误次数，避免冷却本身成为猜码通道。
+            if let remaining = store.pairingLockRemaining() {
+                try sendPlainLocked(.error("pair_locked", Self.lockedMessage(remaining)), to: peer)
+                return
+            }
+            // 每次尝试都按当前配对码派生密钥，配对码在等待期间过期或被手动更换也能用新码配对。
+            let pairCipher = try LinkCrypto.pairingCipher(
+                privateKey: key,
+                peerPublicKey: peerPublic,
+                code: store.currentCode()
+            )
+            guard let message = try? LinkMessage.decode(pairCipher.open(frame.payload)) else {
+                peer.pairAttempts += 1
+                if let remaining = store.recordPairFailure() {
+                    IMicLog.write("mac.link", "pair locked seconds=\(Int(remaining.rounded(.up)))")
+                    try sendPlainLocked(.error("pair_locked", Self.lockedMessage(remaining)), to: peer)
+                } else if peer.pairAttempts < 3 {
+                    try sendPlainLocked(.error("pair_code", "配对码不正确"), to: peer)
+                } else {
+                    sendErrorAndClose(peer, "auth", "配对码不正确或链路已失效")
+                }
+                return
+            }
+            IMicLog.write("mac.link", "handshake message=\(message.t)")
+            guard message.t == "pair",
+                  message.deviceID == deviceID,
+                  let rawToken = message.token,
+                  let token = Data(base64Encoded: rawToken),
+                  token.count == 32,
+                  let name = message.deviceName ?? peer.name
+            else {
+                sendErrorAndClose(peer, "pair", "配对信息无效")
+                return
+            }
             do {
-                message = try LinkMessage.decode(cipher.open(frame.payload))
-                IMicLog.write("mac.link", "handshake message=\(message.t) status=\(message.status ?? "-")")
+                try store.trust(deviceID: deviceID, name: name, token: token)
             } catch {
-                pairAttempts += 1
-                if phase == .awaitingPair, pairAttempts < 3 {
-                    try sendPlainLocked(.error("pair_code", "配对码不正确"))
-                    return
-                }
-                sendErrorAndClose("auth", "配对码不正确或链路已失效")
+                IMicLog.write("mac.link", "trust save failed=\(String(describing: error))")
+                sendErrorAndClose(peer, "pair", "无法保存配对信息")
                 return
             }
-            if phase == .awaitingAuth {
-                guard message.t == "auth", message.deviceID == nil || message.deviceID == clientDeviceID else {
-                    sendErrorAndClose("auth", "设备令牌不匹配")
-                    return
-                }
-                becomeReady()
-            } else {
-                guard message.t == "pair",
-                      message.deviceID == clientDeviceID,
-                      let rawToken = message.token,
-                      let token = Data(base64Encoded: rawToken),
-                      token.count == 32,
-                      let deviceID = clientDeviceID,
-                      let name = message.deviceName ?? clientName
-                else {
-                    sendErrorAndClose("pair", "配对信息无效")
-                    return
-                }
-                do {
-                    try store.trust(deviceID: deviceID, name: name, token: token)
-                } catch {
-                    IMicLog.write("mac.link", "trust save failed=\(String(describing: error))")
-                    sendErrorAndClose("pair", "无法保存配对信息")
-                    return
-                }
-                // 先用配对密钥确认成功，再切换到长期令牌派生的会话密钥。
-                if let pairCipher = pendingPairCipher, let key = privateKey, let peer = peerPublicKey {
-                    try sendLocked(.paired(macID: store.macID, name: store.macName), using: pairCipher)
-                    self.cipher = try LinkCrypto.sessionCipher(privateKey: key, peerPublicKey: peer, token: token)
-                }
-                becomeReady()
-            }
+            // 先用配对密钥确认成功，再切换到长期令牌派生的会话密钥。
+            try sendLocked(.paired(macID: store.macID, name: store.macName), to: peer, using: pairCipher)
+            peer.cipher = try LinkCrypto.sessionCipher(privateKey: key, peerPublicKey: peerPublic, token: token)
+            becomeReady(peer)
 
         case .awaitingHello:
             guard frame.kind == .json else {
-                sendErrorAndClose("protocol", "请先握手")
+                sendErrorAndClose(peer, "protocol", "请先握手")
                 return
             }
             let message = try LinkMessage.decode(frame.payload)
@@ -312,68 +334,62 @@ final class LinkServer {
                   let deviceID = message.deviceID,
                   UUID(uuidString: deviceID) != nil,
                   let name = message.deviceName, !name.isEmpty,
-                  let peer = message.publicKey
+                  let peerPublic = message.publicKey,
+                  (try? LinkCrypto.parsePublicKey(peerPublic)) != nil
             else {
-                sendErrorAndClose("protocol", "握手信息无效")
+                sendErrorAndClose(peer, "protocol", "握手信息无效")
                 return
             }
-            clientDeviceID = deviceID
-            clientName = String(name.prefix(64))
-            peerPublicKey = peer
+            peer.deviceID = deviceID
+            peer.name = String(name.prefix(64))
+            peer.peerPublicKey = peerPublic
             let key = LinkCrypto.makePrivateKey()
-            privateKey = key
+            peer.privateKey = key
             let serverPublic = LinkCrypto.publicKeyBase64(key)
 
             if message.hasToken == true, let token = store.token(for: deviceID) {
                 guard let session = try? LinkCrypto.sessionCipher(
                     privateKey: key,
-                    peerPublicKey: peer,
+                    peerPublicKey: peerPublic,
                     token: token
                 ) else {
-                    sendErrorAndClose("crypto", "无法协商会话密钥")
+                    sendErrorAndClose(peer, "crypto", "无法协商会话密钥")
                     return
                 }
-                cipher = session
-                phase = .awaitingAuth
+                peer.cipher = session
+                peer.phase = .awaitingAuth
                 try sendPlainLocked(.helloReply(
                     macID: store.macID,
                     name: store.macName,
                     publicKey: serverPublic,
                     status: "auth"
-                ))
+                ), to: peer)
             } else {
-                guard let pairCipher = try? LinkCrypto.pairingCipher(
-                    privateKey: key,
-                    peerPublicKey: peer,
-                    code: store.currentCode()
-                ) else {
-                    sendErrorAndClose("crypto", "无法协商配对密钥")
-                    return
-                }
-                cipher = pairCipher
-                pendingPairCipher = pairCipher
-                phase = .awaitingPair
+                peer.phase = .awaitingPair
                 try sendPlainLocked(.helloReply(
                     macID: store.macID,
                     name: store.macName,
                     publicKey: serverPublic,
                     status: "pair_required"
-                ))
+                ), to: peer)
                 DispatchQueue.main.async { [weak self] in self?.onPairRequest?() }
             }
         }
     }
 
-    private func becomeReady() {
-        IMicLog.write("mac.link", "become ready device=\(clientName ?? "-")")
-        phase = .ready
-        pendingPairCipher = nil
-        handshakeTimeout?.cancel()
-        handshakeTimeout = nil
-        let name = clientName ?? "iPhone"
-        everConnected = true
-        emit(.connected(name))
-        sendLockedAsync(.ready())
+    private func becomeReady(_ peer: Peer) {
+        IMicLog.write("mac.link", "become ready device=\(peer.name ?? "-") replacing=\(active != nil)")
+        pending.removeAll { $0 === peer }
+        // 只有通过认证的新连接才替换旧链路；旧连接按断开处理，会话状态由上层清理。
+        if let previous = active {
+            closeLocked(previous, notify: true)
+        }
+        peer.phase = .ready
+        peer.handshakeTimeout?.cancel()
+        peer.handshakeTimeout = nil
+        active = peer
+        emit(.connected(peer.name ?? "iPhone"))
+        sendActiveAsync(.ready())
         startHeartbeat()
     }
 
@@ -382,105 +398,99 @@ final class LinkServer {
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + 10, repeating: 10)
         timer.setEventHandler { [weak self] in
-            guard let self = self, self.phase == .ready else { return }
-            if Date().timeIntervalSince(self.lastReceiveAt) > 40 {
-                self.sendErrorAndClose("timeout", "连接已超时")
+            guard let self = self, let peer = self.active else { return }
+            if Date().timeIntervalSince(peer.lastReceiveAt) > 40 {
+                self.sendErrorAndClose(peer, "timeout", "连接已超时")
                 return
             }
-            self.sendLockedAsync(.ping(Date().timeIntervalSince1970))
+            self.sendActiveAsync(.ping(Date().timeIntervalSince1970))
         }
         heartbeat = timer
         timer.resume()
     }
 
-    private func dropIfCurrent(_ candidate: NWConnection) {
-        guard connection === candidate else { return }
-        closeConnectionLocked(notify: true)
-    }
-
-    private func closeConnectionLocked(notify: Bool) {
-        let wasReady = phase == .ready && everConnected
-        IMicLog.write("mac.link", "close connection notify=\(notify) wasReady=\(wasReady) phase=\(String(describing: phase))")
-        handshakeTimeout?.cancel()
-        handshakeTimeout = nil
-        heartbeat?.cancel()
-        heartbeat = nil
-        connection?.stateUpdateHandler = nil
-        connection?.cancel()
-        connection = nil
-        decoder.reset()
-        cipher = nil
-        pendingPairCipher = nil
-        privateKey = nil
-        peerPublicKey = nil
-        clientDeviceID = nil
-        clientName = nil
-        pairAttempts = 0
-        phase = .awaitingHello
-        everConnected = false
-        if notify && wasReady {
-            DispatchQueue.main.async { [weak self] in self?.onDisconnect?() }
+    private func closeLocked(_ peer: Peer, notify: Bool) {
+        let wasActive = active === peer
+        guard wasActive || pending.contains(where: { $0 === peer }) else { return }
+        IMicLog.write("mac.link", "close connection notify=\(notify) active=\(wasActive) phase=\(String(describing: peer.phase))")
+        peer.handshakeTimeout?.cancel()
+        peer.handshakeTimeout = nil
+        peer.connection.stateUpdateHandler = nil
+        peer.connection.cancel()
+        peer.decoder.reset()
+        peer.cipher = nil
+        peer.privateKey = nil
+        if wasActive {
+            active = nil
+            heartbeat?.cancel()
+            heartbeat = nil
+            if notify {
+                DispatchQueue.main.async { [weak self] in self?.onDisconnect?() }
+            }
+        } else {
+            pending.removeAll { $0 === peer }
         }
     }
 
-    private func sendErrorAndClose(_ code: String, _ message: String) {
+    private func closeAllLocked(notify: Bool) {
+        pending.forEach { closeLocked($0, notify: false) }
+        if let active { closeLocked(active, notify: notify) }
+    }
+
+    private func sendErrorAndClose(_ peer: Peer, _ code: String, _ message: String) {
         IMicLog.write("mac.link", "error code=\(code) message=\(message)")
+        guard isCurrent(peer) else { return }
         // 发送失败也要确保连接被回收；错误文本只描述原因，不包含令牌或音频。
-        if let connection = connection {
-            let data = LinkWire.encode(kind: .json, payload: (try? LinkMessage.error(code, message).encoded()) ?? Data())
-            connection.send(content: data, completion: .contentProcessed { [weak self] _ in
-                self?.queue.async { self?.closeConnectionLocked(notify: true) }
-            })
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                self?.queue.async { self?.dropIfCurrent(connection) }
-            }
-        } else {
-            closeConnectionLocked(notify: true)
+        let data = LinkWire.encode(kind: .json, payload: (try? LinkMessage.error(code, message).encoded()) ?? Data())
+        peer.connection.send(content: data, completion: .contentProcessed { [weak self] _ in
+            self?.queue.async { self?.closeLocked(peer, notify: true) }
+        })
+        queue.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.closeLocked(peer, notify: true)
         }
     }
 
     // MARK: - Sending
 
     func send(_ message: LinkMessage) {
-        sendLockedAsync(message)
+        sendActiveAsync(message)
     }
 
-    private func sendLockedAsync(_ message: LinkMessage) {
+    private func sendActiveAsync(_ message: LinkMessage) {
         queue.async {
-            guard self.phase == .ready, self.cipher != nil else { return }
-            do { try self.sendLocked(message) }
-            catch { self.sendErrorAndClose("protocol", "链路发送失败") }
+            guard let peer = self.active, peer.cipher != nil else { return }
+            do { try self.sendLocked(message, to: peer) }
+            catch { self.sendErrorAndClose(peer, "protocol", "链路发送失败") }
         }
     }
 
-    private func sendPlainLocked(_ message: LinkMessage) throws {
+    private func sendPlainLocked(_ message: LinkMessage, to peer: Peer) throws {
         let payload = try message.encoded()
-        try writeFrameLocked(LinkFrame(kind: .json, payload: payload))
+        writeFrameLocked(LinkFrame(kind: .json, payload: payload), to: peer)
     }
 
-    private func sendLocked(_ message: LinkMessage, using explicit: LinkCipher? = nil) throws {
-        guard let cipher = explicit ?? cipher else { throw LinkError.encodingFailed }
+    private func sendLocked(_ message: LinkMessage, to peer: Peer, using explicit: LinkCipher? = nil) throws {
+        guard let cipher = explicit ?? peer.cipher else { throw LinkError.encodingFailed }
         let payload = try message.encoded()
         let sealed = try cipher.seal(payload)
-        try writeFrameLocked(LinkFrame(kind: .sealedJSON, payload: sealed))
+        writeFrameLocked(LinkFrame(kind: .sealedJSON, payload: sealed), to: peer)
     }
 
-    private func writeFrameLocked(_ frame: LinkFrame) throws {
-        guard let connection = connection else { throw LinkError.encodingFailed }
+    private func writeFrameLocked(_ frame: LinkFrame, to peer: Peer) {
         let data = LinkWire.encode(frame)
-        connection.send(content: data, completion: .contentProcessed { [weak self] error in
+        peer.connection.send(content: data, completion: .contentProcessed { [weak self] error in
             guard error != nil else { return }
             IMicLog.write("mac.link", "send error: \(String(describing: error))")
-            self?.queue.async {
-                if self?.connection === connection {
-                    self?.closeConnectionLocked(notify: true)
-                }
-            }
+            self?.queue.async { self?.closeLocked(peer, notify: true) }
         })
     }
 
     private func emit(_ state: State) {
         DispatchQueue.main.async { [weak self] in self?.onState?(state) }
+    }
+
+    private static func lockedMessage(_ remaining: TimeInterval) -> String {
+        "尝试次数过多，配对码已更换，请 \(Int(remaining.rounded(.up))) 秒后输入 Mac 上的新配对码"
     }
 
     private static func serviceName(_ macName: String) -> String {

@@ -27,6 +27,7 @@ final class PairingStore {
     private var activeCode: String
     private var codeExpiresAt: Date
     private var lastLoadedName: String
+    private var throttle = PairingThrottle()
 
     /// 任何 UI 刷新都通过此回调，服务端只负责状态。
     var onChange: (() -> Void)?
@@ -60,8 +61,9 @@ final class PairingStore {
 
     /// 仅用于无界面联调：把配对码固定一段时间，避免测试与 UI 轮换竞争。
     func overrideCode(_ code: String) {
-        guard code.count == 6, code.allSatisfy(\.isNumber) else { return }
+        guard PairingCode.isValid(code) else { return }
         lock.lock()
+        throttle.reset()
         activeCode = code
         codeExpiresAt = Date().addingTimeInterval(3600)
         lock.unlock()
@@ -84,12 +86,35 @@ final class PairingStore {
         return activeCode
     }
 
+    /// 用户在 Mac 上手动换码：同时解除配对冷却。
     func rotateCode() {
         lock.lock()
+        throttle.reset()
         activeCode = PairingCode.make()
         codeExpiresAt = Date().addingTimeInterval(IMicLink.pairingCodeLifetime)
         lock.unlock()
         notify()
+    }
+
+    /// 配对冷却剩余秒数；未锁定返回 nil。冷却期间不尝试解密任何配对请求。
+    func pairingLockRemaining() -> TimeInterval? {
+        lock.lock(); defer { lock.unlock() }
+        return throttle.remainingLock(at: Date())
+    }
+
+    /// 记录一次配对码错误。达到上限时立即轮换配对码并进入冷却，返回冷却剩余秒数。
+    func recordPairFailure() -> TimeInterval? {
+        lock.lock()
+        let now = Date()
+        let locked = throttle.recordFailure(at: now)
+        if locked {
+            activeCode = PairingCode.make()
+            codeExpiresAt = now.addingTimeInterval(IMicLink.pairingCodeLifetime)
+        }
+        let remaining = locked ? throttle.remainingLock(at: now) : nil
+        lock.unlock()
+        if locked { notify() }
+        return remaining
     }
 
     func token(for deviceID: String) -> Data? {
@@ -114,6 +139,7 @@ final class PairingStore {
             token: token,
             pairedAt: Date()
         )
+        throttle.reset()
         activeCode = PairingCode.make()
         codeExpiresAt = Date().addingTimeInterval(IMicLink.pairingCodeLifetime)
         lock.unlock()
@@ -124,6 +150,7 @@ final class PairingStore {
     func forgetAll() {
         lock.lock()
         stored.devices.removeAll()
+        throttle.reset()
         activeCode = PairingCode.make()
         codeExpiresAt = Date().addingTimeInterval(IMicLink.pairingCodeLifetime)
         lock.unlock()
@@ -141,6 +168,7 @@ final class PairingStore {
 
     private func refreshCodeIfNeededLocked() {
         guard Date() >= codeExpiresAt else { return }
+        throttle.codeRotated()
         activeCode = PairingCode.make()
         codeExpiresAt = Date().addingTimeInterval(IMicLink.pairingCodeLifetime)
     }

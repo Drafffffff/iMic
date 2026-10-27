@@ -626,6 +626,8 @@ final class LinkClient: ObservableObject {
                     do {
                         for frame in try self.decoder.append(data) {
                             try self.handle(frame)
+                            // 处理过程中可能已重置连接（令牌失效、保存失败），剩余帧属于旧链路。
+                            guard self.connection === connection else { return }
                         }
                     } catch {
                         self.closeConnectionLocked()
@@ -723,7 +725,16 @@ final class LinkClient: ObservableObject {
         switch message.t {
         case "paired":
             if let macID = currentMacID, let token = pendingToken {
-                TokenStore.save(token, for: macID)
+                guard TokenStore.save(token, for: macID) else {
+                    // Mac 已信任该令牌，但本机未能保存；继续使用会让下次启动静默失效，明确要求重新配对。
+                    IMicLog.write("iphone.link", "token save failed mac=\(macID)")
+                    pendingToken = nil
+                    pairingCipher = nil
+                    pendingCode = nil
+                    closeConnectionLocked()
+                    fail("无法保存配对信息，请重新配对")
+                    return
+                }
                 publish { self.refreshRememberedPublished() }
             }
             if let token = pendingToken, let serverPublic = serverPublic {
@@ -839,11 +850,16 @@ final class LinkClient: ObservableObject {
     private func handleServerError(_ message: LinkMessage) {
         let code = message.code ?? "unknown"
         let text = message.message ?? "链路错误"
-        if code == "pair_code" {
+        if code == "pair_code" || code == "pair_locked" {
+            // 清掉已被拒绝的码：握手超时重连后不能自动重复提交，否则一次输错会持续消耗 Mac 的全局尝试次数。
+            pendingCode = nil
+            pairingCipher = nil
+            pendingToken = nil
             let name = currentMacName ?? "Mac"
+            let error = code == "pair_locked" ? text : "配对码不正确，请重试"
             publish {
                 self.pairing = true
-                self.pairingError = "配对码不正确，请重试"
+                self.pairingError = error
                 self.phase = .needsCode(name)
             }
             return
@@ -1005,6 +1021,7 @@ final class LinkClient: ObservableObject {
         do {
             for frame in try decoder.append(data) {
                 try handle(frame)
+                guard usingBLE, bleClient === ble else { return }
             }
         } catch {
             IMicLog.write("iphone.link", "BLE frame error=\(String(describing: error))")
@@ -1442,17 +1459,27 @@ extension LinkClient.Phase {
 enum Keychain {
     private static let service = "com.drafffffff.imic.link"
 
-    static func save(_ data: Data, account: String) {
+    /// 先更新、不存在再新增，避免「删除成功、新增失败」时丢掉旧令牌。返回是否写入成功。
+    @discardableResult
+    static func save(_ data: Data, account: String) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
-        SecItemDelete(query as CFDictionary)
-        var attributes = query
-        attributes[kSecValueData as String] = data
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(attributes as CFDictionary, nil)
+        let update: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]
+        var status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if status == errSecItemNotFound {
+            let attributes = query.merging(update) { _, new in new }
+            status = SecItemAdd(attributes as CFDictionary, nil)
+        }
+        if status != errSecSuccess {
+            IMicLog.write("iphone.keychain", "save failed status=\(status)")
+        }
+        return status == errSecSuccess
     }
 
     static func load(account: String) -> Data? {
@@ -1482,10 +1509,13 @@ enum Keychain {
 /// 生产环境只使用钥匙串。模拟器构建未签名时 Keychain 返回 errSecMissingEntitlement，
 /// 因此仅在模拟器追加一个受数据保护的应用容器文件，保证本地联调可重复。
 enum TokenStore {
-    static func save(_ data: Data, for macID: String) {
-        Keychain.save(data, account: "token:\(macID)")
+    @discardableResult
+    static func save(_ data: Data, for macID: String) -> Bool {
+        let saved = Keychain.save(data, account: "token:\(macID)")
         #if targetEnvironment(simulator)
-        FileToken.save(data, for: macID)
+        return FileToken.save(data, for: macID) || saved
+        #else
+        return saved
         #endif
     }
 
@@ -1529,10 +1559,15 @@ private enum FileToken {
         return directory.appendingPathComponent("token-\(digest).bin")
     }
 
-    static func save(_ data: Data, for macID: String) {
-        guard let url = url(for: macID) else { return }
-        try? data.write(to: url, options: [.atomic, .completeFileProtection])
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    static func save(_ data: Data, for macID: String) -> Bool {
+        guard let url = url(for: macID) else { return false }
+        do {
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            return true
+        } catch {
+            return false
+        }
     }
 
     static func load(for macID: String) -> Data? {

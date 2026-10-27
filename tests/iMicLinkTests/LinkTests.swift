@@ -326,9 +326,67 @@ final class LinkCryptoTests: XCTestCase {
         for _ in 0..<200 {
             let code = PairingCode.make()
             XCTAssertEqual(code.count, 6)
-            XCTAssertTrue(code.allSatisfy(\.isNumber))
+            XCTAssertTrue(PairingCode.isValid(code))
             XCTAssertEqual(PairingCode.formatted(code).count, 7)
         }
+    }
+
+    func testPairingCodeAcceptsOnlyASCIIDigits() throws {
+        XCTAssertTrue(PairingCode.isValid("012345"))
+        for code in ["12345", "1234567", "12345五", "12345½", "١٢٣٤٥٦", "１２３４５６", "12 345"] {
+            XCTAssertFalse(PairingCode.isValid(code), code)
+        }
+        XCTAssertEqual(PairingCode.normalize("12五3 ４5٦67８9"), "123567")
+
+        let phone = LinkCrypto.makePrivateKey()
+        let mac = LinkCrypto.makePrivateKey()
+        XCTAssertThrowsError(try LinkCrypto.pairingCipher(
+            privateKey: phone,
+            peerPublicKey: LinkCrypto.publicKeyBase64(mac),
+            code: "12345五"
+        )) { XCTAssertEqual($0 as? LinkError, .invalidPairingCode) }
+    }
+
+    func testPairingThrottleLocksAfterLimitAndEscalates() {
+        var throttle = PairingThrottle()
+        let start = Date(timeIntervalSince1970: 1_000)
+        for _ in 1..<PairingThrottle.failureLimit {
+            XCTAssertFalse(throttle.recordFailure(at: start))
+        }
+        XCTAssertNil(throttle.remainingLock(at: start))
+        XCTAssertTrue(throttle.recordFailure(at: start))
+        XCTAssertEqual(throttle.remainingLock(at: start), PairingThrottle.baseLockout)
+        XCTAssertNil(throttle.remainingLock(at: start.addingTimeInterval(PairingThrottle.baseLockout)))
+
+        // 第二轮冷却翻倍。
+        let later = start.addingTimeInterval(60)
+        for _ in 1..<PairingThrottle.failureLimit { _ = throttle.recordFailure(at: later) }
+        XCTAssertTrue(throttle.recordFailure(at: later))
+        XCTAssertEqual(throttle.remainingLock(at: later), PairingThrottle.baseLockout * 2)
+
+        // 冷却封顶。
+        var now = later
+        for _ in 0..<20 {
+            now = now.addingTimeInterval(PairingThrottle.maxLockout + 1)
+            for _ in 0..<PairingThrottle.failureLimit { _ = throttle.recordFailure(at: now) }
+        }
+        XCTAssertEqual(throttle.remainingLock(at: now), PairingThrottle.maxLockout)
+
+        throttle.reset()
+        XCTAssertNil(throttle.remainingLock(at: now))
+        XCTAssertEqual(throttle, PairingThrottle())
+    }
+
+    func testPairingThrottleCodeRotationKeepsLockButDropsFailures() {
+        var throttle = PairingThrottle()
+        let now = Date(timeIntervalSince1970: 1_000)
+        for _ in 0..<PairingThrottle.failureLimit { _ = throttle.recordFailure(at: now) }
+        for _ in 1..<PairingThrottle.failureLimit { _ = throttle.recordFailure(at: now) }
+        throttle.codeRotated()
+        XCTAssertEqual(throttle.failures, 0)
+        XCTAssertNotNil(throttle.remainingLock(at: now))
+        XCTAssertEqual(throttle.lockouts, 1)
+        XCTAssertFalse(throttle.recordFailure(at: now))
     }
 }
 
