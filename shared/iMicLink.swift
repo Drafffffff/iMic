@@ -24,6 +24,9 @@ public enum IMicLink {
     public static let pairingCodeLifetime: TimeInterval = 600
     public static let polishPreferencesFeature = 1 << 4
     public static let gestureControlFeature = 1 << 5
+    /// 润色偏好包含 `options.output`（翻译 / 终端命令）。Mac 在 `settings` 中声明；
+    /// iPhone 在 `polish.settings` 中声明，未声明时 Mac 保留现有输出模式，避免旧版手机保存时把它重置。
+    public static let polishOutputFeature = 1 << 6
     public static let bleServiceUUID = "7E570000-7F4A-4C7E-9A2B-1C0D5E6F7A80"
     public static let bleUplinkUUID = "7E570001-7F4A-4C7E-9A2B-1C0D5E6F7A80"
     public static let bleDownlinkUUID = "7E570002-7F4A-4C7E-9A2B-1C0D5E6F7A80"
@@ -391,9 +394,11 @@ public struct LinkMessage: Codable, Equatable {
     }
 
     /// iPhone → Mac：请求保存完整润色偏好，仅用于认证后的加密链路。
-    public static func polishSettings(_ preferences: LinkPolishPreferences) -> LinkMessage {
+    /// `features` 声明手机理解的偏好字段（目前为 `polishOutputFeature`）。
+    public static func polishSettings(_ preferences: LinkPolishPreferences, features: Int? = nil) -> LinkMessage {
         var m = LinkMessage(t: "polish.settings")
         m.polish = preferences
+        m.features = features
         return m
     }
 

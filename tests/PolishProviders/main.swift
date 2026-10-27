@@ -142,6 +142,33 @@ final class PolishProviderTests: XCTestCase {
         XCTAssertNil(DeepSeekClient.acceptedContent(data: Data("bad json".utf8), status: 200, raw: raw))
     }
 
+    func testCommandOutputStripsWrappersButRejectsMultipleLines() throws {
+        let spoken = "切到 main 分支然后拉最新代码"
+        for content in ["git switch main && git pull", "`git switch main && git pull`",
+                        "$ git switch main && git pull", "```zsh\ngit switch main && git pull\n```"] {
+            XCTAssertEqual(DeepSeekClient.acceptedContent(
+                data: try response(content: content), status: 200, raw: spoken, output: .command),
+                "git switch main && git pull", content)
+        }
+        XCTAssertEqual(DeepSeekClient.cleanCommand("echo `date`"), "echo `date`")
+        XCTAssertNil(DeepSeekClient.acceptedContent(
+            data: try response(content: "git switch main\ngit pull"), status: 200, raw: spoken, output: .command))
+        XCTAssertNil(DeepSeekClient.acceptedContent(
+            data: try response(content: "```\ngit switch main\ngit pull\n```"), status: 200, raw: spoken, output: .command))
+    }
+
+    func testRequestUsesOutputSpecificPrompt() throws {
+        for output in [PolishOutput.english, .command] {
+            let request = try DeepSeekClient.request(
+                text: "列出当前目录", key: "sk-test-1234567890", model: "deepseek-flash",
+                endpoint: PolishProvider.deepseek.defaultEndpoint, provider: .deepseek,
+                options: PolishOptions(output: output))
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+            let messages = try XCTUnwrap(body["messages"] as? [[String: String]])
+            XCTAssertEqual(messages.first?["content"], PolishOptions(output: output).systemPrompt)
+        }
+    }
+
     func testEmptyToolMetadataAcceptsTextButActualToolCallsAreRejected() throws {
         for toolCalls in [NSNull(), []] as [Any] {
             let object: [String: Any] = ["choices": [[

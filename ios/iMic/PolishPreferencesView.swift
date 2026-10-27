@@ -121,6 +121,7 @@ struct PolishPreferencesSection: View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 10) {
                 sectionHeading("STRENGTH", title: "润色强度")
+                    .opacity(usesStyle(preferences) ? 1 : 0.5)
                 HStack(spacing: 8) {
                     ForEach(PolishStrength.allCases, id: \.self) { strength in
                         let selected = preferences.options.strength == strength
@@ -135,10 +136,13 @@ struct PolishPreferencesSection: View {
                         .accessibilityAddTraits(selected ? .isSelected : [])
                     }
                 }
+                .disabled(!usesStyle(preferences))
+                .opacity(usesStyle(preferences) ? 1 : 0.5)
             }
 
             VStack(alignment: .leading, spacing: 10) {
                 sectionHeading("SCENARIO", title: "使用场景")
+                    .opacity(usesStyle(preferences) ? 1 : 0.5)
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                     ForEach(PolishScenario.allCases, id: \.self) { scenario in
                         let selected = preferences.options.scenario == scenario
@@ -153,6 +157,28 @@ struct PolishPreferencesSection: View {
                         .accessibilityAddTraits(selected ? .isSelected : [])
                     }
                 }
+                .disabled(!usesStyle(preferences))
+                .opacity(usesStyle(preferences) ? 1 : 0.5)
+            }
+
+            if link.polishOutputSupported {
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionHeading("OUTPUT", title: "输出")
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                        ForEach(PolishOutput.allCases, id: \.self) { output in
+                            let selected = preferences.options.output == output
+                            Button {
+                                update { $0.options.output = output }
+                            } label: {
+                                optionLabel(output.title, selected: selected)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("输出，\(output.title)")
+                            .accessibilityValue(selected ? "已选择" : "未选择")
+                            .accessibilityAddTraits(selected ? .isSelected : [])
+                        }
+                    }
+                }
             }
 
             Text(link.polishPreferencesSaving ? "正在提交以上选择，等待 Mac 确认后生效。"
@@ -162,6 +188,11 @@ struct PolishPreferencesSection: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(minHeight: 44, alignment: .topLeading)
         }
+    }
+
+    /// 终端命令不使用强度与场景。
+    private func usesStyle(_ preferences: LinkPolishPreferences) -> Bool {
+        preferences.options.output != .command
     }
 
     private func optionLabel(_ title: String, selected: Bool) -> some View {

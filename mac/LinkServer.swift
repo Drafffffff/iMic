@@ -53,7 +53,8 @@ final class LinkServer {
 
     var onState: ((State) -> Void)?
     var onMessage: ((LinkMessage) -> Void)?
-    var onPolishPreferences: ((LinkPolishPreferences) -> Void)?
+    /// 第二个参数是 iPhone 在 `polish.settings` 中声明的能力位。
+    var onPolishPreferences: ((LinkPolishPreferences, Int) -> Void)?
     var onAudio: ((AudioPacket) -> Void)?
     var onPairRequest: (() -> Void)?
     var onDisconnect: (() -> Void)?
@@ -235,9 +236,10 @@ final class LinkServer {
                     }
                 }
                 if message.t == "polish.settings", let preferences = message.polish {
+                    let features = message.features ?? 0
                     DispatchQueue.main.async { [weak self] in
                         guard let self, self.queue.sync(execute: { self.active === peer }) else { return }
-                        self.onPolishPreferences?(preferences)
+                        self.onPolishPreferences?(preferences, features)
                     }
                 } else if ["polish.saved", "settings", "input.state", "input.result"].contains(message.t) {
                     sendErrorAndClose(peer, "protocol", "iPhone 不能发送 Mac 的设置状态")

@@ -81,8 +81,8 @@ payload[length]
 | `input.state` | Mac → iPhone | `seq, status` | bit5 能力：`ready` / `busy`，权威手势就绪租约 |
 | `input.result` | Mac → iPhone | `seq, action, status, message` | 清空确认：`action=clear`，`applied` / `rejected` |
 | `preview` | iPhone → Mac | `text` | Apple Speech 的临时转写；Mac 实时预览开启且可用范围核验或已授权的键盘兼容模式时逐字投递目标应用，否则仅在 Mac 窗口显示。此为 Mac 本地输入策略，不改变消息字段与加密格式 |
-| `settings` | Mac → iPhone | `features, polish` | 完整功能状态；bit0 预览、bit1 回车、bit2 删除、bit3 光标、bit4 润色偏好设置、bit5 手势就绪与清空 |
-| `polish.settings` | iPhone → Mac | `polish` | 请求当前 Mac 保存完整润色偏好；仅认证完成后的加密链路可用 |
+| `settings` | Mac → iPhone | `features, polish` | 完整功能状态；bit0 预览、bit1 回车、bit2 删除、bit3 光标、bit4 润色偏好设置、bit5 手势就绪与清空、bit6 润色输出模式 |
+| `polish.settings` | iPhone → Mac | `polish, features?` | 请求当前 Mac 保存完整润色偏好；仅认证完成后的加密链路可用。`features` 声明手机理解的偏好字段（bit6） |
 | `polish.saved` | Mac → iPhone | `features, polish` | 本次保存请求的明确确认，携带实际保存值；不以普通状态广播代替确认 |
 | `state` | Mac → iPhone | `session, phase` | `listening` / `transcribing` |
 | `result` | Mac → iPhone | `session, text, latency, pasted, target` | 最终文字；`pasted` 表示所选输入通路已完成，键盘兼容模式仅确认事件投递，不表示目标正文经独立核验 |
@@ -99,6 +99,10 @@ payload[length]
 
 - `IMicLink.polishPreferencesFeature = 1 << 4`：声明支持手机设置润色偏好。声明 bit4 的 `settings` 必须携带非空、完整且合法的 `polish`，否则拒绝解码；旧 Mac 不声明 bit4 且省略 `polish` 的 `settings` 仍可解码，手机明确显示不支持，不推断默认值。
 - `polish.enabled` 为必填布尔值。`polish.options` 必填，其 `strength` 只允许 `light` / `medium` / `heavy`，`scenario` 只允许 `general` / `chat` / `email` / `notes` / `agent`。即使关闭润色也必须提供完整选项；缺失、`null`、类型错误或非法枚举均拒绝，不做静默降级。
+- `polish.options.output` 是后加的可选字段，取值 `original` / `chinese` / `english` / `japanese` / `korean` / `command`：
+  - 缺失、`null` 或未来版本的未知字符串按 `original` 处理，保证新旧两端互通；非字符串类型仍拒绝解码。
+  - `IMicLink.polishOutputFeature = 1 << 6`：Mac 在 `settings` / `polish.saved` 中声明支持输出模式，未声明时手机不显示该项；iPhone 在 `polish.settings` 的 `features` 中声明理解该字段。Mac 收到未声明 bit6 的保存请求（旧版手机）时保留自己当前的 `output`，不被旧手机的默认值覆盖。
+  - 翻译模式先按强度与场景整理，再译为目标语言；仍不得代答、执行。`command` 只输出一行 zsh 命令，忽略强度与场景；Mac 拒绝多行或含控制字符的结果，润色失败或被拒绝时输入 `# 原话` 单行注释。iMic 不会自动按回车执行命令。
 - iPhone 仅在链路已 `ready`、Mac 声明 bit4 且没有在途保存时发送 `{"t":"polish.settings","polish":{...}}`。命令必须包含完整 `polish`，不支持局部更新。保存期间禁用控件；Mac 保存后回传完整 `polish.saved`，且值与请求一致，才表示保存成功，不能仅凭发送成功或普通 `settings` 广播显示已保存。确认必须携带 bit4 与完整偏好；若实际保存值不同，手机显示 Mac 的实际值并明确提示。断线则等待重连读取状态，不自动重发旧 Mac 的修改。
 - 偏好归当前连接的 Mac 所有。手机不持久化第二套偏好，切换 Mac 后以新 Mac 的状态为准；Mac 本地更改也通过完整 `settings` 回显。
 - 手机只接触开关、强度与场景。API Key、AI 服务来源和地址不进入这些消息。命令必须经过原有六位码或令牌认证，使用会话密钥下的 AES-GCM combined 帧及逐帧随机 nonce；明文或未认证连接不能设置偏好。

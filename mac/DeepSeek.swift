@@ -59,7 +59,8 @@ enum DeepSeekConfiguration {
         let defaults = UserDefaults.standard
         return PolishOptions(
             strength: defaults.string(forKey: "deepseekStrength").flatMap(PolishStrength.init(rawValue:)) ?? PolishOptions.default.strength,
-            scenario: defaults.string(forKey: "deepseekScenario").flatMap(PolishScenario.init(rawValue:)) ?? PolishOptions.default.scenario
+            scenario: defaults.string(forKey: "deepseekScenario").flatMap(PolishScenario.init(rawValue:)) ?? PolishOptions.default.scenario,
+            output: defaults.string(forKey: "polishOutput").flatMap(PolishOutput.init(rawValue:)) ?? PolishOptions.default.output
         )
     }
 }
@@ -184,7 +185,7 @@ enum DeepSeekClient {
         let diagnosticModel = modelIsSafe ? model : "redacted"
         let task = (session ?? Self.session).dataTask(with: request) { data, response, error in
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            let result = error == nil ? acceptedContent(data: data, status: status, raw: text) : nil
+            let result = error == nil ? acceptedContent(data: data, status: status, raw: text, output: options.output) : nil
             let milliseconds = Int(Date().timeIntervalSince(started) * 1000)
             // Never log endpoints, response bodies, error descriptions or credentials.
             let code = (error as NSError?)?.code ?? 0
@@ -195,7 +196,7 @@ enum DeepSeekClient {
         return task
     }
 
-    static func acceptedContent(data: Data?, status: Int, raw: String) -> String? {
+    static func acceptedContent(data: Data?, status: Int, raw: String, output: PolishOutput = .original) -> String? {
         guard (200..<300).contains(status), let data,
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               object["error"] == nil,
@@ -208,10 +209,24 @@ enum DeepSeekClient {
               functionCall == nil || functionCall is NSNull,
               let content = message["content"] as? String else { return nil }
         // reasoning_content is deliberately ignored. Reject inline thinking rather than insert it.
-        let result = clean(content)
+        let result = output == .command ? cleanCommand(content) : clean(content)
         guard result.range(of: #"</?(think|thinking|reasoning)(?:\s|>)"#, options: [.regularExpression, .caseInsensitive]) == nil,
-              DeepSeekPolicy.isAcceptable(raw: raw, polished: result) else { return nil }
+              DeepSeekPolicy.isAcceptable(raw: raw, polished: result, output: output) else { return nil }
         return result
+    }
+
+    /// 去掉模型常见的包装（代码围栏、行内反引号、`$ ` 提示符）。不合并多行：
+    /// 多行结果交给策略拒绝，避免把模型的多条建议悄悄拼成一条命令。
+    static func cleanCommand(_ text: String) -> String {
+        var value = clean(text)
+        if value.count >= 2, value.first == "`", value.last == "`",
+           !value.dropFirst().dropLast().contains("`") {
+            value = String(value.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+        }
+        if value.hasPrefix("$ ") {
+            value = String(value.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+        }
+        return value
     }
 
     private static func clean(_ text: String) -> String {

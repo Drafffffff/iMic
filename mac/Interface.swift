@@ -719,16 +719,26 @@ extension AppDelegate {
             control.font = .systemFont(ofSize: 11, weight: .medium)
             control.heightAnchor.constraint(equalToConstant: 28).isActive = true
         }
+        polishOutputPicker = NSPopUpButton(frame: .zero, pullsDown: false)
+        polishOutputPicker.addItems(withTitles: PolishOutput.allCases.map(\.title))
+        polishOutputPicker.selectItem(at: PolishOutput.allCases.firstIndex(of: polishOptions.output)!)
+        polishOutputPicker.target = self
+        polishOutputPicker.action = #selector(changePolishOutput(_:))
+        polishOutputPicker.font = .systemFont(ofSize: 11, weight: .medium)
+        polishOutputPicker.setAccessibilityLabel("润色输出")
         polishOptionsHint = label(polishOptions.summary, size: 10, color: .imicMuted)
         polishOptionsHint.maximumNumberOfLines = 0
         polishOptionsHint.setAccessibilityLabel("当前润色选项说明")
+        updatePolishOptionControls(polishOptions)
         let deepseekFields = column([
             label("润色来源", size: 10, color: .imicMuted, mono: true), polishProviderPicker,
             deepseekKey, deepseekHint, polishAdvancedButton!, polishAdvanced!,
             label("润色强度", size: 10, color: .imicMuted, mono: true),
             polishStrengthButtons!,
             label("使用场景", size: 10, color: .imicMuted, mono: true),
-            polishScenarioButtons!, polishOptionsHint!
+            polishScenarioButtons!,
+            label("输出", size: 10, color: .imicMuted, mono: true),
+            polishOutputPicker!, polishOptionsHint!
         ], spacing: 6)
         for view in deepseekFields.arrangedSubviews {
             fullWidth(view, in: deepseekFields)

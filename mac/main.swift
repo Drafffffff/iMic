@@ -75,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var polishStrengthButtons: NSSegmentedControl!
     var polishScenarioButtons: NSSegmentedControl!
     var polishOptionsHint: NSTextField!
+    var polishOutputPicker: NSPopUpButton!
     var livePreviewCheck: NSButton!
     var polishSweepCheck: NSButton!
     var polishSweepHint: NSTextField!
@@ -244,7 +245,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         link.onMessage = { [weak self] message in
             self?.handle(message)
         }
-        link.onPolishPreferences = { [weak self] preferences in
+        link.onPolishPreferences = { [weak self] preferences, features in
+            var preferences = preferences
+            // 旧版手机不认识输出模式，保存时会带回默认值；保留 Mac 当前的翻译 / 命令设置。
+            if features & IMicLink.polishOutputFeature == 0 {
+                preferences.options.output = DeepSeekConfiguration.options.output
+            }
             self?.applyPolishPreferences(preferences, confirmingSave: true)
         }
         link.onAudio = { [weak self] packet in
@@ -347,6 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             | (swipeCursorEnabled ? 0b1000 : 0)
             | IMicLink.polishPreferencesFeature
             | IMicLink.gestureControlFeature
+            | IMicLink.polishOutputFeature
     }
 
     private var polishPreferences: LinkPolishPreferences {
@@ -365,6 +372,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         defaults.set(preferences.enabled, forKey: "deepseekEnabled")
         defaults.set(preferences.options.strength.rawValue, forKey: "deepseekStrength")
         defaults.set(preferences.options.scenario.rawValue, forKey: "deepseekScenario")
+        defaults.set(preferences.options.output.rawValue, forKey: "polishOutput")
         let saved = polishPreferences
         deepseekCheck?.state = saved.enabled ? .on : .off
         if let index = PolishStrength.allCases.firstIndex(of: saved.options.strength) {
@@ -373,8 +381,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let index = PolishScenario.allCases.firstIndex(of: saved.options.scenario) {
             polishScenarioButtons?.selectedSegment = index
         }
-        polishOptionsHint?.stringValue = saved.options.summary
-        IMicLog.write("mac.settings", "polish source=\(confirmingSave ? "phone" : "mac") enabled=\(saved.enabled) strength=\(saved.options.strength.rawValue) scenario=\(saved.options.scenario.rawValue)")
+        if let index = PolishOutput.allCases.firstIndex(of: saved.options.output) {
+            polishOutputPicker?.selectItem(at: index)
+        }
+        updatePolishOptionControls(saved.options)
+        IMicLog.write("mac.settings", "polish source=\(confirmingSave ? "phone" : "mac") enabled=\(saved.enabled) strength=\(saved.options.strength.rawValue) scenario=\(saved.options.scenario.rawValue) output=\(saved.options.output.rawValue)")
         if confirmingSave {
             link.send(.polishSaved(features: featureMask, polish: saved))
         } else {
@@ -789,6 +800,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let polishModel = DeepSeekConfiguration.modelName(for: provider)
         let polishAddress = DeepSeekConfiguration.endpoint(for: provider)
+        // 终端命令模式下，润色失败不能把原话当命令输入，改为单行注释。
+        let fallback = options.fallbackText(for: raw)
         do {
             _ = try DeepSeekClient.validatedURL(provider: provider, model: polishModel, endpoint: polishAddress)
             guard PolishCredentials.valid(polishKey, for: provider) else { throw PolishConfigurationError.key }
@@ -796,18 +809,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             IMicLog.write("mac.polish", "skipped provider=\(provider.rawValue) reason=invalid_configuration")
             deepseekHint?.stringValue = "\(provider.title)：\(error.localizedDescription)，已保留原文。"
             deepseekHint?.textColor = .systemRed
-            choosePolishResult(session, raw: raw, polished: nil, latency: latency)
+            choosePolishResult(session, raw: fallback, polished: nil, latency: latency)
             return
         }
         asr = nil
         setStatus("正在润色…")
-        IMicLog.write("mac.session", "polish session=\(session) provider=\(provider.rawValue) chars=\(raw.count) strength=\(options.strength.rawValue) scenario=\(options.scenario.rawValue)")
+        IMicLog.write("mac.session", "polish session=\(session) provider=\(provider.rawValue) chars=\(raw.count) strength=\(options.strength.rawValue) scenario=\(options.scenario.rawValue) output=\(options.output.rawValue)")
         // URLSession's request timeout is not a hard wall-clock deadline when
         // a server keeps sending bytes. The utterance has its own terminal gate.
         let deadline = DispatchWorkItem { [weak self] in
             guard let self, self.currentSession == session else { return }
             IMicLog.write("mac.polish", "fallback reason=hard_deadline session=\(session)")
-            self.choosePolishResult(session, raw: raw, polished: nil, latency: latency)
+            self.choosePolishResult(session, raw: fallback, polished: nil, latency: latency)
         }
         polishDeadlineWork = deadline
         DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: deadline)
@@ -820,7 +833,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             options: options
         ) { [weak self] polished in
             guard let self = self, self.currentSession == session else { return }
-            self.choosePolishResult(session, raw: raw, polished: polished, latency: latency)
+            self.choosePolishResult(session, raw: fallback, polished: polished, latency: latency)
         }
     }
 
@@ -1373,10 +1386,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               scenarios.indices.contains(polishScenarioButtons.selectedSegment) else { return }
         let strength = strengths[polishStrengthButtons.selectedSegment]
         let scenario = scenarios[polishScenarioButtons.selectedSegment]
+        let outputs = PolishOutput.allCases
+        let outputIndex = polishOutputPicker?.indexOfSelectedItem ?? -1
+        let output = outputs.indices.contains(outputIndex) ? outputs[outputIndex] : DeepSeekConfiguration.options.output
         applyPolishPreferences(
-            LinkPolishPreferences(enabled: DeepSeekConfiguration.enabled, options: PolishOptions(strength: strength, scenario: scenario)),
+            LinkPolishPreferences(
+                enabled: DeepSeekConfiguration.enabled,
+                options: PolishOptions(strength: strength, scenario: scenario, output: output)
+            ),
             confirmingSave: false
         )
+    }
+
+    @objc func changePolishOutput(_ sender: NSPopUpButton) {
+        changePolishOptions(polishScenarioButtons)
+    }
+
+    /// 终端命令不使用强度与场景，禁用对应控件以免误以为生效。
+    func updatePolishOptionControls(_ options: PolishOptions) {
+        let usesStyle = options.output != .command
+        polishStrengthButtons?.isEnabled = usesStyle
+        polishScenarioButtons?.isEnabled = usesStyle
+        polishOptionsHint?.stringValue = options.summary
     }
 
     @objc func toggleLivePreview() {

@@ -12,10 +12,21 @@ public enum DeepSeekPolicy {
         "可以", "好的", "行", "不行", "当然", "是的", "没问题", "明白", "收到"
     ]
 
-    public static func isAcceptable(raw: String, polished: String) -> Bool {
+    /// 译文中的问句标记：各语言问号，以及日语、韩语、中文常见的句末疑问词。
+    private static let translatedQuestionMarkers = [
+        "?", "？", "か", "까", "나요", "니", "吗", "呢"
+    ]
+
+    public static func isAcceptable(raw: String, polished: String, output: PolishOutput = .original) -> Bool {
         let source = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let result = polished.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !source.isEmpty, !result.isEmpty else { return false }
+
+        switch output {
+        case .command: return isAcceptableCommand(result)
+        case .chinese, .english, .japanese, .korean: return isAcceptableTranslation(source: source, result: result)
+        case .original: break
+        }
 
         // 过度缩短通常意味着模型在总结/回答，而不是整理。
         if source.count >= 12, Double(result.count) < Double(source.count) * 0.45 {
@@ -43,5 +54,26 @@ public enum DeepSeekPolicy {
         }
 
         return true
+    }
+
+    /// 终端命令必须是单行：输入路径会把换行当作回车投递，多行结果可能被 shell 直接执行。
+    static func isAcceptableCommand(_ result: String) -> Bool {
+        guard result.rangeOfCharacter(from: .newlines) == nil,
+              result.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) || $0 == "\t" }),
+              result.count <= 1_000,
+              !result.contains("```"),
+              !result.hasPrefix("$ ") else { return false }
+        return true
+    }
+
+    /// 跨语言时字符数不可比（中文一字三字节、英文一词多字母），用 UTF-8 字节量判断是否被总结或代答。
+    static func isAcceptableTranslation(source: String, result: String) -> Bool {
+        if source.count >= 12, Double(result.utf8.count) < Double(source.utf8.count) * 0.3 {
+            return false
+        }
+        // 只看问号与句末语气词；「怎么」「如何」常出现在陈述句里，译文没有问号也属正常。
+        let sourceHasQuestion = ["?", "？", "吗", "呢"].contains { source.contains($0) }
+        let resultHasQuestion = translatedQuestionMarkers.contains { result.contains($0) }
+        return !sourceHasQuestion || resultHasQuestion
     }
 }

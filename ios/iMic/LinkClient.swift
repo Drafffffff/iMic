@@ -79,6 +79,8 @@ final class LinkClient: ObservableObject {
     @Published private(set) var pairedMacIDs: Set<String> = []
     @Published private(set) var polishPreferences: LinkPolishPreferences?
     @Published private(set) var polishPreferencesSupported = false
+    /// Mac 是否支持润色输出模式（翻译 / 终端命令）；不支持时设置页不显示该项。
+    @Published private(set) var polishOutputSupported = false
     @Published private(set) var polishPreferencesSaving = false
     @Published private(set) var polishPreferencesError: String?
 
@@ -229,6 +231,7 @@ final class LinkClient: ObservableObject {
             // 仅为设置页静态排版预览提供示例；真实链路仍只接受 Mac 回显。
             if mode == "settings" {
                 polishPreferencesSupported = true
+                polishOutputSupported = true
                 polishPreferences = LinkPolishPreferences(enabled: true, options: .default)
             }
             #endif
@@ -802,6 +805,7 @@ final class LinkClient: ObservableObject {
                 self.gestureSupported = features & IMicLink.gestureControlFeature != 0
                 if !self.gestureSupported { self.gestureReady = false }
                 self.polishPreferencesSupported = supported
+                self.polishOutputSupported = supported && features & IMicLink.polishOutputFeature != 0
                 self.polishPreferences = preferences
                 if confirmed || !supported { self.polishPreferencesSaving = false }
                 if confirmed {
@@ -1264,7 +1268,7 @@ final class LinkClient: ObservableObject {
             self.polishSaveGeneration &+= 1
             let generation = self.polishSaveGeneration
             self.pendingPolishPreferences = preferences
-            self.sendSealed(.polishSettings(preferences)) { [weak self] success in
+            self.sendSealed(.polishSettings(preferences, features: IMicLink.polishOutputFeature)) { [weak self] success in
                 guard let self, !success, epoch == self.currentEpoch(),
                       generation == self.polishSaveGeneration, self.pendingPolishPreferences != nil else { return }
                 self.pendingPolishPreferences = nil
@@ -1383,6 +1387,7 @@ final class LinkClient: ObservableObject {
             self.clearPending = false
             self.polishPreferences = nil
             self.polishPreferencesSupported = false
+            self.polishOutputSupported = false
             self.polishPreferencesSaving = false
             self.polishPreferencesError = hadPendingSave ? "连接已断开，保存状态待重新连接确认。" : nil
         }
