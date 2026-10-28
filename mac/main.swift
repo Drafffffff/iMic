@@ -119,6 +119,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var gate = ShortClipGate()
     var targetPID: pid_t?
     var targetAppName: String?
+    /// Line breaks typed into a terminal would press Return and run the line.
+    var targetIsTerminal = false
     var transcriptText = ""
     var lastInsertSucceeded = false
     var inserting = false
@@ -636,7 +638,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             targetAppName = app.localizedName
         }
         if let targetPID { inputTarget = InputTarget.capture(pid: targetPID) }
-        IMicLog.write("mac.session", "start session=\(session) implicit=\(implicit) target=\(targetAppName ?? "-")")
+        targetIsTerminal = targetPID.map { InputTarget.looksLikeTerminal(pid: $0, element: inputTarget?.visualElement) } ?? false
+        IMicLog.write("mac.session", "start session=\(session) implicit=\(implicit) target=\(targetAppName ?? "-") terminal=\(targetIsTerminal)")
         IMicLog.write("mac.input", "target pid=\(targetPID ?? -1) streaming=\(inputTarget?.allowsStreaming == true) mode=\(inputTarget?.mode.rawValue ?? "unavailable")")
         link.send(.state(session: session, phase: "listening"))
         setStatus("正在听…")
@@ -1046,6 +1049,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// nil means the target's asynchronous AX snapshot has not settled yet.
     /// Callers must wait before another revision or reporting final delivery.
     func insert(_ text: String) -> Bool? {
+        // Every path into the target (preview revisions and the final result)
+        // passes here; the copyable transcript keeps its original line breaks.
+        let text = TypedTextSafety.sanitize(text, terminal: targetIsTerminal)
         guard !liveInputBlocked else {
             setStatus("输入位置已变化 · 文字已保留")
             return false

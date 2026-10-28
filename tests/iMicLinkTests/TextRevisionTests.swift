@@ -43,4 +43,31 @@ final class TextRevisionTests: XCTestCase {
         XCTAssertEqual(revision.insertion, "好")
         XCTAssertEqual(apply(revision, to: old), "文字好")
     }
+
+    func testTerminalTextNeverContainsReturnOrTab() {
+        let polished = "第一段整理好的内容。\n\nrm -rf ~\r\n最后\t一行\u{2028}结束"
+        let safe = TypedTextSafety.sanitize(polished, terminal: true)
+        XCTAssertNil(safe.rangeOfCharacter(from: .newlines))
+        XCTAssertFalse(safe.contains("\t"))
+        // One space per break keeps revision arithmetic over characters aligned.
+        XCTAssertEqual(safe.count, polished.count)
+        XCTAssertEqual(TypedTextSafety.sanitize("a\nb", terminal: false), "a\nb")
+    }
+
+    func testControlCharactersAreDroppedInEveryTarget() {
+        let hostile = "删除\u{1b}[3~单词\u{7f}\u{0}\u{9b}结束"
+        for terminal in [true, false] {
+            let safe = TypedTextSafety.sanitize(hostile, terminal: terminal)
+            XCTAssertEqual(safe, "删除[3~单词结束")
+        }
+        XCTAssertEqual(TypedTextSafety.sanitize("emoji 👩🏽‍💻 与中文", terminal: true), "emoji 👩🏽‍💻 与中文")
+    }
+
+    func testTerminalDetectionByBundleOrFocusedControl() {
+        XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: "com.apple.Terminal", labels: []))
+        XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: "com.todesktop.230313mzl4w4u92", labels: ["Terminal 1, zsh"]))
+        XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: "com.microsoft.VSCode", labels: [nil, "xterm-helper-textarea"]))
+        XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: nil, labels: ["终端"]))
+        XCTAssertFalse(TypedTextSafety.isTerminal(bundleIdentifier: "com.apple.TextEdit", labels: ["文本", nil, ""]))
+    }
 }

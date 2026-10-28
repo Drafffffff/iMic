@@ -140,6 +140,20 @@ final class InputTarget {
         } else { acquire() }
     }
 
+    /// Terminal emulators by bundle, or a terminal pane inside an editor by the
+    /// focused control's role description, title, description or identifier.
+    static func looksLikeTerminal(pid: pid_t, element: AXUIElement?) -> Bool {
+        let bundle = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+        let labels = element.map { element in
+            [kAXRoleDescriptionAttribute, kAXTitleAttribute, kAXDescriptionAttribute, kAXIdentifierAttribute, kAXHelpAttribute]
+                .map { name -> String? in
+                    var value: CFTypeRef?
+                    return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value as? String : nil
+                }
+        } ?? []
+        return TypedTextSafety.isTerminal(bundleIdentifier: bundle, labels: labels)
+    }
+
     static func clearRoleAllowed(_ role: String?, valueSettable: Bool,
                                  selectedTextSettable: Bool? = nil, subrole: String? = nil,
                                  editable: Bool? = nil) -> Bool {

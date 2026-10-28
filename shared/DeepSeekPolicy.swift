@@ -71,7 +71,8 @@ public enum DeepSeekPolicy {
     /// 终端命令必须是单行：输入路径会把换行当作回车投递，多行结果可能被 shell 直接执行。
     static func isAcceptableCommand(_ result: String) -> Bool {
         guard result.rangeOfCharacter(from: .newlines) == nil,
-              result.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) || $0 == "\t" }),
+              // No tabs either: zsh completion would rewrite the line being typed.
+              result.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }),
               result.count <= 1_000,
               !result.contains("```"),
               !result.hasPrefix("$ ") else { return false }

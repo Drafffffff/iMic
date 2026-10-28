@@ -485,7 +485,7 @@ final class PolishOutputTests: XCTestCase {
         XCTAssertTrue(DeepSeekPolicy.isAcceptable(raw: "今天天气不错", polished: "# 今天天气不错", output: .command))
         // 很短的命令不受原文长度比例限制。
         XCTAssertTrue(DeepSeekPolicy.isAcceptable(raw: "列出当前目录所有文件包括隐藏的那些", polished: "ls -la", output: .command))
-        for polished in ["git switch main\ngit pull", "ls\r-la", "ls\u{2028}-la", "```\nls\n```", "$ ls -la",
+        for polished in ["git switch main\ngit pull", "git commit\t-m", "ls\r-la", "ls\u{2028}-la", "```\nls\n```", "$ ls -la",
                          "ls\u{0007}", String(repeating: "a", count: 1_001)] {
             XCTAssertFalse(DeepSeekPolicy.isAcceptable(raw: raw, polished: polished, output: .command), polished)
         }
