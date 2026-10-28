@@ -228,14 +228,21 @@ final class PolishEffectTests: XCTestCase {
     }
     func testLinesShareParagraphHeightAndSnapContinuationIndent() {
         let rows = [CGRect(x: 32, y: 100, width: 260, height: 20),   // first-line indent kept
-                    CGRect(x: 21, y: 125, width: 280, height: 16),   // OCR jitter on left/height
-                    CGRect(x: 20, y: 148, width: 90, height: 18)]
+                    CGRect(x: 21, y: 130, width: 280, height: 16),   // OCR jitter on left/height
+                    CGRect(x: 20, y: 156, width: 90, height: 18)]
         let lines = SweepLineLayout.lines(in: rows)
         XCTAssertEqual(lines.map(\.height), [18, 18, 18])
         XCTAssertEqual(lines.map(\.maxY), rows.map(\.maxY))
         XCTAssertEqual(lines[0].minX, 32)
         XCTAssertEqual(lines[1].minX, 20)
         XCTAssertEqual(lines[1].maxX, rows[1].maxX)
+    }
+    func testTightLineSpacingKeepsRailsOffTheNextLine() {
+        let rows = [CGRect(x: 20, y: 100, width: 300, height: 24), CGRect(x: 20, y: 126, width: 200, height: 24)]
+        let lines = SweepLineLayout.lines(in: rows)
+        XCTAssertEqual(lines[1].minY-lines[0].maxY, 6, accuracy: 0.01)
+        XCTAssertEqual(lines[0].minY, 100)
+        XCTAssertEqual(lines[1], rows[1])
     }
     func testStrokeFollowsTextSize() {
         XCTAssertEqual(SweepLineLayout.stroke(lineHeight: 11), 1)
@@ -279,6 +286,36 @@ final class PolishEffectTests: XCTestCase {
         XCTAssertEqual(segment(19, 4)?.1, false)
         XCTAssertEqual(segment(23, 7)?.1, true)
         XCTAssertNil(TextLineSegment.visible(NSRange(location: 0, length: 4), in: "   \n" as NSString))
+    }
+    func testMisreadEndsStillCoverTheWholeLine() {
+        // OCR misreads the first two and last two characters of the line.
+        let text = "哎我来试试在这里输入的效果呢请再验证一次OCR的位置是否正确"
+        let ocr = "哀，戎来试试在这里输入的效果呢。请再验证一次 OCR 的位置是否正嗬。"
+        let match = TextRegionMatcher.locate(expected: text, fragments: [ocr], fieldScoped: true)
+        XCTAssertEqual(match?.spans, [TextRegionMatcher.Span(fragment: 0, range: NSRange(location: 0, length: (ocr as NSString).length))])
+        XCTAssertEqual(match?.includesEnd, true)
+    }
+    func testDraftBeforeTranscriptOnSameLineIsNotCovered() {
+        let draft = "原稿开头的文字，"
+        let text = "这是本轮新输入的一段文字需要准确定位"
+        let match = TextRegionMatcher.locate(expected: text, fragments: [draft+text+"。"], fieldScoped: true)
+        XCTAssertEqual(match?.spans.first?.range.location, (draft as NSString).length)
+        XCTAssertEqual(NSMaxRange(match!.spans[0].range), (draft+text+"。" as NSString).length)
+    }
+    func testShortTranscriptMatchesOnlyAUniqueExactOccurrenceInsideAField() {
+        XCTAssertEqual(TextRegionMatcher.locate(expected: "好的", fragments: ["搜索：好的"], fieldScoped: true)?.spans.first?.range,
+                       NSRange(location: 3, length: 2))
+        XCTAssertNil(TextRegionMatcher.locate(expected: "好的", fragments: ["好的，好的"], fieldScoped: true))
+        XCTAssertNil(TextRegionMatcher.locate(expected: "好的", fragments: ["搜索：好的"]))
+        XCTAssertNil(TextRegionMatcher.locate(expected: "好", fragments: ["好"], fieldScoped: true))
+    }
+    func testWindowOCRIgnoresLineNumberGutter() {
+        let lines = ["今天下午三点开会讨论输入框动画", "的细节以及终端里的下划线位置", "最后统一替换成整理后的内容"]
+        let fragments = ["12", lines[0], "13", lines[1], "14", lines[2]]
+        let match = TextRegionMatcher.locate(expected: lines.joined(), fragments: fragments)
+        XCTAssertEqual(match?.spans.map(\.fragment), [1, 3, 5])
+        XCTAssertEqual(TextRegionMatcher.locate(expected: "好的呀", fragments: ["7", "回复：好的呀"])?.spans.first?.fragment, 1)
+        XCTAssertNil(TextRegionMatcher.locate(expected: "好的", fragments: ["回复：好的"]))
     }
     func testRowStaggerIsOrderedAndHandoffRemainsBounded() {
         for count in [1, 3, 8, 40] {
@@ -341,7 +378,8 @@ final class PolishEffectTests: XCTestCase {
         let text = String(repeating: "这部分已经滚出输入框的可见区域。", count: 300)+suffix
         let result = TextRegionMatcher.match(expected: text, fragments: ["旧草稿的尾部", suffix])
         XCTAssertEqual(result?.map(\.fragment), [1])
-        XCTAssertEqual(result?.last?.range.length, (suffix as NSString).length-1)
+        // The line has no letters after the transcript: the span snaps to the line end, period included.
+        XCTAssertEqual(result?.last?.range.length, (suffix as NSString).length)
     }
     func testOnlyVisibleSuffixOfLongTranscriptCanBeMatched() {
         let suffix = "这是当前输入框最后可见的文字需要保留完整的逐行区域并在润色结束后播放扫光"

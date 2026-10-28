@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>iMic field test</title>
+<style>
+  body { font: 17px -apple-system, "PingFang SC", sans-serif; margin: 40px; background: var(--bg); color: var(--fg); }
+  body.dark { --bg: #1e1f22; --fg: #e6e6e6; }
+  body.light { --bg: #ffffff; --fg: #1d1d1f; }
+  .field { width: 640px; box-sizing: border-box; padding: 10px 12px; border: 1px solid #888; border-radius: 8px;
+           background: transparent; color: inherit; font: inherit; line-height: 1.5; }
+  textarea.field { height: 180px; resize: none; }
+  .rich { min-height: 120px; max-height: 200px; overflow-y: auto; outline: none; }
+  .rich p { margin: 0 0 6px; }
+  .code { font: 14px Menlo, monospace; white-space: pre; overflow-x: auto; }
+  .chat { position: fixed; bottom: 40px; left: 40px; }
+</style>
+</head>
+<body>
+<p id="label"></p>
+<div id="slot"></div>
+<script>
+// ?kind=input|textarea|rich|code|chat&pre=...&post=...&theme=dark|light&size=17
+// The runner writes a per-case copy with IMIC_CASE inlined: `open` drops query strings.
+const q = new URLSearchParams(window.IMIC_CASE || location.search);
+const kind = q.get("kind") || "textarea";
+const pre = q.get("pre") || "", post = q.get("post") || "";
+document.body.className = q.get("theme") || "light";
+document.body.style.fontSize = (q.get("size") || "17") + "px";
+document.getElementById("label").textContent = "iMic 测试 · " + kind;
+const slot = document.getElementById("slot");
+let field;
+if (kind === "input") {
+  field = document.createElement("input"); field.className = "field"; field.value = pre + post;
+} else if (kind === "textarea" || kind === "code") {
+  field = document.createElement("textarea"); field.className = "field" + (kind === "code" ? " code" : "");
+  field.value = pre + post;
+} else {
+  // Rich composer like ChatGPT/Claude: contenteditable with one <p> per paragraph.
+  field = document.createElement("div"); field.className = "field rich" + (kind === "chat" ? " chat" : "");
+  field.contentEditable = "true";
+  const paragraphs = (pre + "\u0000" + post).split("\n");
+  for (const text of paragraphs) {
+    const p = document.createElement("p");
+    p.textContent = text.replace("\u0000", "");
+    if (!text.length) p.appendChild(document.createElement("br"));
+    p.dataset.caret = text.includes("\u0000") ? text.indexOf("\u0000") : "";
+    field.appendChild(p);
+  }
+}
+slot.appendChild(field);
+let placed = false;
+function placeCaret() {
+  if (placed) return; placed = true;
+  if (field.setSelectionRange) { field.setSelectionRange(pre.length, pre.length); return; }
+  const p = [...field.querySelectorAll("p")].find(node => node.dataset.caret !== "");
+  const node = p.firstChild && p.firstChild.nodeType === 3 ? p.firstChild : p;
+  const range = document.createRange();
+  range.setStart(node, node.nodeType === 3 ? Number(p.dataset.caret) : 0); range.collapse(true);
+  const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+}
+// Browsers that keep focus in the address bar focus the field later (via AX);
+// place the caret on that first focus instead of selecting everything.
+field.addEventListener("focus", () => setTimeout(placeCaret, 0), { once: true });
+field.focus();
+if (document.activeElement === field) placeCaret();
+</script>
+</body>
+</html>

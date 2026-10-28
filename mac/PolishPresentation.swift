@@ -33,6 +33,14 @@ enum SweepLineLayout {
                 let x = index != paragraph.lowerBound && row.minX-left < height*0.6 ? left : row.minX
                 result[index] = CGRect(x: x, y: row.maxY-height, width: row.maxX-x, height: height)
             }
+            // OCR boxes reach below the glyphs; with tight line spacing the rail
+            // under one line would touch the next. Keep a 6pt gap by lifting the
+            // upper line's bottom, by at most a quarter of its height.
+            for index in paragraph.dropLast() {
+                let row = result[index], next = result[index+1]
+                let lift = min(row.height*0.25, max(0, 6-(next.minY-row.maxY)))
+                if lift > 0 { result[index] = CGRect(x: row.minX, y: row.minY, width: row.width, height: row.height-lift) }
+            }
         }
         return result
     }
@@ -292,9 +300,20 @@ enum TextRegionMatcher {
                        fieldScoped: Bool = false, cancelled: () -> Bool = { false }) -> Match? {
         // Bound CPU/memory independently of the maximum ten-minute recording.
         let pattern = Array(tokens([expected]).suffix(1_200))
+        // Window-wide OCR also reads gutters: code editors and terminals put a
+        // line number beside every line, which would interleave with the
+        // transcript. Bare numbers are dropped (indices stay aligned).
+        let fragments = fieldScoped ? fragments : fragments.map { fragment in
+            let bare = fragment.trimmingCharacters(in: .whitespaces)
+            return bare.count <= 5 && !bare.isEmpty && bare.allSatisfy(\.isNumber) ? "" : fragment
+        }
         let source = Array(tokens(fragments).suffix(4_000))
         let m = pattern.count, n = source.count
-        guard m >= 6, n >= 6, !cancelled() else { return nil }
+        if m < 6 {
+            // Window-wide OCR sees much more text; two-character words are too common there.
+            return fieldScoped || m >= 3 ? exactShort(pattern, in: source, fragments: fragments) : nil
+        }
+        guard n >= 6, !cancelled() else { return nil }
         let width = n + 1
         var trace = [UInt8](repeating: 0, count: (m + 1) * width)
         var previous = [Int](repeating: 0, count: width)
@@ -326,6 +345,7 @@ enum TextRegionMatcher {
         }
         let consumed = max(bestI - i, bestJ - j)
         guard consumed >= 6, Double(matches) / Double(consumed) >= 0.9 else { return nil }
+        let alignedStart = j, alignedEnd = bestJ
         let full = Double(bestI - i) / Double(m) >= 0.85
         let visibleSuffix = bestI == m && (bestJ >= n - 2 || fieldScoped) && matches >= 24
         // Narrow single-line fields may show fewer than 24 characters, or a
@@ -336,16 +356,55 @@ enum TextRegionMatcher {
             && coverage >= (bestI == m ? 0.65 : 0.85)
         guard full || visibleSuffix || clipped else { return nil }
         // Two equally plausible occurrences: skip rather than highlight old draft.
-        let competing = (1...n).filter { $0 <= j || $0 > bestJ + 3 }.map { columnBest[$0] }.max() ?? 0
+        let competing = (1...n).filter { $0 <= alignedStart || $0 > alignedEnd + 3 }.map { columnBest[$0] }.max() ?? 0
         guard Double(competing) < Double(best) * 0.94 else { return nil }
+        // Acceptance above uses the aligned core only. Local alignment drops
+        // misread characters at its ends and would shrink the rail into the
+        // middle of a line, so the drawn span re-extends over unmatched
+        // transcript characters: same OCR line, at most six per side.
+        var back = 0
+        while back < min(i, 6), j > 0, source[j-1].fragment == source[alignedStart].fragment { j -= 1; back += 1 }
+        var forward = 0
+        while forward < min(m-bestI, 6), bestJ < n, source[bestJ].fragment == source[alignedEnd-1].fragment { bestJ += 1; forward += 1 }
+        bestI += forward
+        let spans = spans(source, j..<bestJ, fragments: fragments)
+        return spans.isEmpty ? nil : Match(spans: spans, includesEnd: bestI == m)
+    }
+
+    /// Short transcripts (two to five characters) cannot be aligned reliably.
+    /// Inside a known field accept only a single exact occurrence.
+    private static func exactShort(_ pattern: [Token], in source: [Token], fragments: [String]) -> Match? {
+        let m = pattern.count
+        guard m >= 2, source.count >= m else { return nil }
+        let hits = (0...(source.count-m)).filter { start in
+            (0..<m).allSatisfy { source[start+$0].character == pattern[$0].character }
+                && source[start+m-1].fragment == source[start].fragment
+        }
+        guard hits.count == 1, let start = hits.first else { return nil }
+        let spans = spans(source, start..<(start+m), fragments: fragments)
+        return spans.isEmpty ? nil : Match(spans: spans, includesEnd: true)
+    }
+
+    /// One span per OCR line. A side with no remaining letters or digits on that
+    /// line snaps to the line edge, so trailing punctuation is covered and the
+    /// whole observation box can be used instead of an interpolated sub-box.
+    private static func spans(_ source: [Token], _ range: Range<Int>, fragments: [String]) -> [Span] {
         var spans: [Span] = []
-        for token in source[j..<bestJ] {
+        for token in source[range] {
             if let last = spans.last, last.fragment == token.fragment {
                 spans[spans.count - 1] = Span(fragment: last.fragment, range: NSUnionRange(last.range, token.range))
             } else {
                 spans.append(Span(fragment: token.fragment, range: token.range))
             }
         }
-        return spans.isEmpty ? nil : Match(spans: spans, includesEnd: bestI == m)
+        return spans.map { span in
+            let fragmentTokens = source.filter { $0.fragment == span.fragment }
+            let length = (fragments[span.fragment] as NSString).length
+            let before = fragmentTokens.contains { $0.range.location < span.range.location }
+            let after = fragmentTokens.contains { $0.range.location >= NSMaxRange(span.range) }
+            let start = before ? span.range.location : 0
+            let end = after ? NSMaxRange(span.range) : length
+            return Span(fragment: span.fragment, range: NSRange(location: start, length: end-start))
+        }
     }
 }

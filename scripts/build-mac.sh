@@ -42,6 +42,7 @@ build_binary() {
     "$ROOT/mac/Permissions.swift" \
     "$ROOT/mac/InputTarget.swift" \
     "$ROOT/mac/PolishPresentation.swift" \
+    "$ROOT/mac/TextMarkerGeometry.swift" \
     "$ROOT/mac/TextPolishEffect.swift" \
     "$ROOT/mac/Brand.swift" \
     "$ROOT/mac/StatusBar.swift" \

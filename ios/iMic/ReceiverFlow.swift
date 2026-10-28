@@ -116,6 +116,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         return store?.hasPending == true || spectrum?.ink.releaseWaveActive == true
             || (artworkState != nil && scene.needsStatusFrames(at: CACurrentMediaTime()))
             || particles.contains { $0.phase != .attached || CGFloat(CACurrentMediaTime() - $0.started) < $0.duration + 0.3 }
+            || !debris.isEmpty
     }
 
     func wake() { spectrum?.wake() }
@@ -156,6 +157,22 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         var landPhase: Double = 0
     }
 
+    /// Embers shed by a release. They pop out of the launch point or break off a
+    /// glyph early in its flight, then fall under gravity while cooling from
+    /// near-white to orange, so the burst keeps weight after the text has gone.
+    private struct Debris {
+        var origin: CGPoint
+        var velocity: CGVector
+        var born: Double
+        var life: Double
+        var side: CGFloat
+        var spin: CGFloat
+        var heat: CGFloat
+    }
+    nonisolated private static let debrisGlyph: Character = "■"
+    nonisolated private static let debrisBudget = 140
+    nonisolated private static let gravity: CGFloat = 1500
+
     /// Where an attached glyph sits on its projected wire. The glyph's up axis follows the
     /// ring tangent and is foreshortened with it, so text wraps around the coil in 3D.
     private struct WirePose {
@@ -180,6 +197,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
     private var dimmed = false
     private var textClearOpacity: Float = 1
     private var particles: [Particle] = []
+    private var debris: [Debris] = []
     private var draws: [WaveGlyphDraw] = []
     private var exposures: [WaveGlyphSample] = []
     private let shutter = ReceiverShutter()
@@ -206,6 +224,8 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         exposures.reserveCapacity(512 + 64 * ReceiverShutter.maximumSamples)
         do { drawing = try WaveTextRenderer(view: canvas) }
         catch { IMicLog.write("iphone.visual", "text renderer unavailable: \(error)") }
+        debris.reserveCapacity(Self.debrisBudget)
+        drawing?.prepare(Self.debrisGlyph)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -343,6 +363,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
     func reset() {
         wake()
         particles.removeAll(keepingCapacity: true)
+        debris.removeAll(keepingCapacity: true)
         draws.removeAll(keepingCapacity: true)
         exposures.removeAll(keepingCapacity: true)
         drawing?.resetAtlas()
@@ -423,6 +444,8 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         var shotIndex = 0
         // Retire an earlier visual flight before a repeated release, keeping the budget global.
         particles.removeAll { $0.phase == .projectile }
+        debris.removeAll(keepingCapacity: true)
+        drawing?.prepare(Self.debrisGlyph)
         // Attached text is the released load. Speech still arriving joins the next load.
         // No texture creation, allocations, command sending or audio work in this loop.
         for index in particles.indices where particles[index].phase == .attached {
@@ -466,6 +489,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
             particle.thickness = 1
             particle.phase = .projectile
             particles[index] = particle
+            shed(from: particle, shot: shotIndex, shots: layout.visibleCount, strength: strength)
             shotIndex += 1
         }
         particles.removeAll { $0.phase == .projectile && $0.opacity == 0 }
@@ -478,7 +502,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         textClearOpacity = Float(motion.clearLoadOpacity)
         guard window != nil, positioned, let spectrum, let drawing else { return }
         if let pendingArtwork { updateArtwork(pendingArtwork,drawing:drawing) }
-        guard artworkState != nil || !particles.isEmpty || store?.hasPending == true || hadVisibleText else { return }
+        guard artworkState != nil || !particles.isEmpty || !debris.isEmpty || store?.hasPending == true || hadVisibleText else { return }
         updateGeometry(spectrum)
         // Use the short physical return as the final intake, not an artificial hit-stop.
         if motion.pendingReturn, !wasPendingReturn {
@@ -527,7 +551,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
                 }
             }
             let sampleBudget = particles.count + 64 * (ReceiverShutter.maximumSamples - 1) + 32
-            try drawing.reserve(instances: max(1024, particles.count + 32), samples: sampleBudget)
+            try drawing.reserve(instances: max(1024, particles.count + debris.count + 32), samples: sampleBudget + debris.count)
             if exposures.capacity < sampleBudget { exposures.reserveCapacity(sampleBudget) }
             if draws.capacity < particles.count {
                 draws.reserveCapacity(max(draws.capacity * 2, particles.count))
@@ -615,6 +639,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
             particles[index] = particle
             index += 1
         }
+        appendDebris(now: now, drawing: drawing)
         appendElapsed(drawing)
         if artworkState != nil || !draws.isEmpty || hadVisibleText {
             _ = drawing.draw(draws, samples: exposures, size: bounds.size, scene: artworkState == nil ? nil:scene)
@@ -660,6 +685,64 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         value = (value ^ (value >> 27)) &* 0x94D049BB133111EB
         value ^= value >> 31
         return CGFloat(Double(value >> 11) / 9_007_199_254_740_992)
+    }
+
+    /// A few embers per shot, fewer when many glyphs fly, within one global budget.
+    private func shed(from particle: Particle, shot: Int, shots: Int, strength: CGFloat) {
+        let perShot = shots <= 8 ? 4 : shots <= 24 ? 2 : (shot % 2 == 0 ? 1 : 0)
+        let key = ordinal ^ placementSeed ^ UInt64(shot &* 7919)
+        let lift = 0.7 + 0.5 * min(1, max(0, strength))
+        for piece in 0..<perShot where debris.count < Self.debrisBudget {
+            let stream = UInt64(piece * 8)
+            let u = Self.unit(key, stream: stream), v = Self.unit(key, stream: stream + 1)
+            let w = Self.unit(key, stream: stream + 2), z = Self.unit(key, stream: stream + 3)
+            if piece % 2 == 0 {
+                // Popped out of the launch point: a small hop, then the fall.
+                debris.append(Debris(
+                    origin: particle.origin,
+                    velocity: CGVector(dx: (u - 0.5) * 280 + particle.velocity.dx * 0.05, dy: -(120 + v * 220) * lift),
+                    born: particle.started, life: 0.9 + Double(w) * 0.5,
+                    side: 2.5 + z * 2.5, spin: (u - 0.5) * 14, heat: 0.75))
+            } else {
+                // Broken off the glyph early in flight, keeping a little of its speed.
+                let t = 0.06 + v * 0.16
+                let here = projectilePose(particle, at: t).center
+                let next = projectilePose(particle, at: t + 0.012).center
+                let carried = CGVector(dx: (next.x - here.x) / 0.012 * 0.12, dy: (next.y - here.y) / 0.012 * 0.12)
+                debris.append(Debris(
+                    origin: here,
+                    velocity: CGVector(dx: carried.dx + (u - 0.5) * 180, dy: carried.dy - 40 + w * 80),
+                    born: particle.started + Double(t), life: 0.8 + Double(z) * 0.4,
+                    side: 2 + w * 2, spin: (v - 0.5) * 18, heat: 1))
+            }
+        }
+    }
+
+    private func appendDebris(now: Double, drawing: WaveTextRenderer) {
+        guard !debris.isEmpty else { return }
+        debris.removeAll { now - $0.born > $0.life }
+        // The atlas may have been reset since the release; the ember shape comes back next frame.
+        guard let glyph = try? drawing.texture(for: Self.debrisGlyph) else {
+            drawing.prepare(Self.debrisGlyph); return
+        }
+        for piece in debris {
+            let t = CGFloat(now - piece.born)
+            guard t >= 0 else { continue }
+            // Light air drag sideways, full gravity downwards.
+            let x = piece.origin.x + piece.velocity.dx * (1 - exp(-2.2 * t)) / 2.2
+            let y = piece.origin.y + piece.velocity.dy * t + 0.5 * Self.gravity * t * t
+            guard y < bounds.height + 12, x > -12, x < bounds.width + 12 else { continue }
+            let remaining = max(0, 1 - t / CGFloat(piece.life))
+            let flicker = 0.82 + 0.18 * sin(t * 38 + piece.spin)
+            let heat = piece.heat * max(0, 1 - t * 1.8)
+            let pose = ReceiverFlightPose(center: CGPoint(x: x, y: y), size: CGSize(width: piece.side, height: piece.side),
+                                          rotation: piece.spin * t, opacity: pow(remaining, 1.4) * flicker, warmth: heat)
+            let offset = exposures.count
+            var sample = WaveGlyphSample(pose)
+            sample.appearance.z *= textClearOpacity
+            exposures.append(sample)
+            appendDraw(glyph, bounds: pose.bounds, sampleOffset: offset, sampleCount: 1, depth: 0.04, style: Float(0.2 * heat))
+        }
     }
 
     private func projectilePose(_ particle: Particle, at age: CGFloat) -> ReceiverFlightPose {

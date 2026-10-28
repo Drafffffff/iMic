@@ -11,6 +11,6 @@ xcrun swiftc -swift-version 5 -O -F "$FRAMEWORKS" -I "$SWIFT_SUPPORT" \
   -framework AppKit -framework ApplicationServices -framework Vision -framework ScreenCaptureKit \
   -Xlinker -rpath -Xlinker "$FRAMEWORKS" -Xlinker -rpath -Xlinker "$SWIFT_SUPPORT" \
   "$ROOT/shared/IMicLog.swift" "$ROOT/shared/TextRevision.swift" \
-  "$ROOT/mac/InputTarget.swift" "$ROOT/mac/PolishPresentation.swift" "$ROOT/mac/TextPolishEffect.swift" \
+  "$ROOT/mac/InputTarget.swift" "$ROOT/mac/PolishPresentation.swift" "$ROOT/mac/TextMarkerGeometry.swift" "$ROOT/mac/TextPolishEffect.swift" \
   "$ROOT/tests/PolishEffect/main.swift" -o "$WORK/polish-effect-tests"
 "$WORK/polish-effect-tests" "$@"

@@ -122,6 +122,9 @@ final class TextPolishEffect: @unchecked Sendable {
     /// Measured from the target's pixels when a capture is allowed, otherwise
     /// the system appearance. Chooses ink vs near-white rails, no keylines.
     private var lightBackground: Bool?
+    /// The draft was located through the editor's own geometry (AX ranges or
+    /// text markers); its final layout then outranks the less precise OCR.
+    private var editorGeometry = false
     private var originalText = ""
     private var matchedVisibleUnits: Double = 0
     private var releaseEndpoint: CGPoint?
@@ -177,8 +180,8 @@ final class TextPolishEffect: @unchecked Sendable {
             }
             IMicLog.write("mac.effect", "viewport clipped=\(!Self.same(target.elementFrame, target.field)) height=\(Int(target.field.height)) document_height=\(Int(target.elementFrame.height)) single_line=\(target.singleLine)")
             // Tier 1: the editor's own line geometry. Exact, fast, permission-free.
-            if let layout = Self.rangeLayout(target: target, text: text) {
-                IMicLog.write("mac.effect", "locate source=ax_range lines=\(layout.rows.count)")
+            if let layout = Self.textLayout(target: target, text: text) {
+                IMicLog.write("mac.effect", "locate source=\(layout.source) lines=\(layout.rows.count)")
                 let publish = { (light: Bool?) in
                     DispatchQueue.main.async {
                         self.prepared(layout.rows, generation: version, target: target, visibleUnits: layout.visibleUnits,
@@ -262,7 +265,7 @@ final class TextPolishEffect: @unchecked Sendable {
         panel?.orderOut(nil); panel = nil; sweepView = nil
         removeMonitors()
         lifecycle.cancel()
-        regions = []; paragraphHint = nil; lightBackground = nil; validationTarget = nil
+        regions = []; paragraphHint = nil; lightBackground = nil; editorGeometry = false; validationTarget = nil
         originalText = ""; matchedVisibleUnits = 0; releaseEndpoint = nil
         delivery = nil; allowed = nil; interrupted = nil; targetPID = nil
     }
@@ -296,6 +299,7 @@ final class TextPolishEffect: @unchecked Sendable {
                           paragraphEnds: Set<Int>? = nil, light: Bool? = nil) {
         guard generation == version, cancellation?.cancelled == false, lifecycle.phase == .locating else { return }
         lightBackground = light
+        editorGeometry = paragraphEnds != nil
         regions = SweepLineLayout.lines(in: rectangles)
         paragraphHint = Self.mapped(paragraphEnds, from: rectangles, to: regions)
         validationTarget = target
@@ -368,7 +372,7 @@ final class TextPolishEffect: @unchecked Sendable {
         didShowSweep = true
         let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         let duration = reduced ? 0.12 : SweepLineLayout.duration(lineCount: regions.count)
-        IMicLog.write("mac.effect", "sweep lines=\(regions.count) paragraphs=\((paragraphHint ?? SweepLineLayout.paragraphEnds(regions)).count) source=\(paragraphHint == nil ? "gaps" : "text") palette=\((lightBackground ?? Self.systemAppearanceIsLight) ? "light" : "dark")\(lightBackground == nil ? "(system)" : "") reduced=\(reduced) ms=\(Int(duration*1000)) resultReady=\(lifecycle.hasResult)")
+        IMicLog.write("mac.effect", "sweep lines=\(regions.count) paragraphs=\((paragraphHint ?? SweepLineLayout.paragraphEnds(regions)).count) source=\(paragraphHint == nil ? "gaps" : "text") palette=\((lightBackground ?? Self.systemAppearanceIsLight) ? "light" : "dark")\(lightBackground == nil ? "(system)" : "") reduced=\(reduced) ms=\(Int(duration*1000)) resultReady=\(lifecycle.hasResult) \(Self.geometry(regions, endpoint: nil))")
         let version = generation
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.generation == version, self.lifecycle.phase == .sweeping else { return }
@@ -420,20 +424,20 @@ final class TextPolishEffect: @unchecked Sendable {
         deadline = timeout
         DispatchQueue.main.asyncAfter(deadline: .now()+0.6, execute: timeout)
         guard let target = validationTarget, let token = cancellation else { reveal(source: "no_target", burst: false); return }
-        let oldRows = regions, original = originalText, visibleUnits = matchedVisibleUnits
+        let oldRows = regions, original = originalText, visibleUnits = matchedVisibleUnits, preferEditor = editorGeometry
         // Read again after the editor has had time to reflow/auto-grow. All
         // passes share the existing 600ms visual deadline and cancellation.
         for (attempt, delay) in [0.0, 0.12, 0.28, 0.44].enumerated() {
             queue.asyncAfter(deadline: .now()+delay) { [weak self] in
                 self?.refreshFinalLayout(target: target, pid: pid, finalText: finalText, verified: verified,
                                          oldRows: oldRows, original: original, visibleUnits: visibleUnits,
-                                         token: token, version: version, attempt: attempt)
+                                         preferEditor: preferEditor, token: token, version: version, attempt: attempt)
             }
         }
     }
 
     private func refreshFinalLayout(target: Target, pid: pid_t, finalText: String, verified: Bool,
-                                    oldRows: [CGRect], original: String, visibleUnits: Double,
+                                    oldRows: [CGRect], original: String, visibleUnits: Double, preferEditor: Bool,
                                     token: EffectCancellation, version: Int, attempt: Int) {
         guard !token.cancelled else { return }
         let field = target.element.flatMap { Self.visibleField($0, window: target.window) } ?? target.field
@@ -454,7 +458,7 @@ final class TextPolishEffect: @unchecked Sendable {
         // Some editors expose the new value before updating its line geometry.
         // Do not finalize on that first, stale AX layout immediately after write.
         // Single-line fields qualify too: rangeLayout requires a visible tail.
-        if attempt >= 2, let layout = Self.rangeLayout(target: target, text: finalText) {
+        if attempt >= 2, let layout = Self.textLayout(target: target, text: finalText) {
             DispatchQueue.main.async {
                 guard self.generation == version, self.lifecycle.phase == .writing, !token.cancelled else { return }
                 self.releaseEndpoint = nil
@@ -465,7 +469,9 @@ final class TextPolishEffect: @unchecked Sendable {
             }
             return
         }
-        guard attempt == 1 else { return }
+        // OCR of the final text is a fallback. When the editor reports geometry,
+        // give its post-reflow layout (attempts 2 and 3) the first chance.
+        guard attempt == (preferEditor ? 3 : 1) else { return }
         guard let fresh = Self.locate(pid: pid, element: target.element, expected: finalText, token: token),
               fresh.allowsCapture else { return }
         guard #available(macOS 14.0, *) else { return }
@@ -497,7 +503,7 @@ final class TextPolishEffect: @unchecked Sendable {
               cancellation?.cancelled == false else { finishVisual(); return }
         guard lifecycle.beginRelease() else { return }
         deadline?.cancel(); deadline = nil
-        IMicLog.write("mac.effect", "release source=\(source) burst=\(burst)")
+        IMicLog.write("mac.effect", "release source=\(source) burst=\(burst) \(Self.geometry(regions, endpoint: releaseEndpoint))")
         let duration = sweepView?.release(burst: burst) ?? 0.12
         let version = generation
         let work = DispatchWorkItem { [weak self] in
@@ -506,6 +512,15 @@ final class TextPolishEffect: @unchecked Sendable {
         }
         animationEnd = work
         DispatchQueue.main.asyncAfter(deadline: .now()+duration, execute: work)
+    }
+
+    /// Screen-space summary for diagnostics: union of rows and the endpoint the
+    /// overlay lands on. Coordinates only, never text.
+    private static func geometry(_ rows: [CGRect], endpoint: CGPoint?) -> String {
+        guard let last = rows.last else { return "rows=0" }
+        let union = rows.reduce(CGRect.null) { $0.union($1) }
+        let end = endpoint ?? CGPoint(x: last.maxX, y: last.midY)
+        return "union=\(Int(union.minX)),\(Int(union.minY)),\(Int(union.width)),\(Int(union.height)) end=\(Int(end.x)),\(Int(end.y))"
     }
 
     private func finishVisual() {
@@ -526,6 +541,19 @@ final class TextPolishEffect: @unchecked Sendable {
         let visibleUnits: Double
         /// Row indices ended by a hard line break, plus the text's last row.
         let paragraphEnds: Set<Int>
+        var source = "ax_range"
+    }
+
+    /// Editor geometry: plain AX line ranges first, then the WebKit/Chromium
+    /// text-marker API (Chrome, Safari, Electron), whose AXBoundsForRange is
+    /// often an empty rectangle.
+    private static func textLayout(target: Target, text: String) -> TextLayout? {
+        if let layout = rangeLayout(target: target, text: text) { return layout }
+        guard let element = target.element, let field = visibleField(element, window: target.window),
+              let marker = TextMarkerGeometry.layout(element: element, text: text, field: field,
+                                                     deadline: ProcessInfo.processInfo.systemUptime+0.25) else { return nil }
+        return TextLayout(rows: marker.rows, visibleUnits: marker.visibleUnits,
+                          paragraphEnds: marker.paragraphEnds, source: "ax_marker")
     }
 
     /// Visible line rectangles of the last occurrence of `text`, read from the
@@ -628,6 +656,11 @@ final class TextPolishEffect: @unchecked Sendable {
             if role == kAXWindowRole { break }
             parent = read(ancestor, kAXParentAttribute)
         }
+        // Windows can extend past the display edge; never draw for off-screen text.
+        clips.append(NSScreen.screens.map { screen in
+            let top = NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY
+            return CGRect(x: screen.frame.minX, y: top-screen.frame.maxY, width: screen.frame.width, height: screen.frame.height)
+        }.first { $0.intersects(content) } ?? .zero)
         return TextViewport.visible(content: content, window: window, clips: clips)
     }
 
@@ -664,7 +697,16 @@ final class TextPolishEffect: @unchecked Sendable {
         AXUIElementSetMessagingTimeout(app, 0.08)
         var candidates: [AXUIElement] = []
         if let element { candidates.append(element) }
-        let focused = read(app, kAXFocusedUIElementAttribute).flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? ($0 as! AXUIElement) : nil }
+        var focused = read(app, kAXFocusedUIElementAttribute).flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? ($0 as! AXUIElement) : nil }
+        // Electron apps (Claude, ChatGPT, Cursor, VS Code) publish their text fields
+        // only after AXManualAccessibility is requested. This asks the app for its
+        // AX tree; it is not a TCC permission and changes nothing else.
+        if focused == nil, element == nil,
+           AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue) == .success {
+            usleep(120_000)
+            focused = read(app, kAXFocusedUIElementAttribute).flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? ($0 as! AXUIElement) : nil }
+            IMicLog.write("mac.effect", "manual accessibility requested focused=\(focused != nil)")
+        }
         if let focused { candidates.append(focused) }
         var protectedSeen = false
         let until = ProcessInfo.processInfo.systemUptime + 0.4
@@ -725,6 +767,9 @@ final class TextPolishEffect: @unchecked Sendable {
         configuration.height = max(1, Int(target.window.height * scale))
         configuration.showsCursor = false
         configuration.ignoreShadowsSingleWindow = true
+        // Without this a window on a 1x display is delivered at its native size in
+        // the corner of the larger canvas, and every OCR box maps to the wrong place.
+        configuration.scalesToFit = true
         let image = try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: configuration)
         let sx = CGFloat(image.width) / target.window.width, sy = CGFloat(image.height) / target.window.height
         let crop = CGRect(x: (target.field.minX-target.window.minX)*sx, y: (target.field.minY-target.window.minY)*sy,
@@ -759,9 +804,10 @@ final class TextPolishEffect: @unchecked Sendable {
         let observations = (request.results ?? []).sorted {
             abs($0.boundingBox.midY-$1.boundingBox.midY) > 0.015 ? $0.boundingBox.midY > $1.boundingBox.midY : $0.boundingBox.minX < $1.boundingBox.minX
         }
-        let candidates = observations.compactMap { $0.topCandidates(1).first }
-        if requireTail, !allowClipped, TextRegionMatcher.match(expected: String(expected.suffix(24)), fragments: candidates.map(\.string),
-                                               cancelled: { token.cancelled }) == nil { return RecognizedRegions() }
+        let observed = observations.compactMap { observation in observation.topCandidates(1).first.map { (observation, $0) } }
+        let candidates = observed.map(\.1)
+        if requireTail, !allowClipped, TextRegionMatcher.locate(expected: String(expected.suffix(24)), fragments: candidates.map(\.string),
+                                                fieldScoped: fieldScoped, cancelled: { token.cancelled }) == nil { return RecognizedRegions() }
         guard let match = TextRegionMatcher.locate(expected: expected, fragments: candidates.map(\.string), allowClipped: allowClipped,
                                                    fieldScoped: fieldScoped, cancelled: { token.cancelled }) else {
             if !token.cancelled { IMicLog.write("mac.effect", "ocr unmatched pass=\(pass) expected_chars=\(expected.count) fragments=\(candidates.count)") }
@@ -774,8 +820,15 @@ final class TextPolishEffect: @unchecked Sendable {
         }
         let rectangles: [CGRect] = spans.compactMap { span in
             let candidate = candidates[span.fragment]
-            guard let range = Range(span.range, in: candidate.string), let box = try? candidate.boundingBox(for: range) else { return nil }
-            let r = box.boundingBox
+            // A whole line uses the observation's own box; Vision interpolates
+            // sub-ranges, which drifts with mixed CJK and Latin widths.
+            let r: CGRect
+            if span.range.location == 0, span.range.length == (candidate.string as NSString).length {
+                r = observed[span.fragment].0.boundingBox
+            } else {
+                guard let range = Range(span.range, in: candidate.string), let box = try? candidate.boundingBox(for: range) else { return nil }
+                r = box.boundingBox
+            }
             let result = CGRect(x: field.minX+r.minX*field.width, y: field.minY+(1-r.maxY)*field.height,
                                 width: r.width*field.width, height: r.height*field.height).intersection(field)
             return result.width > 1 && result.height > 1 ? result : nil
