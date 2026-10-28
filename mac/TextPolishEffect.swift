@@ -149,6 +149,7 @@ final class TextPolishEffect: @unchecked Sendable {
         lifecycle.beginPreparation()
         targetPID = pid
         originalText = text
+        Self.snapshotScreens()
         self.allowed = allowed
         self.interrupted = interrupted
         guard Self.enabled, !text.isEmpty, allowed() else {
@@ -179,6 +180,15 @@ final class TextPolishEffect: @unchecked Sendable {
                 return
             }
             IMicLog.write("mac.effect", "viewport clipped=\(!Self.same(target.elementFrame, target.field)) height=\(Int(target.field.height)) document_height=\(Int(target.elementFrame.height)) single_line=\(target.singleLine)")
+            // One coarse crop of the field picks the rail ink; no OCR runs on it.
+            // Started now so the capture overlaps the AX line walk below.
+            var shade: Task<Bool?, Never>?
+            if target.element != nil, canCapture, target.allowsCapture, #available(macOS 14.0, *) {
+                shade = Task {
+                    let image = token.cancelled ? nil : try? await Self.capture(target, maxScale: 0.5)
+                    return image.flatMap(Self.averageLuminance).map { $0 > 0.5 }
+                }
+            }
             // Tier 1: the editor's own line geometry. Exact, fast, permission-free.
             if let layout = Self.textLayout(target: target, text: text) {
                 IMicLog.write("mac.effect", "locate source=\(layout.source) lines=\(layout.rows.count)")
@@ -188,14 +198,12 @@ final class TextPolishEffect: @unchecked Sendable {
                                       paragraphEnds: layout.paragraphEnds, light: light)
                     }
                 }
-                // One small crop of the field picks the rail ink; no OCR runs on it.
-                guard canCapture, target.allowsCapture, #available(macOS 14.0, *) else { publish(nil); return }
-                Task {
-                    let image = token.cancelled ? nil : try? await Self.capture(target)
-                    publish(image.flatMap(Self.averageLuminance).map { $0 > 0.5 })
-                }
+                guard let shade else { publish(nil); return }
+                Task { publish(await shade.value) }
                 return
             }
+            // OCR below measures luminance from its own full-resolution capture.
+            shade?.cancel()
             // Tier 3: a single-line field without usable ranges or OCR still has a
             // reliable vertical centre; estimate the row instead of skipping.
             let estimate = { (light: Bool?) -> Void in
@@ -404,8 +412,9 @@ final class TextPolishEffect: @unchecked Sendable {
         deadline?.cancel(); deadline = nil
         delivery = nil
         IMicLog.write("mac.effect", "writing overlay=\(panel != nil)")
-        // Rails belong to the pre-polish text; clear them before it is replaced.
-        sweepView?.detach()
+        // Rails belong to the pre-polish text: they turn into shimmering skeleton
+        // placeholders until the new layout is known.
+        sweepView?.beginLoading()
         callback()
     }
 
@@ -416,6 +425,7 @@ final class TextPolishEffect: @unchecked Sendable {
         guard lifecycle.phase == .writing else { return }
         guard succeeded, panel != nil, let pid = targetPID,
               NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { finishVisual(); return }
+        Self.snapshotScreens()
         let version = generation
         let timeout = DispatchWorkItem { [weak self] in
             guard let self, self.generation == version else { return }
@@ -440,24 +450,11 @@ final class TextPolishEffect: @unchecked Sendable {
                                     oldRows: [CGRect], original: String, visibleUnits: Double, preferEditor: Bool,
                                     token: EffectCancellation, version: Int, attempt: Int) {
         guard !token.cancelled else { return }
-        let field = target.element.flatMap { Self.visibleField($0, window: target.window) } ?? target.field
-        if !target.singleLine, target.element != nil {
-            let estimate = PolishEndpointEstimate.endpoint(original: original, final: finalText,
-                                                           rows: oldRows, field: field, visibleUnits: visibleUnits, referenceField: target.field)
-            let estimatedRows = PolishEndpointEstimate.layout(original: original, final: finalText,
-                                                              rows: oldRows, field: field, visibleUnits: visibleUnits, referenceField: target.field)
-            DispatchQueue.main.async {
-                guard self.generation == version, self.lifecycle.phase == .writing, !token.cancelled else { return }
-                self.releaseEndpoint = estimate
-                if let estimate {
-                    self.installPanel(regions: estimatedRows.isEmpty ? oldRows : estimatedRows, entering: false,
-                                      endpoint: estimate, confirmed: false)
-                }
-            }
-        }
         // Some editors expose the new value before updating its line geometry.
         // Do not finalize on that first, stale AX layout immediately after write.
         // Single-line fields qualify too: rangeLayout requires a visible tail.
+        // Tried before the estimate so a confirmed layout never follows a
+        // momentary jump to the guessed position.
         if attempt >= 2, let layout = Self.textLayout(target: target, text: finalText) {
             DispatchQueue.main.async {
                 guard self.generation == version, self.lifecycle.phase == .writing, !token.cancelled else { return }
@@ -468,6 +465,24 @@ final class TextPolishEffect: @unchecked Sendable {
                 self.reveal(source: verified ? "confirmed_range_layout" : "readable_layout", burst: true)
             }
             return
+        }
+        if !target.singleLine, target.element != nil {
+            let field = target.element.flatMap { Self.visibleField($0, window: target.window) } ?? target.field
+            let estimate = PolishEndpointEstimate.endpoint(original: original, final: finalText,
+                                                           rows: oldRows, field: field, visibleUnits: visibleUnits, referenceField: target.field)
+            let estimatedRows = PolishEndpointEstimate.layout(original: original, final: finalText,
+                                                              rows: oldRows, field: field, visibleUnits: visibleUnits, referenceField: target.field)
+            DispatchQueue.main.async {
+                guard self.generation == version, self.lifecycle.phase == .writing, !token.cancelled else { return }
+                // Later passes usually repeat the same guess; re-anchoring would blink it.
+                if let estimate, let previous = self.releaseEndpoint,
+                   hypot(estimate.x-previous.x, estimate.y-previous.y) < 0.5 { return }
+                self.releaseEndpoint = estimate
+                if let estimate {
+                    self.installPanel(regions: estimatedRows.isEmpty ? oldRows : estimatedRows, entering: false,
+                                      endpoint: estimate, confirmed: false)
+                }
+            }
         }
         // OCR of the final text is a fallback. When the editor reports geometry,
         // give its post-reflow layout (attempts 2 and 3) the first chance.
@@ -548,6 +563,14 @@ final class TextPolishEffect: @unchecked Sendable {
     /// text-marker API (Chrome, Safari, Electron), whose AXBoundsForRange is
     /// often an empty rectangle.
     private static func textLayout(target: Target, text: String) -> TextLayout? {
+        // Terminal AX boxes are half as wide as wide (CJK) text really is; OCR
+        // reads what is actually drawn.
+        if TypedTextSafety.containsWideCharacters(text),
+           TypedTextSafety.isTerminal(bundleIdentifier: NSRunningApplication(processIdentifier: target.pid)?.bundleIdentifier,
+                                      labels: []) {
+            IMicLog.write("mac.effect", "locate editor_geometry=off cause=terminal_wide_text")
+            return nil
+        }
         if let layout = rangeLayout(target: target, text: text) { return layout }
         guard let element = target.element, let field = visibleField(element, window: target.window),
               let marker = TextMarkerGeometry.layout(element: element, text: text, field: field,
@@ -633,8 +656,24 @@ final class TextPolishEffect: @unchecked Sendable {
         var value: CFTypeRef?
         return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
     }
+    /// Several attributes in one IPC round trip; unsupported ones come back nil.
+    /// Falls back to single reads when the target rejects the batched call.
+    private static func read(_ element: AXUIElement, _ attributes: [String]) -> [CFTypeRef?] {
+        var values: CFArray?
+        guard AXUIElementCopyMultipleAttributeValues(element, attributes as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &values) == .success,
+              let array = values as? [AnyObject], array.count == attributes.count else {
+            return attributes.map { read(element, $0) }
+        }
+        return array.map { value in
+            CFGetTypeID(value) == AXValueGetTypeID() && AXValueGetType(value as! AXValue) == .axError ? nil : value
+        }
+    }
     private static func frame(_ element: AXUIElement) -> CGRect? {
-        guard let a = read(element, kAXPositionAttribute), let b = read(element, kAXSizeAttribute),
+        let values = read(element, [kAXPositionAttribute, kAXSizeAttribute])
+        return frame(position: values[0], size: values[1])
+    }
+    private static func frame(position: CFTypeRef?, size: CFTypeRef?) -> CGRect? {
+        guard let a = position, let b = size,
               CFGetTypeID(a) == AXValueGetTypeID(), CFGetTypeID(b) == AXValueGetTypeID() else { return nil }
         let av = a as! AXValue, bv = b as! AXValue
         var point = CGPoint.zero, size = CGSize.zero
@@ -649,19 +688,28 @@ final class TextPolishEffect: @unchecked Sendable {
         var parent = read(element, kAXParentAttribute)
         for _ in 0..<24 {
             guard let raw = parent, CFGetTypeID(raw) == AXUIElementGetTypeID() else { break }
-            let ancestor = raw as! AXUIElement
-            let role = read(ancestor, kAXRoleAttribute) as? String
+            let values = read(raw as! AXUIElement, [kAXRoleAttribute, kAXPositionAttribute, kAXSizeAttribute, kAXParentAttribute])
+            let role = values[0] as? String
             if role == kAXScrollAreaRole || role == "AXClipView" || role == kAXWindowRole,
-               let rect = frame(ancestor), rect.width > 10, rect.height > 8 { clips.append(rect) }
+               let rect = frame(position: values[1], size: values[2]), rect.width > 10, rect.height > 8 { clips.append(rect) }
             if role == kAXWindowRole { break }
-            parent = read(ancestor, kAXParentAttribute)
+            parent = values[3]
         }
         // Windows can extend past the display edge; never draw for off-screen text.
-        clips.append(NSScreen.screens.map { screen in
-            let top = NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY
-            return CGRect(x: screen.frame.minX, y: top-screen.frame.maxY, width: screen.frame.width, height: screen.frame.height)
-        }.first { $0.intersects(content) } ?? .zero)
+        clips.append(screens.first { $0.intersects(content) } ?? .zero)
         return TextViewport.visible(content: content, window: window, clips: clips)
+    }
+
+    /// Display frames in AX (top-left) coordinates. Workers must not touch
+    /// NSScreen, so main refreshes this snapshot at the start of each pass.
+    private static let screenLock = NSLock()
+    private static var screenSnapshot: [CGRect] = []
+    private static var screens: [CGRect] { screenLock.lock(); defer { screenLock.unlock() }; return screenSnapshot }
+    private static func snapshotScreens() {
+        precondition(Thread.isMainThread)
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        let frames = NSScreen.screens.map { CGRect(x: $0.frame.minX, y: top-$0.frame.maxY, width: $0.frame.width, height: $0.frame.height) }
+        screenLock.lock(); screenSnapshot = frames; screenLock.unlock()
     }
 
     private static func same(_ a: CGRect, _ b: CGRect) -> Bool {
@@ -715,20 +763,25 @@ final class TextPolishEffect: @unchecked Sendable {
         while index < candidates.count, index < 2_000, !token.cancelled, ProcessInfo.processInfo.systemUptime < until {
             let candidate = candidates[index]; index += 1
             AXUIElementSetMessagingTimeout(candidate, 0.06)
-            let role = read(candidate, kAXRoleAttribute) as? String
-            if read(candidate, kAXSubroleAttribute) as? String == kAXSecureTextFieldSubrole
-                || (read(candidate, "AXProtectedContent") as? Bool) == true {
+            // One round trip per node: large web/Electron trees exhaust the
+            // 0.4s budget quickly when every attribute is its own IPC call.
+            let values = read(candidate, [kAXRoleAttribute, kAXSubroleAttribute, "AXProtectedContent",
+                                          kAXPositionAttribute, kAXSizeAttribute, kAXChildrenAttribute])
+            let role = values[0] as? String
+            if values[1] as? String == kAXSecureTextFieldSubrole || (values[2] as? Bool) == true {
                 // Never decorate the secure field itself. Elsewhere in the window it
                 // only rules out screenshots, so AX-located fields keep the effect.
                 if element.map({ CFEqual($0, candidate) }) == true || focused.map({ CFEqual($0, candidate) }) == true { return nil }
                 protectedSeen = true
                 continue
             }
-            if role == "AXTextArea" || role == "AXTextField", let field = frame(candidate), field.width > 10, field.height > 8 {
+            if role == "AXTextArea" || role == "AXTextField", let field = frame(position: values[3], size: values[4]),
+               field.width > 10, field.height > 8 {
                 // The captured focused element is preferred. Discovered fields must
                 // actually contain a distinctive suffix of our emitted transcript.
                 let captured = element.map { CFEqual($0, candidate) } ?? false
-                let content = read(candidate, kAXValueAttribute) as? String ?? ""
+                let value = read(candidate, kAXValueAttribute) as? String
+                let content = value ?? ""
                 let suffix = String(expected.suffix(16))
                 if captured || (!suffix.isEmpty && content.contains(suffix)) {
                     let owner = read(candidate, kAXWindowAttribute)
@@ -738,12 +791,12 @@ final class TextPolishEffect: @unchecked Sendable {
                         return Target(element: candidate, pid: pid, windowID: window.id, windowLayer: window.layer,
                                       window: window.frame, field: visible, elementFrame: field,
                                       singleLine: role == kAXTextFieldRole || (read(candidate, "AXMultiline") as? Bool) == false,
-                                      textSignature: (read(candidate, kAXValueAttribute) as? String)?.hashValue,
+                                      textSignature: value?.hashValue,
                                       allowsCapture: !protectedSeen)
                     }
                 }
             }
-            if let children = read(candidate, kAXChildrenAttribute) as? [AXUIElement] { candidates.append(contentsOf: children) }
+            if let children = values[5] as? [AXUIElement] { candidates.append(contentsOf: children) }
         }
         guard !token.cancelled else { return nil }
         // Window-wide OCR would screenshot the protected content itself.
@@ -758,11 +811,12 @@ final class TextPolishEffect: @unchecked Sendable {
     }
 
     @available(macOS 14.0, *)
-    private static func capture(_ target: Target) async throws -> CGImage {
+    /// `maxScale` 2 suits OCR; a luminance probe needs only a coarse image.
+    private static func capture(_ target: Target, maxScale: CGFloat = 2) async throws -> CGImage {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         guard let window = content.windows.first(where: { $0.windowID == target.windowID }) else { throw CaptureError.unavailable }
         let configuration = SCStreamConfiguration()
-        let scale = min(2, 2_800 / max(target.window.width, target.window.height))
+        let scale = min(maxScale, 2_800 / max(target.window.width, target.window.height))
         configuration.width = max(1, Int(target.window.width * scale))
         configuration.height = max(1, Int(target.window.height * scale))
         configuration.showsCursor = false
@@ -818,7 +872,8 @@ final class TextPolishEffect: @unchecked Sendable {
         let visibleUnits = spans.reduce(0.0) { total, span in
             total+PolishEndpointEstimate.units(in: (candidates[span.fragment].string as NSString).substring(with: span.range))
         }
-        let rectangles: [CGRect] = spans.compactMap { span in
+        var raw: [(rect: CGRect, endsLine: Bool)] = []
+        for span in spans {
             let candidate = candidates[span.fragment]
             // A whole line uses the observation's own box; Vision interpolates
             // sub-ranges, which drifts with mixed CJK and Latin widths.
@@ -826,14 +881,57 @@ final class TextPolishEffect: @unchecked Sendable {
             if span.range.location == 0, span.range.length == (candidate.string as NSString).length {
                 r = observed[span.fragment].0.boundingBox
             } else {
-                guard let range = Range(span.range, in: candidate.string), let box = try? candidate.boundingBox(for: range) else { return nil }
+                guard let range = Range(span.range, in: candidate.string), let box = try? candidate.boundingBox(for: range) else { continue }
                 r = box.boundingBox
             }
             let result = CGRect(x: field.minX+r.minX*field.width, y: field.minY+(1-r.maxY)*field.height,
                                 width: r.width*field.width, height: r.height*field.height).intersection(field)
-            return result.width > 1 && result.height > 1 ? result : nil
+            if result.width > 1, result.height > 1 {
+                raw.append((result, NSMaxRange(span.range) == (candidate.string as NSString).length))
+            }
         }
+        let rectangles = refineInk(raw, image: image, field: field)
         return RecognizedRegions(rectangles: rectangles, visibleUnits: visibleUnits, includesEnd: match.includesEnd)
+    }
+
+    /// Snap OCR boxes to the glyph ink in the same capture. Vision's boxes float
+    /// with each line's glyphs, which put rails at uneven distances below the
+    /// text and line ends a little off. Each row searches only up to the midpoint
+    /// of its neighbours; a box that cannot be confirmed keeps its OCR geometry.
+    private static func refineInk(_ rows: [(rect: CGRect, endsLine: Bool)], image: CGImage, field: CGRect) -> [CGRect] {
+        guard !rows.isEmpty, let ink = inkImage(image) else { return rows.map(\.rect) }
+        let sx = CGFloat(image.width)/field.width, sy = CGFloat(image.height)/field.height
+        let rects = rows.map(\.rect)
+        return rows.map { row in
+            let r = row.rect
+            let above = rects.filter { $0.midY < r.minY }.map(\.maxY).max()
+            let below = rects.filter { $0.midY > r.maxY }.map(\.minY).min()
+            let top = above.map { ($0+r.minY)/2 } ?? r.minY-r.height*0.5
+            let bottom = below.map { ($0+r.maxY)/2 } ?? r.maxY+r.height*0.5
+            let lower = Int(((top-field.minY)*sy).rounded(.down)), upper = Int(((bottom-field.minY)*sy).rounded(.up))
+            guard upper > lower else { return r }
+            let box = CGRect(x: (r.minX-field.minX)*sx, y: (r.minY-field.minY)*sy, width: r.width*sx, height: r.height*sy)
+            guard let glyph = InkBounds.refine(box, in: ink, window: lower...upper, extendRight: row.endsLine) else { return r }
+            let refined = CGRect(x: field.minX+glyph.minX/sx, y: field.minY+glyph.minY/sy,
+                                 width: glyph.width/sx, height: glyph.height/sy)
+            // Glyph ink is tighter than a line box; leave room for descent so the
+            // rail sits like an underline, as it does on the AX path.
+            return CGRect(x: refined.minX, y: refined.minY, width: refined.width, height: refined.height*1.12).intersection(field)
+        }
+    }
+
+    private static func inkImage(_ image: CGImage) -> InkImage? {
+        let width = image.width, height = image.height
+        guard width > 0, height > 0, width*height <= 16_000_000 else { return nil }
+        var pixels = [UInt8](repeating: 0, count: width*height)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width, space: CGColorSpaceCreateDeviceGray(),
+                                          bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        return drawn ? InkImage(pixels: pixels, width: width, height: height) : nil
     }
 }
 
@@ -874,6 +972,9 @@ private final class SweepView: NSView {
     private var endpointCore: CALayer?
     private var rails: [CALayer] = []
     private var caps: [CALayer] = []
+    /// Dim placeholder rails and endpoints shown while the new layout is pending.
+    private var skeletonRails: [CALayer] = []
+    private var skeletonCaps: [CALayer] = []
     private var alignedAt: CFTimeInterval = 0
 
     private static let travelTime: CFTimeInterval = 0.2
@@ -1131,12 +1232,121 @@ private final class SweepView: NSView {
         CATransaction.commit()
     }
 
-    /// The editor is about to replace the text under the rails. Retract every
-    /// rail and paragraph endpoint now, at the text swap, so nothing sits on or
-    /// travels across reflowing text; only the final status endpoint remains.
-    func detach() {
-        retire(rails, fade: false); rails = []
-        retire(caps, fade: true); caps = []
+    /// The editor is replacing the text under the rails and the new layout is not
+    /// known yet. Instead of an empty gap, the rails stay where they are as dim
+    /// skeleton placeholders with a skeleton-screen shimmer running along them,
+    /// staggered row by row. Nothing moves across lines; the status endpoint keeps
+    /// its cadence. The skeleton leaves when the confirmed layout draws or on release.
+    func beginLoading() {
+        guard !rails.isEmpty || !caps.isEmpty else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        let now = CACurrentMediaTime()
+        for (row, line) in rails.enumerated() {
+            line.removeAllAnimations()
+            line.transform = CATransform3DIdentity
+            let dim = palette.line.withAlphaComponent(palette.line.alphaComponent*0.32).cgColor
+            let fade = CABasicAnimation(keyPath: "backgroundColor")
+            fade.fromValue = line.backgroundColor; fade.toValue = dim; fade.duration = reducedMotion ? 0 : 0.12
+            line.backgroundColor = dim
+            line.add(fade, forKey: "skeleton-dim")
+            if !reducedMotion { shimmer(along: line, begin: now+0.08+Double(row)*0.08) }
+        }
+        for node in caps {
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = node.opacity; fade.toValue = 0.4; fade.duration = reducedMotion ? 0 : 0.12
+            node.opacity = 0.4
+            node.add(fade, forKey: "skeleton-dim")
+        }
+        CATransaction.commit()
+        skeletonRails += rails; skeletonCaps += caps
+        rails = []; caps = []
+    }
+
+    /// The final text is already in the field but its confirmed layout is not:
+    /// stretch or shrink each skeleton bar in place to the estimated length of the
+    /// new text, so a shorter polished result is not overhung by the draft's bars.
+    /// Bars only change width (no vertical travel across lines); extra rows fade
+    /// in as skeletons, surplus rows fade out.
+    private func reshapeSkeleton(to regions: [CGRect]) {
+        guard !skeletonRails.isEmpty, !regions.isEmpty else { return }
+        let duration = reducedMotion ? 0 : 0.18
+        let easing = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        retire(skeletonCaps, fade: true); skeletonCaps = []
+        var kept: [CALayer] = []
+        // A single-row draft has no measured line pitch, so the estimate guesses
+        // where new lines go and could cut through them; those rows wait for the
+        // confirmed layout. With two or more rows the pitch is observed.
+        let rows = skeletonRails.count >= 2 ? regions : Array(regions.prefix(skeletonRails.count))
+        for (index, rect) in rows.enumerated() {
+            guard index < skeletonRails.count else {
+                let line = rail(for: rect)
+                line.backgroundColor = palette.line.withAlphaComponent(palette.line.alphaComponent*0.32).cgColor
+                loadingRoot?.addSublayer(line)
+                if !reducedMotion {
+                    let show = CABasicAnimation(keyPath: "opacity"); show.fromValue = 0; show.toValue = 1; show.duration = 0.12
+                    line.add(show, forKey: "skeleton-in")
+                    shimmer(along: line, begin: CACurrentMediaTime()+Double(index)*0.08)
+                }
+                kept.append(line)
+                continue
+            }
+            let line = skeletonRails[index]
+            anchorRight(line)
+            let current = line.presentation() ?? line
+            let fromWidth = current.bounds.width, fromX = current.position.x
+            // Keep the bar on its own line; only a near-identical row may shift.
+            let y = abs(rect.minY-1-thickness(rect)/2-line.position.y) < rect.height*0.6
+                ? rect.minY-1-thickness(rect)/2 : line.position.y
+            line.bounds.size.width = rect.width
+            line.position = CGPoint(x: rect.maxX, y: y)
+            if duration > 0 {
+                let width = CABasicAnimation(keyPath: "bounds.size.width")
+                width.fromValue = fromWidth; width.toValue = rect.width
+                let x = CABasicAnimation(keyPath: "position.x")
+                x.fromValue = fromX; x.toValue = rect.maxX
+                for animation in [width, x] { animation.duration = duration; animation.timingFunction = easing }
+                line.add(width, forKey: "skeleton-width"); line.add(x, forKey: "skeleton-x")
+            }
+            kept.append(line)
+        }
+        if skeletonRails.count > rows.count {
+            retire(Array(skeletonRails[rows.count...]), fade: true)
+        }
+        skeletonRails = kept
+        CATransaction.commit()
+    }
+
+    /// A narrow highlight travelling left to right inside a rail, then a short
+    /// rest, repeated: the loading cue of a skeleton screen.
+    private func shimmer(along line: CALayer, begin: CFTimeInterval) {
+        line.masksToBounds = true
+        let length = line.bounds.width
+        let width = min(140, max(36, length*0.35))
+        let band = CAGradientLayer()
+        let bright = palette.line.cgColor, clear = palette.line.withAlphaComponent(0).cgColor
+        band.colors = [clear, bright, clear]
+        band.locations = [0, 0.5, 1]
+        band.startPoint = CGPoint(x: 0, y: 0.5); band.endPoint = CGPoint(x: 1, y: 0.5)
+        band.bounds = CGRect(x: 0, y: 0, width: width, height: line.bounds.height)
+        band.position = CGPoint(x: -width/2, y: line.bounds.height/2)
+        line.addSublayer(band)
+        let travel = min(1.1, max(0.45, (length+width*2)/760))
+        let move = CABasicAnimation(keyPath: "position.x")
+        move.fromValue = -width/2; move.toValue = length+width/2
+        move.duration = travel
+        move.timingFunction = CAMediaTimingFunction(controlPoints: 0.45, 0, 0.55, 1)
+        let cycle = CAAnimationGroup(); cycle.animations = [move]
+        cycle.duration = travel+0.28; cycle.repeatCount = .infinity
+        cycle.beginTime = begin
+        band.add(cycle, forKey: "skeleton-shimmer")
+    }
+
+    /// Skeleton placeholders fade out in place while the new rails draw.
+    private func retireSkeleton() {
+        let nodes = skeletonRails+skeletonCaps
+        skeletonRails = []; skeletonCaps = []
+        retire(nodes, fade: true)
     }
 
     private func retire(_ nodes: [CALayer], fade: Bool) {
@@ -1161,8 +1371,8 @@ private final class SweepView: NSView {
         DispatchQueue.main.asyncAfter(deadline: .now()+duration) { nodes.forEach { $0.removeFromSuperlayer() } }
     }
 
-    /// New layout after the write. Old rails have already retracted into their
-    /// endpoints; nothing ever travels across lines.
+    /// New layout after the write. Old rails wait as skeleton placeholders;
+    /// nothing ever travels across lines.
     /// - Confirmed geometry (AX or OCR of the final text): new rails draw on in
     ///   place, top to bottom, and the endpoint lands at the end of the last row.
     ///   A one-line draft growing into four lines visibly becomes four lines.
@@ -1171,7 +1381,11 @@ private final class SweepView: NSView {
     func align(regions: [CGRect], paragraphEnds ends: Set<Int>, endpoint: CGPoint?, confirmed: Bool) {
         let regions = snapped(regions)
         guard let loading = loadingRoot, let last = regions.last else { return }
-        detach()
+        // Rails from an earlier pass retract; the skeleton stays until a confirmed
+        // layout replaces it, so an estimate never reopens an empty gap.
+        retire(rails, fade: false); rails = []
+        retire(caps, fade: true); caps = []
+        if confirmed { retireSkeleton() }
         rowRegions = regions; paragraphEnds = ends; self.endpoint = endpoint
         CATransaction.begin(); CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
@@ -1184,6 +1398,7 @@ private final class SweepView: NSView {
         } else { core = endpointCore! }
         let now = CACurrentMediaTime()
 
+        if !confirmed { reshapeSkeleton(to: regions) }
         guard confirmed, !reducedMotion else {
             let moved = hypot((core.presentation()?.position.x ?? core.position.x)-target.x,
                               (core.presentation()?.position.y ?? core.position.y)-target.y) > 0.5
@@ -1201,7 +1416,8 @@ private final class SweepView: NSView {
             return
         }
 
-        let start = now+Self.retireTime
+        // Draw while the skeleton fades: the loading state hands over without a gap.
+        let start = now+0.03
         let drawTime = 0.12
         let stagger = regions.count > 1 ? min(0.045, 0.18/Double(regions.count-1)) : 0
         let easing = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
@@ -1246,6 +1462,8 @@ private final class SweepView: NSView {
         }
         let start = CACurrentMediaTime()+delay
         let retract = 0.09
+        // An estimate-only finish still has the skeleton; it leaves with the rails.
+        retireSkeleton()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for line in rails {
             anchorRight(line)

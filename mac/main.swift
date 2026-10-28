@@ -18,12 +18,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var window: NSWindow!
     var settingsWindow: NSWindow!
-    var permissionGuide: InputPermissionGuide?
+    var setupWizard: SetupWizard?
+    /// Fake wizard state for --ui-preview=setup-*; never used with real permissions.
+    var previewSetup: SetupSnapshot?
     var statusMenu: NSMenu!
 
     let stateLabel = NSTextField(labelWithString: "NO LINK")
     let pairPanel = NSStackView()
-    var pairSteps: NSStackView!
     let pairCodeLabel = NSTextField(labelWithString: "000 000")
     let pairHint = NSTextField(labelWithString: "")
     var pairPanelVisible = true
@@ -36,7 +37,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let elapsedLabel = NSTextField(labelWithString: "0.0 s")
     let spinner = NSProgressIndicator()
     let activityHint = NSTextField(labelWithString: "")
-    let resultMeta = NSTextField(labelWithString: "")
     var lastLatencyMS = 0.0
     var activityRow: NSStackView!
     var stageStack: NSStackView!
@@ -62,6 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var pullDeleteCheck: NSButton!
     var swipeCursorCheck: NSButton!
     var deepseekCheck: NSButton!
+    /// Mode, tone, language and service; shown only while polish is on.
+    var polishFields: NSStackView?
     let deepseekKey = NSSecureTextField()
     let deepseekModel = NSTextField(string: DeepSeekConfiguration.modelName)
     var deepseekHint: NSTextField!
@@ -169,7 +171,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if preview == nil { TextPolishEffect.prewarm() }
+        if preview == nil {
+            TextPolishEffect.prewarm()
+            DeepSeekConfiguration.migrateDefaultProvider(hasDeepSeekKey: {
+                PolishCredentials.resolve(for: .deepseek) != nil
+            })
+        }
 
         NSApp.setActivationPolicy(.accessory)
         buildUI()
@@ -189,6 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installLinkHandlers()
         link.start()
         show()
+        if shouldShowSetupOnLaunch() { showSetup() }
 
         watchdog = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.tick()
@@ -379,6 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         defaults.set(preferences.options.tone.rawValue, forKey: "polishTone")
         let saved = polishPreferences
         deepseekCheck?.state = saved.enabled ? .on : .off
+        polishFields?.isHidden = !saved.enabled
         polishToneButtons?.selectedSegment = PolishTone.allCases.firstIndex(of: saved.options.tone) ?? 0
         polishModeButtons?.selectedSegment = PolishMode.allCases.firstIndex(of: saved.options.mode) ?? 0
         polishOutputPicker?.selectItem(at: PolishOutput.languages.firstIndex(of: saved.options.output) ?? 0)
@@ -590,7 +599,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !key.stringValue.isEmpty else {
             IMicLog.write("mac.session", "start rejected key missing session=\(session)")
             link.send(.failure(session: session, code: "key", message: "Mac 尚未配置百炼 API Key"))
-            showSettings()
+            showSetup(at: .key)
             polishEffect.cancel()
             polishTask?.cancel(); polishTask = nil
             sendGestureState()
@@ -1327,13 +1336,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let active = DeepSeekConfiguration.provider.title
         switch provider {
         case .deepseek:
-            deepseekHint.stringValue = "当前生效：\(active)。官方 Key 独立保存到 ~/.zshrc；失败保留原文。"
+            deepseekHint.stringValue = "当前生效：\(active)。\(credentialNote(for: provider))失败保留原文。"
             polishAddressHint.stringValue = "完整 Chat Completions 地址，仅允许 api.deepseek.com 的 HTTPS 地址。关闭思考，只整理口述内容。"
         case .bailian:
-            deepseekHint.stringValue = "当前生效：\(active)。复用上方百炼 Key（DASHSCOPE_API_KEY / BAILIAN_API_KEY），请在上方修改。"
+            deepseekHint.stringValue = "当前生效：\(active)。复用上方百炼 Key，一个 Key 同时用于识别与润色；请在上方修改。"
             polishAddressHint.stringValue = "填完整地址：https://业务空间ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions；默认是北京 DashScope。Key、模型须与地域匹配；关闭思考。"
         case .custom:
-            deepseekHint.stringValue = "当前生效：\(active)。独立 Key 保存为 ~/.zshrc 中的 IMIC_CUSTOM_POLISH_API_KEY，不复用其他来源。"
+            deepseekHint.stringValue = "当前生效：\(active)。\(credentialNote(for: provider))不复用其他来源。"
             polishAddressHint.stringValue = "填写完整 HTTPS Chat Completions 地址，例如 https://example.com/v1/chat/completions，不是 Base URL。不支持思考专用模型；HTTP 仅允许 127.0.0.1 或 [::1] 本机联调。"
         }
         let expanded = provider == .custom
@@ -1457,14 +1466,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             systemSymbolName: visible ? "chevron.down" : "chevron.right",
             accessibilityDescription: nil
         )
-        advancedButton.setAccessibilityLabel(visible ? "收起高级设置" : "展开高级设置")
-        if let window = settingsWindow {
-            var frame = window.frame
-            let delta: CGFloat = visible ? 120 : -120
-            frame.origin.y -= delta
-            frame.size.height += delta
-            window.setFrame(frame, display: true)
-        }
+        advancedButton.title = visible ? "收起高级选项" : "显示高级选项"
+        advancedButton.setAccessibilityLabel(visible ? "收起高级选项" : "显示高级选项")
     }
 
     @objc func saveSettings() {
@@ -1480,21 +1483,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard validatePolishSettings() else { return }
         if preview == nil {
-            if !cleanedKey.isEmpty {
+            // Only a changed key is written; a key read from the environment stays external.
+            let resolved = MicCredentials.resolve()
+            if cleanedKey != (resolved?.key ?? ""), !cleanedKey.isEmpty || resolved?.source == .app {
                 guard MicCredentials.save(cleanedKey) else {
                     saveFeedback.textColor = .systemRed
-                    saveFeedback.stringValue = "Key 保存失败，请检查文件权限"
+                    saveFeedback.stringValue = "百炼 Key 格式无效或无法写入 iMic 配置文件"
                     return
                 }
             }
+            key.stringValue = MicCredentials.load()
+            updateKeySource()
             UserDefaults.standard.set(model.stringValue, forKey: "asrModel")
             UserDefaults.standard.set(endpoint.stringValue, forKey: "asrEndpoint")
         }
-        for (provider, value) in polishDrafts {
-            if provider != .bailian, (!value.key.isEmpty || !PolishCredentials.load(for: provider).isEmpty),
-               !PolishCredentials.save(value.key, for: provider) {
+        for (provider, value) in polishDrafts where provider != .bailian && preview == nil {
+            let resolved = PolishCredentials.resolve(for: provider)
+            guard value.key != (resolved?.key ?? ""), !value.key.isEmpty || resolved?.source == .app else { continue }
+            guard PolishCredentials.save(value.key, for: provider) else {
                 saveFeedback.textColor = .systemRed
-                saveFeedback.stringValue = "\(provider.title) Key 保存失败，请检查 ~/.zshrc 权限"
+                saveFeedback.stringValue = "\(provider.title) Key 无法写入 iMic 配置文件"
                 return
             }
         }
@@ -1510,23 +1518,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func permissions() {
-        guard let applicationURL = PermissionApplication.current else {
-            setStatus("请从「应用程序」打开 iMic 后设置权限")
-            return
+        showSetup(at: .permissions)
+    }
+
+    @objc func showSetupAction() {
+        showSetup()
+    }
+
+    func showSetup(at step: SetupStep? = nil) {
+        guard !headless else { return }
+        if let wizard = setupWizard {
+            wizard.reopen(at: step)
+        } else {
+            let wizard = SetupWizard(host: self)
+            setupWizard = wizard
+            wizard.reopen(at: step)
         }
-        if permissionGuide == nil {
-            permissionGuide = InputPermissionGuide(
-                applicationURL: applicationURL,
-                preview: preview != nil,
-                check: { [weak self] in
-                    self?.inputPermissionState() ?? InputPermissionState(accessibility: false, posting: false)
-                },
-                request: { [weak self] in self?.requestInputAuthorization() }
-            )
-        }
-        permissionGuide?.refreshState()
-        permissionGuide?.showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// New users, or anyone missing the one required key, start in the wizard.
+    func shouldShowSetupOnLaunch() -> Bool {
+        if key.stringValue.isEmpty { return true }
+        guard UserDefaults.standard.integer(forKey: SetupWizard.completedKey) < SetupWizard.version else { return false }
+        // Existing installs that are already set up are not interrupted.
+        guard inputAllowed() else { return true }
+        UserDefaults.standard.set(SetupWizard.version, forKey: SetupWizard.completedKey)
+        return false
     }
 
     func requestInputAuthorization() {
@@ -1657,6 +1674,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             transcriptText = "把今天讨论的交互细节整理成一页说明，重点保留按住说话、松开即输入的节奏。"
             lastInsertSucceeded = true
             samples = 51_200
+        case let name where name.hasPrefix("setup"):
+            previewSetup = previewSetupSnapshot(name)
+            setStatus("等待 iPhone 连接")
         case "permission":
             setStatus("文字已保留 · 请允许自动输入")
             transcriptText = "文字已经识别完成，可以先复制使用。"
@@ -1669,6 +1689,103 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStatusBar()
         if preview == "settings" { showSettings() }
         show()
+        if let setup = previewSetup {
+            showSetup(at: SetupStep.first(for: setup))
+        }
+    }
+
+    private func previewSetupSnapshot(_ name: String) -> SetupSnapshot {
+        let detected = ResolvedCredential(key: "sk-preview-detected-key", source: .shell(path: "~/.zshrc", name: "DASHSCOPE_API_KEY"))
+        var snapshot = SetupSnapshot(
+            key: nil, permission: InputPermissionState(accessibility: false, posting: false),
+            screenCapture: false, location: .applications,
+            applicationURL: PermissionApplication.current, asrEndpoint: ASRConfiguration.defaultEndpoint)
+        switch name {
+        case "setup-move": snapshot.location = .translocated
+        case "setup-granted": snapshot.permission = InputPermissionState(accessibility: true, posting: true)
+        case "setup-key", "setup-key-detected":
+            snapshot.permission = InputPermissionState(accessibility: true, posting: true)
+            snapshot.screenCapture = true
+            if name == "setup-key-detected" { snapshot.key = detected }
+        default: break
+        }
+        return snapshot
+    }
+}
+
+// MARK: - Setup wizard host
+
+extension AppDelegate: SetupWizardHost {
+    var setupPreview: Bool { preview != nil }
+
+    func setupSnapshot() -> SetupSnapshot {
+        if let fake = previewSetup { return fake }
+        var active: ResolvedCredential?
+        if !key.stringValue.isEmpty {
+            let found = MicCredentials.resolve()
+            active = found?.key == key.stringValue ? found : ResolvedCredential(key: key.stringValue, source: .app)
+        }
+        return SetupSnapshot(
+            key: active,
+            permission: inputPermissionState(),
+            screenCapture: CGPreflightScreenCaptureAccess(),
+            location: SetupLocation.classify(PermissionApplication.current),
+            applicationURL: PermissionApplication.current,
+            asrEndpoint: endpoint.stringValue)
+    }
+
+    func setupSaveKey(_ value: String) -> Bool {
+        if previewSetup != nil {
+            previewSetup?.key = ResolvedCredential(key: value, source: .app)
+            return true
+        }
+        guard MicCredentials.save(value) else { return false }
+        key.stringValue = MicCredentials.load()
+        keyChanged()
+        return true
+    }
+
+    func setupUseKey(_ credential: ResolvedCredential) {
+        guard previewSetup == nil else { return }
+        key.stringValue = credential.key
+        keyChanged()
+    }
+
+    private func keyChanged() {
+        updateKeySource()
+        if editingPolishProvider == .bailian { loadPolishProviderFields() }
+        if connectedName == nil { setStatus("等待 iPhone 连接") }
+        refreshUI()
+    }
+
+    func setupRequestAccessibility() { requestInputAuthorization() }
+
+    func setupRequestScreenCapture() {
+        guard preview == nil else { return }
+        _ = CGRequestScreenCaptureAccess()
+    }
+
+    func setupFinished() {
+        UserDefaults.standard.set(SetupWizard.version, forKey: SetupWizard.completedKey)
+        show()
+    }
+
+    func credentialNote(for provider: PolishProvider) -> String {
+        PolishCredentials.resolve(for: provider)?.source.isExternal == true ? "已自动读取本机配置的 Key。" : ""
+    }
+
+    func updateKeySource() {
+        guard let hint = keyHint else { return }
+        switch MicCredentials.resolve()?.source {
+        case nil: hint.stringValue = "还没有 Key。一个百炼 Key 同时用于识别和润色。"
+        case .app?: hint.stringValue = "一个百炼 Key 同时用于识别和润色。"
+        case _?: hint.stringValue = "已自动读取本机配置的 Key，同时用于识别和润色。"
+        }
+    }
+
+    @objc func openBailianConsole() {
+        guard preview == nil else { return }
+        NSWorkspace.shared.open(SetupLinks.bailianKeys)
     }
 }
 

@@ -49,6 +49,20 @@ enum TypedTextSafety {
         "com.github.wez.wezterm", "org.tabby"
     ]
 
+    /// East Asian wide characters (CJK, kana, Hangul, full-width forms, emoji).
+    /// Terminals draw each in two cells, but Terminal.app and Otty report one
+    /// cell per character through AX, so their boxes cover half the text.
+    static func containsWideCharacters(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x1100...0x115F, 0x2E80...0x303E, 0x3041...0x33FF, 0x3400...0x4DBF, 0x4E00...0x9FFF,
+                 0xA960...0xA97F, 0xAC00...0xD7A3, 0xF900...0xFAFF, 0xFE30...0xFE4F, 0xFF00...0xFF60,
+                 0xFFE0...0xFFE6, 0x1F300...0x1FAFF, 0x20000...0x3FFFD: return true
+            default: return false
+            }
+        }
+    }
+
     static func isTerminal(bundleIdentifier: String?, labels: [String?]) -> Bool {
         if let bundleIdentifier, terminalBundles.contains(bundleIdentifier) { return true }
         return labels.contains { label in

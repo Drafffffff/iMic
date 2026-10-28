@@ -7,8 +7,7 @@ struct ClearDropZone: View {
     let enabled: Bool
 
     var body: some View {
-        let progress = motion.isClearing ? CGFloat(motion.clearZone)
-            : (enabled ? min(1, max(0, -motion.pull / distance)) : 0)
+        let progress = motion.clearPreview(distance: distance, enabled: enabled)
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "trash").font(.system(size: 15, weight: .semibold))

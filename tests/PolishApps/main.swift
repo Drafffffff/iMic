@@ -60,7 +60,7 @@ func finish(_ status: String) {
 
 let keyCodes: [String: CGKeyCode] = [
     "left": 123, "right": 124, "down": 125, "up": 126, "delete": 51, "home": 115, "end": 119,
-    "escape": 53, "a": 0, "c": 8, "e": 14, "k": 40, "s": 1, "u": 32, "w": 13, "space": 49, "tab": 48
+    "escape": 53, "a": 0, "c": 8, "e": 14, "n": 45, "k": 40, "s": 1, "u": 32, "w": 13, "space": 49, "tab": 48
 ]
 
 func post(_ token: String, pid: pid_t) {
@@ -277,6 +277,7 @@ func run() {
     result["capture"] = CGPreflightScreenCaptureAccess()
     for key in options.keys {
         if key == "focus-web" { result["focusWeb"] = focusWebField(pid); usleep(300_000) }
+        else if key.hasPrefix("wait:") { usleep(useconds_t((Int(key.dropFirst(5)) ?? 0) * 1000)) }
         else if key.hasPrefix("pretype:") {
             type(Data(base64Encoded: String(key.dropFirst(8))).flatMap { String(data: $0, encoding: .utf8) } ?? "", pid: pid)
         } else { post(key, pid: pid) }
@@ -349,7 +350,13 @@ func run() {
         let phase = "\(effect.phase)"
         if phase != last { phases.append(phase); last = phase }
         if #available(macOS 14.0, *) {
-            if phase == "holding", !shots.contains("hold") { shots.insert("hold"); snapshot(region, "hold") }
+            if phase == "holding", !shots.contains("hold") {
+                shots.insert("hold")
+                // Let the landing squash settle before the geometry shot.
+                DispatchQueue.main.asyncAfter(deadline: .now()+0.25) { snapshot(region, "hold") }
+            }
+            if let wrote, Date().timeIntervalSince(wrote) > 0.12, !shots.contains("loading") { shots.insert("loading"); snapshot(region, "loading") }
+            if let wrote, Date().timeIntervalSince(wrote) > 0.24, !shots.contains("reshaped") { shots.insert("reshaped"); snapshot(region, "reshaped") }
             if let wrote, Date().timeIntervalSince(wrote) > 0.3, !shots.contains("final") { shots.insert("final"); snapshot(region, "final") }
         }
     }
@@ -358,7 +365,9 @@ func run() {
         DispatchQueue.main.asyncAfter(deadline: .now()+0.12) { snapshot(region, "sweep") }
     }
     // The polished result arrives after the intro, like a typical DeepSeek reply.
-    DispatchQueue.main.asyncAfter(deadline: .now()+0.9) {
+    // A longer IMIC_RESULT_DELAY holds the rails still for geometry screenshots.
+    let resultDelay = Double(ProcessInfo.processInfo.environment["IMIC_RESULT_DELAY"] ?? "") ?? 0.9
+    DispatchQueue.main.asyncAfter(deadline: .now()+resultDelay) {
         effect.deliverAfterSweep {
             // Deletes go to the same process queue as the typing, then settle, so
             // the two streams cannot interleave (iMic's own revisions are ordered too).

@@ -13,7 +13,9 @@
   .rich { min-height: 120px; max-height: 200px; overflow-y: auto; outline: none; }
   .rich p { margin: 0 0 6px; }
   .code { font: 14px Menlo, monospace; white-space: pre; overflow-x: auto; }
-  .chat { position: fixed; bottom: 40px; left: 40px; }
+  /* Chat composer look (dark, compact) kept inside the viewport: a fixed bottom
+     position can fall below the display edge when the window is taller than it. */
+  .chat { margin-top: 120px; border-radius: 14px; }
 </style>
 </head>
 <body>

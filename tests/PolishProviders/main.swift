@@ -19,6 +19,8 @@ private final class PolishResponseProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+private enum ASRTestEndpoint { static let value = "wss://dashscope.aliyuncs.com/api-ws/v1/inference" }
+
 final class PolishProviderTests: XCTestCase {
     private let raw = "帮我整理一下明天的会议安排，可以吗？"
     private let officialKey = "sk-official-test-secret"
@@ -86,7 +88,9 @@ final class PolishProviderTests: XCTestCase {
         defaults.set(true, forKey: "deepseekEnabled")
         defaults.set("heavy", forKey: "deepseekStrength")
         defaults.set("email", forKey: "deepseekScenario")
+        DeepSeekConfiguration.migrateDefaultProvider(in: defaults, hasDeepSeekKey: { true })
         let originalProvider = DeepSeekConfiguration.provider(in: defaults)
+        XCTAssertEqual(originalProvider, .deepseek)
         let originalRequest = try DeepSeekClient.request(
             text: raw, key: officialKey,
             model: DeepSeekConfiguration.modelName(for: originalProvider, defaults: defaults),
@@ -116,35 +120,100 @@ final class PolishProviderTests: XCTestCase {
         XCTAssertEqual(DeepSeekConfiguration.endpoint(for: .custom, defaults: defaults), "http://127.0.0.1:1234/v1/chat/completions")
     }
 
-    func testProviderCredentialStoresStaySeparateAndUseLiteralStorage() throws {
-        XCTAssertTrue(PolishCredentials.save(officialKey, for: .deepseek, home: home))
-        XCTAssertTrue(PolishCredentials.save(bailianKey, for: .bailian, home: home))
-        XCTAssertTrue(PolishCredentials.save(customKey, for: .custom, home: home))
-        XCTAssertEqual(PolishCredentials.load(for: .deepseek, home: home, environment: [:]), officialKey)
-        XCTAssertEqual(PolishCredentials.load(for: .bailian, home: home, environment: [:]), bailianKey)
-        XCTAssertEqual(PolishCredentials.load(for: .custom, home: home, environment: [:]), customKey)
-        let attributes = try FileManager.default.attributesOfItem(atPath: home.appendingPathComponent(".zshrc").path)
+    private var file: CredentialFile { CredentialFile(url: home.appendingPathComponent("Support/credentials.json")) }
+
+    func testNewInstallsDefaultToBailianPolish() {
+        XCTAssertEqual(DeepSeekConfiguration.provider(in: defaults), .bailian)
+        DeepSeekConfiguration.migrateDefaultProvider(in: defaults, hasDeepSeekKey: { false })
+        XCTAssertEqual(defaults.string(forKey: "polishProvider"), "bailian")
+        // An explicit choice is never rewritten.
+        defaults.set("custom", forKey: "polishProvider")
+        DeepSeekConfiguration.migrateDefaultProvider(in: defaults, hasDeepSeekKey: { true })
+        XCTAssertEqual(DeepSeekConfiguration.provider(in: defaults), .custom)
+    }
+
+    func testProviderCredentialStoresStaySeparateInAppFile() throws {
+        XCTAssertTrue(PolishCredentials.save(officialKey, for: .deepseek, file: file))
+        XCTAssertTrue(PolishCredentials.save(bailianKey, for: .bailian, file: file))
+        XCTAssertTrue(PolishCredentials.save(customKey, for: .custom, file: file))
+        XCTAssertEqual(PolishCredentials.resolve(for: .deepseek, file: file, home: home, environment: [:]),
+                       ResolvedCredential(key: officialKey, source: .app))
+        XCTAssertEqual(PolishCredentials.load(for: .bailian, file: file, home: home, environment: [:]), bailianKey)
+        XCTAssertEqual(PolishCredentials.load(for: .custom, file: file, home: home, environment: [:]), customKey)
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.url.path)
         XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
-        XCTAssertTrue(PolishCredentials.save("sk-updated-official-key", for: .deepseek, home: home))
-        XCTAssertEqual(PolishCredentials.load(for: .bailian, home: home, environment: [:]), bailianKey)
-        XCTAssertEqual(PolishCredentials.load(for: .custom, home: home, environment: [:]), customKey)
-        XCTAssertTrue(PolishCredentials.save("", for: .custom, home: home))
-        XCTAssertTrue(PolishCredentials.load(for: .custom, home: home, environment: ["IMIC_CUSTOM_POLISH_API_KEY": customKey]).isEmpty)
-        XCTAssertEqual(PolishCredentials.load(for: .bailian, home: home, environment: [:]), bailianKey)
+        let directory = try FileManager.default.attributesOfItem(atPath: file.url.deletingLastPathComponent().path)
+        XCTAssertEqual((directory[.posixPermissions] as? NSNumber)?.intValue, 0o700)
+        XCTAssertTrue(PolishCredentials.save("sk-updated-official-key", for: .deepseek, file: file))
+        XCTAssertEqual(PolishCredentials.load(for: .bailian, file: file, home: home, environment: [:]), bailianKey)
+        XCTAssertEqual(PolishCredentials.load(for: .custom, file: file, home: home, environment: [:]), customKey)
+        XCTAssertTrue(PolishCredentials.save("", for: .custom, file: file))
+        XCTAssertTrue(PolishCredentials.load(for: .custom, file: file, home: home, environment: [:]).isEmpty)
+        XCTAssertEqual(PolishCredentials.load(for: .bailian, file: file, home: home, environment: [:]), bailianKey)
+        XCTAssertFalse(PolishCredentials.save("not-a-key", for: .bailian, file: file))
+        // iMic never writes shell startup files.
+        XCTAssertFalse(FileManager.default.fileExists(atPath: home.appendingPathComponent(".zshrc").path))
+    }
+
+    func testAppFileWinsThenEnvironmentThenShellFiles() throws {
+        let shellKey = "sk-shell-test-secret"
+        let envKey = "sk-env-test-secret"
+        try Data("export DASHSCOPE_API_KEY='\(shellKey)'\n".utf8).write(to: home.appendingPathComponent(".zprofile"))
+        XCTAssertEqual(PolishCredentials.resolve(for: .bailian, file: file, home: home, environment: [:]),
+                       ResolvedCredential(key: shellKey, source: .shell(path: "~/.zprofile", name: "DASHSCOPE_API_KEY")))
+        XCTAssertEqual(PolishCredentials.resolve(for: .bailian, file: file, home: home, environment: ["BAILIAN_API_KEY": envKey]),
+                       ResolvedCredential(key: envKey, source: .environment("BAILIAN_API_KEY")))
+        XCTAssertTrue(PolishCredentials.save(bailianKey, for: .bailian, file: file))
+        XCTAssertEqual(PolishCredentials.resolve(for: .bailian, file: file, home: home, environment: ["BAILIAN_API_KEY": envKey]),
+                       ResolvedCredential(key: bailianKey, source: .app))
+        // Removing iMic's copy falls back to the external key and never edits it.
+        XCTAssertTrue(PolishCredentials.save("", for: .bailian, file: file))
+        XCTAssertEqual(PolishCredentials.resolve(for: .bailian, file: file, home: home, environment: [:])?.source,
+                       .shell(path: "~/.zprofile", name: "DASHSCOPE_API_KEY"))
+        let fish = home.appendingPathComponent(".config/fish")
+        try FileManager.default.createDirectory(at: fish, withIntermediateDirectories: true)
+        try Data("set -gx DEEPSEEK_API_KEY \(officialKey)\n".utf8).write(to: fish.appendingPathComponent("config.fish"))
+        XCTAssertEqual(PolishCredentials.load(for: .deepseek, file: file, home: home, environment: [:]), officialKey)
     }
 
     func testBailianEnvironmentKeyCannotFillOtherProviderCredentials() {
         let environment = ["BAILIAN_API_KEY": bailianKey, "DASHSCOPE_API_KEY": bailianKey]
-        XCTAssertEqual(PolishCredentials.load(for: .bailian, home: home, environment: environment), bailianKey)
-        XCTAssertTrue(PolishCredentials.load(for: .deepseek, home: home, environment: environment).isEmpty)
-        XCTAssertTrue(PolishCredentials.load(for: .custom, home: home, environment: environment).isEmpty)
+        XCTAssertEqual(PolishCredentials.load(for: .bailian, file: file, home: home, environment: environment), bailianKey)
+        XCTAssertTrue(PolishCredentials.load(for: .deepseek, file: file, home: home, environment: environment).isEmpty)
+        XCTAssertTrue(PolishCredentials.load(for: .custom, file: file, home: home, environment: environment).isEmpty)
+    }
+
+    func testBailianKeyCheckUsesRecognitionHostAndClassifiesResponses() throws {
+        let request = try XCTUnwrap(BailianKeyCheck.request(
+            key: bailianKey, asrEndpoint: "wss://ws-1.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference"))
+        XCTAssertEqual(request.url?.absoluteString, "https://ws-1.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/models")
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(bailianKey)")
+        XCTAssertNil(request.httpBody)
+        XCTAssertNil(BailianKeyCheck.request(key: "bad key", asrEndpoint: ASRTestEndpoint.value))
+        XCTAssertNil(BailianKeyCheck.request(key: bailianKey, asrEndpoint: "https://dashscope.aliyuncs.com"))
+        XCTAssertEqual(BailianKeyCheck.classify(status: 200), .valid)
+        XCTAssertEqual(BailianKeyCheck.classify(status: 401), .rejected)
+        XCTAssertEqual(BailianKeyCheck.classify(status: 403), .rejected)
+        XCTAssertEqual(BailianKeyCheck.classify(status: 503), .unreachable("百炼返回 HTTP 503"))
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [PolishResponseProtocol.self]
+        let session = URLSession(configuration: configuration)
+        PolishResponseProtocol.handler = { _ in (401, Data("{}".utf8)) }
+        let done = expectation(description: "check")
+        BailianKeyCheck.run(key: bailianKey, asrEndpoint: ASRTestEndpoint.value, session: session) { result in
+            XCTAssertEqual(result, .rejected)
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
     }
 
     func testExecutableShellAssignmentIsNeverReadAsCredential() throws {
         let marker = home.appendingPathComponent("must-not-exist")
         let text = "export DEEPSEEK_API_KEY=\"$(touch \(marker.path))\"\n"
         try Data(text.utf8).write(to: home.appendingPathComponent(".zshrc"))
-        XCTAssertTrue(PolishCredentials.load(for: .deepseek, home: home, environment: [:]).isEmpty)
+        XCTAssertTrue(PolishCredentials.load(for: .deepseek, file: file, home: home, environment: [:]).isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
         XCTAssertFalse(PolishCredentials.valid("token\nInjected: header", for: .custom))
         XCTAssertFalse(PolishCredentials.valid("token'escape", for: .custom))

@@ -386,8 +386,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
             for index in rings.indices { rings[index] = layout.ring(at: index) }
         }
         if artworkState != nil {
-            scene.clearProgress=Float(motion.isClearing ? CGFloat(motion.clearZone)
-                : (clearEnabled ? min(1,max(0,-motion.pull/max(1,torus.midY-84))):0))
+            scene.clearProgress=Float(motion.clearPreview(distance:torus.midY-84,enabled:clearEnabled))
             scene.update(spectrum:spectrum,torus:torus,size:bounds.size,reduced:reduced,
                          dimmed:dimmed,scale:window?.screen.scale ?? traitCollection.displayScale)
             if let artworkState {

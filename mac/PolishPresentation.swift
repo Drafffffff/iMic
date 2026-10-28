@@ -408,3 +408,73 @@ enum TextRegionMatcher {
         }
     }
 }
+
+/// 8-bit luminance pixels, row-major, top row first.
+struct InkImage {
+    let pixels: [UInt8]
+    let width: Int
+    let height: Int
+    func value(_ x: Int, _ y: Int) -> Int { Int(pixels[y*width+x]) }
+}
+
+/// Pixel-level correction of OCR line boxes. Vision's boxes float with the
+/// glyphs on each line (punctuation stretches them), so rails drawn from them
+/// sit at uneven distances below the text. The captured image shows the real
+/// ink: pixels that stand out from the band's dominant background luminance.
+enum InkBounds {
+    /// `box` and the result are in image pixels, y down. `window` bounds the
+    /// vertical search (midpoints to neighbouring rows). Horizontally the box only
+    /// shrinks to its ink, except outward on a side that ends the OCR line, where
+    /// a clipped trailing glyph (often 。) may be recovered.
+    static func refine(_ box: CGRect, in image: InkImage, window: ClosedRange<Int>,
+                       extendLeft: Bool = false, extendRight: Bool = false) -> CGRect? {
+        let x0 = max(0, Int(box.minX.rounded(.down))), x1 = min(image.width-1, Int(box.maxX.rounded(.up))-1)
+        let y0 = max(0, window.lowerBound), y1 = min(image.height-1, window.upperBound)
+        guard x1 > x0+2, y1 > y0+2, box.height >= 4 else { return nil }
+        // Background: the dominant luminance in the margins above and below the
+        // OCR box (dense glyphs can outnumber background inside it), else the band.
+        func dominant(_ rows: [Int]) -> (value: Int, samples: Int) {
+            var histogram = [Int](repeating: 0, count: 256), samples = 0
+            for y in rows { for x in stride(from: x0, through: x1, by: 2) { histogram[image.value(x, y)] += 1; samples += 1 } }
+            return (histogram.indices.max { histogram[$0] < histogram[$1] } ?? 255, samples)
+        }
+        let margins = (y0...y1).filter { CGFloat($0) < box.minY || CGFloat($0) >= box.maxY }
+        let sampled = dominant(margins)
+        let background = sampled.samples >= 40 ? sampled.value : dominant(Array(y0...y1)).value
+        func ink(_ x: Int, _ y: Int) -> Bool { abs(image.value(x, y)-background) > 48 }
+
+        // Rows carrying ink inside the box's columns, grouped with small gaps.
+        let minimum = max(1, (x1-x0)/300)
+        var clusters: [ClosedRange<Int>] = []
+        var open: (start: Int, last: Int)?
+        let gap = max(1, Int(box.height*0.15))
+        for y in y0...y1 {
+            var count = 0
+            for x in x0...x1 where ink(x, y) { count += 1; if count >= minimum { break } }
+            guard count >= minimum else { continue }
+            if let current = open, y-current.last <= gap+1 { open = (current.start, y) }
+            else { if let current = open { clusters.append(current.start...current.last) }; open = (y, y) }
+        }
+        if let current = open { clusters.append(current.start...current.last) }
+        func overlap(_ band: ClosedRange<Int>) -> CGFloat {
+            max(0, min(CGFloat(band.upperBound+1), box.maxY)-max(CGFloat(band.lowerBound), box.minY))
+        }
+        guard let band = clusters.max(by: { overlap($0) < overlap($1) }), overlap(band) > 0 else { return nil }
+        let height = CGFloat(band.count)
+        guard height >= box.height*0.35, height <= box.height*1.5 else { return nil }
+
+        func columnHasInk(_ x: Int) -> Bool { band.contains { ink(x, $0) } }
+        let inner = (x0...x1).filter(columnHasInk)
+        guard var left = inner.first, var right = inner.last else { return nil }
+        let reach = Int(height*0.9), tolerance = max(2, Int(height*0.6))
+        if extendRight {
+            var x = right+1
+            while x < image.width, x <= x1+reach, x-right <= tolerance { if columnHasInk(x) { right = x }; x += 1 }
+        }
+        if extendLeft {
+            var x = left-1
+            while x >= 0, x >= x0-reach, left-x <= tolerance { if columnHasInk(x) { left = x }; x -= 1 }
+        }
+        return CGRect(x: CGFloat(left), y: CGFloat(band.lowerBound), width: CGFloat(right-left+1), height: height)
+    }
+}

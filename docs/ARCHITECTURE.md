@@ -87,11 +87,12 @@ FFT 使用最近 512 个 16 kHz 样本组成约 32ms 重叠窗，采集 hop 与�
 | `DeepSeek.swift` / `shared/PolishOptions.swift` | 官方、百炼与自定义 OpenAI-compatible 润色；每来源独立模型和完整地址，官方与百炼关闭思考模式，自定义不发送供应商私有参数；失败回退完整原文，保留原意/问句守门 |
 | `PairingStore.swift` | Mac 身份、配对设备令牌、六位码轮换、0600 持久化 |
 | `ASR.swift` | 百炼 message ASR，流式 PCM 上传，最终文本聚合 |
-| `Interface.swift` / `main.swift` | 菜单栏、主窗口、设置、权限引导、输入与状态机；模式、语气与四种语言按顺序分组，选中即保存；终端模式保留但禁用语气和语言 |
-| `Permissions.swift` | 辅助功能 / 事件投递权限说明与引导 |
+| `Interface.swift` / `main.swift` | 菜单栏、主窗口、设置、输入与状态机；模式、语气与四种语言按顺序分组，选中即保存；终端模式保留但禁用语气和语言 |
+| `Permissions.swift` | 输入权限状态与应用包位置 |
+| `Onboarding.swift` | 两步设置向导：权限 → 百炼 Key；状态实时检测、可随时重开 |
 | `InputTarget.swift` | 捕获录音起始输入框及选区；分别判断范围读取与 AX 改写能力，只校验和修改本轮 UTF-16 范围；只读 AX 可用键盘修订，不可验证的编辑器回退最终 Unicode 投递，不读写整框 `AXValue` |
 | `PolishPresentation.swift` / `TextPolishEffect.swift` | 单次最终结果门控、OCR 文字对齐和逐行扫光；原文与润色不提前回写，10 秒硬截止回退；图像仅内存处理，视觉失败不改变输入策略 |
-| `Credentials.swift` | 非执行地解析和安全写入 `~/.zshrc`；官方与自定义润色 Key 独立，百炼润色复用 ASR Key，不跨来源兜底 |
+| `Credentials.swift` | iMic 配置文件读写 + 环境变量/shell 配置只读解析 + 百炼 Key 只读校验 |
 
 Mac 活动条是实际接收 RMS 的 96 帧时间历史，不是 FFT。绘图始终铺满容器宽度，已有真实样本才点亮；约 −60dBFS 以下不产生能量，软门限与平方根压缩提高轻声辨识度，静音不注入最低柱高。会话更替、处理与断开清理旧历史。
 

@@ -14,37 +14,47 @@
 
 从 [GitHub Releases](https://github.com/Drafffffff/iMic/releases/latest) 下载：
 
-- `iMic-1.4.2-macOS-universal.dmg`：macOS 13+，同时支持 Apple Silicon 与 Intel。打开镜像，把 `iMic.app` 拖入「Applications」，再从应用程序中启动。
-- `iMic-1.4.2-iOS-unsigned.ipa`：iOS 17+ 的 iPhone 真机包，**未签名，不能直接点击安装**。需通过 AltStore、SideStore、Sideloadly 等工具，用自己的 Apple ID/开发团队重新签名；也可以按下方步骤从源码安装。个人团队通常需要每 7 天续签。
+- `iMic-1.4.3-macOS-universal.dmg`：macOS 13+，同时支持 Apple Silicon 与 Intel。打开镜像，把 `iMic.app` 拖入「Applications」，再从应用程序中启动。
+- `iMic-1.4.3-iOS-unsigned.ipa`：iOS 17+ 的 iPhone 真机包，**未签名，不能直接点击安装**。需通过 AltStore、SideStore、Sideloadly 等工具，用自己的 Apple ID/开发团队重新签名；也可以按下方步骤从源码安装。个人团队通常需要每 7 天续签。
 - `SHA256SUMS.txt`：下载两个安装包和此文件到同一目录后，运行 `shasum -a 256 -c SHA256SUMS.txt` 校验完整性。
 
-Mac 公开包使用 ad-hoc 签名，尚未做 Apple 公证。首次打开若被 Gatekeeper 阻止，请确认下载来源与校验和，再到「系统设置 → 隐私与安全性」中允许这一次打开；不需要关闭系统安全保护。辅助功能、本地网络与蓝牙权限仍需自行授权。
+Mac 公开包使用 ad-hoc 签名，尚未做 Apple 公证。首次打开若被 Gatekeeper 阻止，请确认下载来源与校验和，再到「系统设置 → 隐私与安全性」中允许这一次打开；不需要关闭系统安全保护。首次启动会打开两步设置窗口（权限 → 百炼 Key）；本地网络与蓝牙授权提示可能在后续使用时出现。
 
 iOS Release 不是免签包，也不是 TestFlight/App Store 分发；不包含发布者的个人描述文件、设备清单或签名私钥。百炼和可选 DeepSeek Key 均由使用者自行配置。
 
 ## 源码构建环境
 
-- Mac：macOS 13+，Xcode 27（含 iOS 17+ SDK），百炼 API Key。
+- Mac：macOS 13+，Command Line Tools（`xcode-select --install`），百炼 API Key；无需完整 Xcode 或 XcodeGen。
+- iOS 构建：Xcode（含 iOS 17+ SDK）与 [XcodeGen](https://github.com/yonaskolb/XcodeGen)；使用 Homebrew 时可运行 `brew install xcodegen`。
 - iPhone：iOS 17+，与 Mac 在同一 Wi-Fi。
 - 无需路由器端口映射；Bonjour 在同一局域网内发现设备。
-- 安装 Xcode 命令行工具及 [XcodeGen](https://github.com/yonaskolb/XcodeGen)；使用 Homebrew 时可运行 `brew install xcodegen`。
 
 ## 快速开始
 
 ### 1. 构建并安装 Mac 端
 
 ```bash
-./scripts/build-mac.sh
-./scripts/install-mac.sh
+./scripts/install-mac.sh --build
 ```
+
+构建后安装到 `/Applications` 并打开。可加 `--no-open` 跳过打开，或用 `--dry-run` 预览操作；也可分两步运行 `./scripts/build-mac.sh`、`./scripts/install-mac.sh`。没有 Apple Development 证书时使用 ad-hoc 签名，每次重建后需重新添加辅助功能授权；可通过 `IMIC_SIGNING_IDENTITY` 指定证书。
 
 开发产物默认位于 `build/mac.noindex/`，模拟器与真机派生目录分别为 `build/ios.noindex/`、`build/ios-device.noindex/`，避免被 Spotlight 当作额外应用收录。正式入口只使用 `/Applications/iMic.app`；安装脚本把旧版本备份为 `~/Library/Application Support/iMic/backups/时间戳/iMic.app.zip`，不再留下可启动的备份副本。
 
-首次启动后：
+首次启动、未配置百炼 Key，或尚未完成设置且辅助功能未授权时，会打开两步设置窗口：
 
-1. 打开 iMic 主窗口，填入百炼 API Key 并保存。
-2. 在「系统设置 → 隐私与安全性 → 辅助功能」中允许 iMic，才能把文字填入其他应用。
-3. 允许 iMic 使用本地网络（macOS 可能弹出提示）。
+1. **权限**：「辅助功能」必需，用于向当前应用输入文字；「屏幕录制」可选，仅用于润色扫光。点「去开启」首次显示 macOS 系统授权提示，之后打开系统设置；iMic 检测到授权后自动继续，不修改 TCC，也不自行批准权限。
+2. **百炼 API Key**：点「[获取百炼 API Key ↗](https://bailian.console.aliyun.com/?tab=model#/api-key)」后复制并粘贴 Key。iMic 通过一次只读的百炼模型列表请求校验并保存，不发送音频或文字。已有 `DASHSCOPE_API_KEY` 会自动填入并校验。
+
+一个百炼 Key 同时用于识别与润色，新安装默认使用百炼润色；DeepSeek 官方与自定义服务仅在设置中配置。iPhone 配对不在向导内，主窗口仍显示六位配对码。随时可从菜单栏 iMic 图标 →「设置向导…」重新打开。
+
+### Mac 常见问题
+
+- **辅助功能开关已开但不生效**：重装或更新后签名变化可能导致旧授权失效。在系统设置列表中选中 iMic，点「−」移除，再回到向导点「去开启」。
+- **从 DMG 或下载目录运行**：触发 App Translocation 时，iMic 会提示先移到「应用程序」，再从那里启动。
+- **Key 保存与读取**：所有在 iMic 中输入的 Key 保存于 `~/Library/Application Support/iMic/credentials.json`，目录权限 `0700`、文件权限 `0600`，仅当前用户可读；不使用钥匙串，也不再写入 shell 配置。每个服务依次读取此文件 → 进程环境变量 → `~/.zshenv`、`~/.zprofile`、`~/.zshrc`、`~/.bash_profile`、`~/.bashrc`、`~/.profile`、`~/.config/fish/config.fish` 中的字面量赋值（只解析，不执行）。百炼使用 `DASHSCOPE_API_KEY` / `BAILIAN_API_KEY`，DeepSeek 官方使用 `DEEPSEEK_API_KEY`，自定义服务使用 `IMIC_CUSTOM_POLISH_API_KEY`，不跨服务代用。
+- **iPhone 找不到 Mac**：确认在同一 Wi-Fi，并在「系统设置 → 隐私与安全性 → 本地网络」允许 iMic；必要时在 Mac 设置中开启蓝牙兜底。
+- **卸载**：退出 iMic，删除 `/Applications/iMic.app` 与 `~/Library/Application Support/iMic`（Key、配对令牌和备份）；可选执行 `defaults delete com.drafffffff.imic` 清除偏好。
 
 ### 2. 构建 iPhone 端
 
@@ -189,7 +199,7 @@ xcrun simctl launch --terminate-running-process booted com.drafffffff.imic \
   - **DeepSeek 官方**：独立的 `DEEPSEEK_API_KEY`，默认 `deepseek-flash`，请求使用 `thinking.type=disabled`，参见[官方 Chat Completions 文档](https://api-docs.deepseek.com/api/create-chat-completion/)。
   - **百炼 DeepSeek**：复用顶部识别所用的百炼 Key（`DASHSCOPE_API_KEY` / `BAILIAN_API_KEY`），默认 `deepseek-v4.1-flash`，请求使用顶层 `enable_thinking=false`。默认地址为北京 DashScope 兼容端点；其他地域或工作空间需在「模型与地址」填入对应的完整 Chat Completions URL，Key 与地域须匹配，参见[百炼 DeepSeek 文档](https://help.aliyun.com/zh/model-studio/deepseek-api)。
   - **自定义兼容服务**：独立的 `IMIC_CUSTOM_POLISH_API_KEY`，自行填写模型与以 `/chat/completions` 结尾的完整 URL。远程地址必须使用 HTTPS；只有本机 `127.0.0.1` / `[::1]` 可使用 HTTP。不跟随重定向，避免把 Key 转发到其他地址。
-  - Mac 的三类 Key 保存于 `~/.zshrc`，不互相代用；不执行该文件中的命令。无效配置或请求失败回退完整识别原文，日志不记录 Key、请求地址或正文。
+  - Mac 的三类 Key 保存于 `~/Library/Application Support/iMic/credentials.json`，不使用钥匙串、不写入 shell 配置；按服务依次读取该文件、进程环境变量与 shell 配置中的字面量赋值，不执行配置文件、不跨服务代用，详见「Mac 常见问题」。无效配置或请求失败回退完整识别原文，日志不记录 Key、请求地址或正文。
 - iPhone 通过加密 `settings` 接收当前 Mac 的功能位与完整润色偏好；修改时发送 `polish.settings`，等待 `polish.saved` 明确确认。保存中禁用编辑，不把发送成功当成保存成功；离线或旧 Mac 不支持时不能修改。切换 Mac 或重连后重新读取权威状态，不自动重发旧目标的修改；手机不持久化第二套偏好，Mac 本地修改也会同步回显。Key 与服务地址不进入这些消息。
 - 上传与最终识别分别计时；iPhone 的 `audio.end` 排空后才启动结果等待，Mac 从百炼 `finish-task` 送达后计算最终识别期限。失败或断线保留本机已识别文字，可从底部「查看结果」复制，不自动投递给新电脑。
 - **终端命令**：已归入转换模式，把口述操作写成单行 zsh 命令（多步用 `&&` 连接），语气与语言选项保留但不生效。不会自动按回车；无法转换、超时或结果被拒绝时输入 `# 原话` 单行注释。模型可能生成不符合预期的命令，执行前请核对。

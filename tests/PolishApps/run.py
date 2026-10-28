@@ -12,6 +12,8 @@ APP = os.environ.get("IMIC_SELFTEST_APP", os.path.join(ROOT, "build/polish-apps.
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/tmp/imic-polish-apps"
 ONLY = sys.argv[2].split(",") if len(sys.argv) > 2 and sys.argv[2] else None
 CASE_ONLY = os.environ.get("IMIC_CASES", "").split(",") if os.environ.get("IMIC_CASES") else None
+# IMIC_PAIRS="target--case,..." reruns exactly those combinations.
+PAIRS = set(os.environ["IMIC_PAIRS"].split(",")) if os.environ.get("IMIC_PAIRS") else None
 WORK = os.path.join(OUT, "docs")
 os.makedirs(WORK, exist_ok=True)
 
@@ -41,6 +43,8 @@ CASES = {
     "grow":       ("", "", GROW, GROW_F, True),
     "scrolled":   (SCROLL_PRE, "", LONG, LONG_F, True),
     "long-line":  ("这是一段很长的单行输入框里已有的文字，", "", LONG, LONG_F.replace("\n\n", ""), False),
+    # Polishing removes filler: the result is much shorter than the draft.
+    "shorten":    ("", "", "嗯那个就是我想说一下今天下午三点要开会然后讨论一下那个输入框动画的细节吧", "今天下午三点开会，讨论输入框动画细节。", False),
 }
 
 def b64(text):
@@ -95,7 +99,17 @@ def shell(app):
         return ([f"pretype:{b64(pre)}"] if pre else []), ["ctrl+c", "cmd+w"]
     return prepare
 
-SHELL_CASES = {"empty", "after", "spaces", "short", "long-line"}
+def new_window(app):
+    """A new terminal window (Cmd+N) at a fresh shell prompt. Existing sessions are
+    never typed into; Return is never pressed; the line is cleared before closing."""
+    def prepare(case):
+        pre = CASES[case][0]
+        subprocess.run(["open", "-a", app], check=True)
+        time.sleep(1.5)
+        return ["cmd+n", "wait:1800"] + ([f"pretype:{b64(pre)}"] if pre else []), ["ctrl+u", "cmd+w"]
+    return prepare
+
+SHELL_CASES = {"empty", "after", "spaces", "short", "long-line", "shorten"}
 
 TARGETS = {
     "chrome-input":    (page("Google Chrome", "input"), False),
@@ -107,9 +121,9 @@ TARGETS = {
     "textedit":        (document("TextEdit", "rtf"), True),
     "zed":             (document("Zed", "txt", save=True), True),
     "cursor":          (document("Cursor", "txt", save=True), True),
-    "terminal":        (shell("Terminal"), False),
-    "iterm":           (shell("iTerm"), False),
-    "otty":            (shell("Otty"), False),
+    "terminal":        (new_window("Terminal"), False),
+    "iterm":           (new_window("iTerm"), False),
+    "otty":            (new_window("Otty"), False),
 }
 
 def run_case(target, case):
@@ -123,7 +137,8 @@ def run_case(target, case):
         return None
     keys, cleanup = prepare(case)
     name = f"{target}--{case}"
-    subprocess.run(["open", "-n", "-g", "-W", APP, "--args", f"--out={OUT}", f"--name={name}",
+    env = ["--env", f"IMIC_RESULT_DELAY={os.environ['IMIC_RESULT_DELAY']}"] if os.environ.get("IMIC_RESULT_DELAY") else []
+    subprocess.run(["open", "-n", "-g", "-W"] + env + [APP, "--args", f"--out={OUT}", f"--name={name}",
                     "--keys=" + ",".join(keys), f"--type-b64={b64(typed)}", f"--final-b64={b64(final)}",
                     "--cleanup=" + ",".join(cleanup)] + (["--probe-enhanced"] if os.environ.get("IMIC_PROBE_ENHANCED") else []), check=False)
     time.sleep(0.6)
@@ -167,6 +182,7 @@ if __name__ == "__main__":
         if ONLY and target not in ONLY: continue
         for case in CASES:
             if CASE_ONLY and case not in CASE_ONLY: continue
+            if PAIRS and f"{target}--{case}" not in PAIRS: continue
             result = run_case(target, case)
             if result is None: continue
             row = summarize(result) if result.get("status") != "missing" else {"case": result["name"], "status": "missing"}

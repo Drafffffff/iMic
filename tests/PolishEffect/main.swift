@@ -317,6 +317,45 @@ final class PolishEffectTests: XCTestCase {
         XCTAssertEqual(TextRegionMatcher.locate(expected: "好的呀", fragments: ["7", "回复：好的呀"])?.spans.first?.fragment, 1)
         XCTAssertNil(TextRegionMatcher.locate(expected: "好的", fragments: ["回复：好的"]))
     }
+    /// A white canvas with dark "glyph" blocks; returns the image and helpers.
+    private func canvas(width: Int, height: Int, glyphs: [CGRect]) -> InkImage {
+        var pixels = [UInt8](repeating: 250, count: width*height)
+        for glyph in glyphs {
+            for y in Int(glyph.minY)..<Int(glyph.maxY) { for x in Int(glyph.minX)..<Int(glyph.maxX) { pixels[y*width+x] = 30 } }
+        }
+        return InkImage(pixels: pixels, width: width, height: height)
+    }
+    func testInkBoundsSnapsFloatingOCRBoxToGlyphs() {
+        // Glyph band y 40..<60, x 20..<200; Vision's box floats 6px low and 10px wide.
+        let image = canvas(width: 300, height: 120, glyphs: [CGRect(x: 20, y: 40, width: 180, height: 20)])
+        let box = CGRect(x: 14, y: 46, width: 196, height: 22)
+        let refined = InkBounds.refine(box, in: image, window: 20...90)
+        XCTAssertEqual(refined, CGRect(x: 20, y: 40, width: 180, height: 20))
+    }
+    func testInkBoundsStaysOffNeighbouringLines() {
+        let image = canvas(width: 300, height: 140, glyphs: [CGRect(x: 20, y: 20, width: 200, height: 20),
+                                                             CGRect(x: 20, y: 50, width: 150, height: 20),
+                                                             CGRect(x: 20, y: 80, width: 180, height: 20)])
+        let middle = InkBounds.refine(CGRect(x: 18, y: 52, width: 160, height: 22), in: image, window: 45...75)
+        XCTAssertEqual(middle, CGRect(x: 20, y: 50, width: 150, height: 20))
+    }
+    func testInkBoundsRecoversClippedTrailingGlyphOnlyAtLineEnd() {
+        // Text 20..<160 plus a separate trailing 。 at 166..<174 that OCR clipped.
+        let image = canvas(width: 300, height: 100, glyphs: [CGRect(x: 20, y: 30, width: 140, height: 20),
+                                                             CGRect(x: 166, y: 42, width: 8, height: 8)])
+        let box = CGRect(x: 20, y: 30, width: 140, height: 20)
+        XCTAssertEqual(InkBounds.refine(box, in: image, window: 10...70, extendRight: true)?.maxX, 174)
+        XCTAssertEqual(InkBounds.refine(box, in: image, window: 10...70)?.maxX, 160)
+    }
+    func testInkBoundsWorksOnDarkBackgroundsAndRejectsEmptyBoxes() {
+        var pixels = [UInt8](repeating: 20, count: 200*80)
+        for y in 30..<46 { for x in 40..<150 { pixels[y*200+x] = 230 } }
+        let dark = InkImage(pixels: pixels, width: 200, height: 80)
+        XCTAssertEqual(InkBounds.refine(CGRect(x: 36, y: 33, width: 120, height: 18), in: dark, window: 10...70),
+                       CGRect(x: 40, y: 30, width: 110, height: 16))
+        let blank = canvas(width: 200, height: 80, glyphs: [])
+        XCTAssertNil(InkBounds.refine(CGRect(x: 36, y: 33, width: 120, height: 18), in: blank, window: 10...70))
+    }
     func testRowStaggerIsOrderedAndHandoffRemainsBounded() {
         for count in [1, 3, 8, 40] {
             let delays = (0..<count).map { SweepLineLayout.delay(row: $0, lineCount: count) }

@@ -3,7 +3,19 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 VERSION=$(cat "$ROOT/VERSION")
-export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
+if [ "${DEVELOPER_DIR+x}" != x ]; then
+  DEVELOPER_DIR=""
+  if [ -d /Applications/Xcode.app/Contents/Developer ]; then
+    DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+  elif SELECTED_DEVELOPER_DIR=$(xcode-select -p 2>/dev/null) && [ -d "$SELECTED_DEVELOPER_DIR" ]; then
+    DEVELOPER_DIR="$SELECTED_DEVELOPER_DIR"
+  fi
+fi
+if [ -n "$DEVELOPER_DIR" ]; then export DEVELOPER_DIR; fi
+if ! xcrun --find swiftc >/dev/null 2>&1 || ! xcrun --sdk macosx --show-sdk-path >/dev/null 2>&1; then
+  echo "未找到 Swift 编译器或 macOS SDK。Mac 端只需要命令行工具，请先运行：xcode-select --install" >&2
+  exit 1
+fi
 SDK=$(xcrun --sdk macosx --show-sdk-path)
 ARCH=${IMIC_ARCH:-$(uname -m)}
 OUT=${IMIC_BUILD_DIR:-"$ROOT/build/mac.noindex"}
@@ -40,6 +52,7 @@ build_binary() {
     "$ROOT/mac/ShortClipGate.swift" \
     "$ROOT/mac/SingleInstance.swift" \
     "$ROOT/mac/Permissions.swift" \
+    "$ROOT/mac/Onboarding.swift" \
     "$ROOT/mac/InputTarget.swift" \
     "$ROOT/mac/PolishPresentation.swift" \
     "$ROOT/mac/TextMarkerGeometry.swift" \
@@ -93,9 +106,13 @@ ditto "$ROOT/licenses" "$APP/Contents/Resources/Legal/licenses"
 # 使用开发者证书可以保持辅助功能授权在重新编译后继续有效。
 IDENTITY=${IMIC_SIGNING_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | awk '/Apple Development/ {print $2; exit}')}
 if [ -z "$IDENTITY" ]; then
-  echo "warning: no Apple Development identity found; signing ad hoc (permissions may need re-approval after rebuild)" >&2
+  echo "提示：未找到 Apple Development 证书，使用 ad-hoc 签名。" >&2
+  echo "每次重新构建后，辅助功能授权会失效：请在「系统设置 → 隐私与安全性 → 辅助功能」中删除旧的 iMic，再重新添加。" >&2
+  echo "可设置 IMIC_SIGNING_IDENTITY 指定签名证书。" >&2
   IDENTITY="-"
 fi
 codesign --force --sign "$IDENTITY" --identifier com.drafffffff.imic --entitlements "$ROOT/mac/iMic.entitlements" "$APP"
 codesign --verify --deep --strict "$APP"
-echo "Built: $APP (signed by: $IDENTITY)"
+SIGNING_LABEL="$IDENTITY"
+if [ "$IDENTITY" = "-" ]; then SIGNING_LABEL=ad-hoc; fi
+echo "已构建：$APP（签名：$SIGNING_LABEL）"

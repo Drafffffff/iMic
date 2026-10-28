@@ -922,6 +922,14 @@ final class StringMotionStore: ObservableObject {
     weak var renderer: (any StringMotionRendering)?
     var velocity: CGFloat { spring.velocity }
     var upwardTravel: CGFloat? { clearStretch?.depth }
+
+    /// Brightness of the top clear zone. Only a finger pulling the string up
+    /// previews it; a released string swinging above its baseline never does.
+    func clearPreview(distance: CGFloat, enabled: Bool) -> CGFloat {
+        if isClearing { return CGFloat(clearZone) }
+        guard enabled, dragging, !cancelled else { return 0 }
+        return min(1, max(0, -pull / max(1, distance)))
+    }
     var clearLoadOpacity: Double { isClearing ? (clearElapsed < 0.22 ? clearOpacity : 0) : 1 }
     private(set) var releaseStrength: CGFloat = 0
     private(set) var pendingReturn = false

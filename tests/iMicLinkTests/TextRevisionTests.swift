@@ -70,4 +70,14 @@ final class TextRevisionTests: XCTestCase {
         XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: nil, labels: ["终端"]))
         XCTAssertFalse(TypedTextSafety.isTerminal(bundleIdentifier: "com.apple.TextEdit", labels: ["文本", nil, ""]))
     }
+
+    func testWideCharacterDetectionForTerminalGeometry() {
+        XCTAssertTrue(TypedTextSafety.containsWideCharacters("今天开会"))
+        XCTAssertTrue(TypedTextSafety.containsWideCharacters("ls 文件"))
+        XCTAssertTrue(TypedTextSafety.containsWideCharacters("こんにちは"))
+        XCTAssertTrue(TypedTextSafety.containsWideCharacters("안녕하세요"))
+        XCTAssertTrue(TypedTextSafety.containsWideCharacters("全角，标点"))
+        XCTAssertFalse(TypedTextSafety.containsWideCharacters("git switch main && git pull"))
+        XCTAssertFalse(TypedTextSafety.containsWideCharacters("café naïve — ok"))
+    }
 }

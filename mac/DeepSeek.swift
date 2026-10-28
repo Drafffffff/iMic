@@ -35,7 +35,14 @@ enum DeepSeekConfiguration {
     static let model = "deepseek-flash"
     static var provider: PolishProvider { provider(in: .standard) }
     static func provider(in defaults: UserDefaults) -> PolishProvider {
-        defaults.string(forKey: "polishProvider").flatMap(PolishProvider.init(rawValue:)) ?? .deepseek
+        defaults.string(forKey: "polishProvider").flatMap(PolishProvider.init(rawValue:)) ?? .bailian
+    }
+    /// One Bailian key covers recognition and polish, so new installs default to Bailian.
+    /// Older installs that never saved a source kept the implicit DeepSeek default;
+    /// pin it once when they already have an official DeepSeek key.
+    static func migrateDefaultProvider(in defaults: UserDefaults = .standard, hasDeepSeekKey: () -> Bool) {
+        guard defaults.string(forKey: "polishProvider") == nil else { return }
+        defaults.set((hasDeepSeekKey() ? PolishProvider.deepseek : .bailian).rawValue, forKey: "polishProvider")
     }
     static var enabled: Bool {
         UserDefaults.standard.object(forKey: "deepseekEnabled") as? Bool ?? false
