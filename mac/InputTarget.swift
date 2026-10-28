@@ -178,15 +178,26 @@ final class InputTarget {
     }
     private var pendingReplacement: PendingReplacement?
 
-    static func initialMode(bundleIdentifier: String?, canObserveRange: Bool) -> Mode {
+    static func initialMode(bundleIdentifier: String?, electron: Bool = false, canObserveRange: Bool) -> Mode {
         // Otty exposes a rendered screen, not the TUI editor cursor. Codex's
         // rich-text composer advertises range support but AX tail selection can
         // leave a visible selection/formatting popover when replacement fails.
+        // Electron editors (Qoder, Cursor, VS Code, Claude) expose ranges only once
+        // AXManualAccessibility is on, which the polish sweep requests; their
+        // Monaco/rich-text inputs move the real caret asynchronously, so AX tail
+        // edits land in the wrong place and leave stray text after the result.
         // Choose compatibility before any range mutation, not after a timeout.
+        if electron { return .keyboard }
         switch bundleIdentifier {
         case "io.appmakes.otty", "com.openai.codex": return .keyboard
         default: return canObserveRange ? .verifiedRange : .keyboard
         }
+    }
+
+    static func isElectron(_ bundleURL: URL?) -> Bool {
+        guard let bundleURL else { return false }
+        let framework = bundleURL.appendingPathComponent("Contents/Frameworks/Electron Framework.framework")
+        return FileManager.default.fileExists(atPath: framework.path)
     }
 
     private let pid: pid_t
@@ -218,9 +229,10 @@ final class InputTarget {
             canReplace = canObserve && isSettable(kAXSelectedTextRangeAttribute, on: element)
                 && isSettable(kAXSelectedTextAttribute, on: element)
         }
-        let bundleIdentifier = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+        let application = NSRunningApplication(processIdentifier: pid)
         return InputTarget(pid: pid, element: element, initialSelection: selection,
-                           mode: initialMode(bundleIdentifier: bundleIdentifier, canObserveRange: canObserve),
+                           mode: initialMode(bundleIdentifier: application?.bundleIdentifier,
+                                             electron: isElectron(application?.bundleURL), canObserveRange: canObserve),
                            replacesSelectionDirectly: canReplace)
     }
 

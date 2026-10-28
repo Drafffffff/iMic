@@ -15,6 +15,18 @@ final class InputRangeTests: XCTestCase {
         XCTAssertFalse(InputTarget.clearRoleAllowed("AXTextArea", valueSettable: true, selectedTextSettable: false))
     }
 
+    func testElectronEditorsStayInKeyboardCompatibilityWhenRangesAppear() {
+        // The polish sweep turns on AXManualAccessibility; the next capture must not
+        // switch Qoder/Cursor/VS Code inputs to AX tail selection.
+        XCTAssertEqual(InputTarget.initialMode(bundleIdentifier: "com.qoder.ide", electron: true, canObserveRange: true), .keyboard)
+        XCTAssertEqual(InputTarget.initialMode(bundleIdentifier: "com.apple.TextEdit", canObserveRange: true), .verifiedRange)
+        XCTAssertEqual(InputTarget.initialMode(bundleIdentifier: "com.openai.codex", canObserveRange: true), .keyboard)
+        XCTAssertTrue(InputTarget.isElectron(URL(fileURLWithPath: "/Applications/Cursor.app"))
+                      || !FileManager.default.fileExists(atPath: "/Applications/Cursor.app"))
+        XCTAssertFalse(InputTarget.isElectron(URL(fileURLWithPath: "/System/Applications/TextEdit.app")))
+        XCTAssertFalse(InputTarget.isElectron(nil))
+    }
+
     func testUnknownKeyboardSelectionDoesNotAcceptGhostCompletion() {
         XCTAssertEqual(InputTarget.keyboardInitialPreparation(selection: nil), .ready,
                        "An unreadable editor must receive text without a speculative Right or Tab key")

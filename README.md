@@ -14,8 +14,8 @@
 
 从 [GitHub Releases](https://github.com/Drafffffff/iMic/releases/latest) 下载：
 
-- `iMic-1.4.1-macOS-universal.dmg`：macOS 13+，同时支持 Apple Silicon 与 Intel。打开镜像，把 `iMic.app` 拖入「Applications」，再从应用程序中启动。
-- `iMic-1.4.1-iOS-unsigned.ipa`：iOS 17+ 的 iPhone 真机包，**未签名，不能直接点击安装**。需通过 AltStore、SideStore、Sideloadly 等工具，用自己的 Apple ID/开发团队重新签名；也可以按下方步骤从源码安装。个人团队通常需要每 7 天续签。
+- `iMic-1.4.2-macOS-universal.dmg`：macOS 13+，同时支持 Apple Silicon 与 Intel。打开镜像，把 `iMic.app` 拖入「Applications」，再从应用程序中启动。
+- `iMic-1.4.2-iOS-unsigned.ipa`：iOS 17+ 的 iPhone 真机包，**未签名，不能直接点击安装**。需通过 AltStore、SideStore、Sideloadly 等工具，用自己的 Apple ID/开发团队重新签名；也可以按下方步骤从源码安装。个人团队通常需要每 7 天续签。
 - `SHA256SUMS.txt`：下载两个安装包和此文件到同一目录后，运行 `shasum -a 256 -c SHA256SUMS.txt` 校验完整性。
 
 Mac 公开包使用 ad-hoc 签名，尚未做 Apple 公证。首次打开若被 Gatekeeper 阻止，请确认下载来源与校验和，再到「系统设置 → 隐私与安全性」中允许这一次打开；不需要关闭系统安全保护。辅助功能、本地网络与蓝牙权限仍需自行授权。
@@ -179,7 +179,7 @@ xcrun simctl launch --terminate-running-process booted com.drafffffff.imic \
 
 - 实时预览在新安装中默认开启，已有开关选择保留。一旦收到 iPhone 的 Apple Speech 增量预览，本次录音持续使用手机预览；停顿产生的百炼确认句不抢占手机来源，没有手机预览时才使用百炼流式结果。完整百炼正文在录音结束后统一校正，再可选润色。
 - **范围校验模式**：保留 Chrome、苹果终端等范围接口可靠目标的原有路径；核对前台应用、输入框、光标和本轮文字后，只修订变化尾部，不全选、不设置整框 `AXValue`。键盘投递后异步确认，等待期间合并最新预览。最终结果有独立的确认时间，不继承润色前的旧期限。
-- **键盘兼容模式**：用户已授权用于 Otty、缺少范围接口的自定义编辑器，以及范围持续 1.5 秒无法同步的目标。Otty 的画面范围不代表 TUI 编辑光标；Codex（`com.openai.codex`，当前安装名为 ChatGPT.app）的富文本输入框虽声明范围支持，AX 修订可能留下选区并弹出格式工具栏。这两类目标直接选择兼容模式，不主动设置 AX 选区；其他 ChatGPT 版本、Zed/VS Code 等缺少所需接口时自动选择。按本轮已投递文字计算退格与追加，不等待 AX 光标；界面显示「已投递」，日志记录 `mode=keyboard_compatibility`，不冒充已核验目标正文。
+- **键盘兼容模式**：用户已授权用于 Otty、缺少范围接口的自定义编辑器，以及范围持续 1.5 秒无法同步的目标。Otty 的画面范围不代表 TUI 编辑光标；Codex（`com.openai.codex`，当前安装名为 ChatGPT.app）的富文本输入框虽声明范围支持，AX 修订可能留下选区并弹出格式工具栏；Electron 应用（Qoder、Cursor、VS Code、Claude 等）在润色扫光请求 `AXManualAccessibility` 后才暴露范围，但 Monaco/富文本输入框的真实光标异步移动，AX 尾部修订会落错位置、在结果后残留文字。这几类目标直接选择兼容模式，不主动设置 AX 选区；其他 ChatGPT 版本、Zed/VS Code 等缺少所需接口时自动选择。按本轮已投递文字计算退格与追加，不等待 AX 光标；界面显示「已投递」，日志记录 `mode=keyboard_compatibility`，不冒充已核验目标正文。
 - **AX 失败回退**：设置或核验本轮尾部选区失败、且尚未尝试替换正文时，只有确认原文完整、选区仍属于本轮、焦点未变且用户未接管，才收起选区并立即切键盘兼容模式。尝试替换正文后，即使接口报错，也先回读新正文与光标，不重放同一次修订；无法确认则停止自动修改并保留完整结果。识别失败时，Mac 也保留最新临时转写供复制。
 - 两种模式都监视手动按键、点击及应用切换；用户接管后冻结本轮，最终回写也不能绕过。iMic 自己的按键带独立来源标记，不读取或记录按键正文。兼容模式不能独立核验目标程序自行改稿或丢弃按键，仍有重复文字或误删原稿的风险；录音期间避免在目标编辑器中混合编辑。取消、失败与新会话取消旧任务，撤回本轮未确认尾部；兼容模式依据投递记录而非 AX 内容执行。
 - 没有可用接管监视且范围不可核验时，只在结束后通过 Unicode 键盘事件投递最终结果。初次输入收起已知选区；选区不可读时使用无修饰右方向键，避免直接替换选中原稿，但光标原本位于正文中间时可能向右移动一字符。
