@@ -18,7 +18,7 @@
 - `iMic-1.4.3-iOS-unsigned.ipa`：iOS 17+ 的 iPhone 真机包，**未签名，不能直接点击安装**。需通过 AltStore、SideStore、Sideloadly 等工具，用自己的 Apple ID/开发团队重新签名；也可以按下方步骤从源码安装。个人团队通常需要每 7 天续签。
 - `SHA256SUMS.txt`：下载两个安装包和此文件到同一目录后，运行 `shasum -a 256 -c SHA256SUMS.txt` 校验完整性。
 
-Mac 公开包使用 ad-hoc 签名，尚未做 Apple 公证。首次打开若被 Gatekeeper 阻止，请确认下载来源与校验和，再到「系统设置 → 隐私与安全性」中允许这一次打开；不需要关闭系统安全保护。首次启动会打开两步设置窗口（权限 → 百炼 Key）；本地网络与蓝牙授权提示可能在后续使用时出现。
+Mac 公开包使用 Developer ID（KE CHENG, 5H39F98ND4）签名并已通过 Apple 公证，下载后可直接打开。首次启动会打开两步设置窗口（权限 → 百炼 Key）；本地网络与蓝牙授权提示可能在后续使用时出现。
 
 iOS Release 不是免签包，也不是 TestFlight/App Store 分发；不包含发布者的个人描述文件、设备清单或签名私钥。百炼和可选 DeepSeek Key 均由使用者自行配置。
 
@@ -236,7 +236,6 @@ xcrun simctl launch --terminate-running-process booted com.drafffffff.imic \
 - 识别依赖阿里云百炼 `qwen-audio-3.1-asr-flash-message`，需要网络与有效 Key。
 - 自动输入需要 macOS 辅助功能权限；未授权时文字仍会保留在窗口与 iPhone 上，可复制。
 - 当前一次只连接一台 iPhone；新手机会替换旧连接。
-- Mac 端未做 Apple 公证，首次打开可能需要在「隐私与安全性」中手动允许。
 
 ## 许可
 
