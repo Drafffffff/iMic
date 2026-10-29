@@ -18,7 +18,7 @@
 - `iMic-1.4.4-iOS-unsigned.ipa`：iOS 17+ 的 iPhone 真机包，**未签名，不能直接点击安装**。需通过 AltStore、SideStore、Sideloadly 等工具，用自己的 Apple ID/开发团队重新签名；也可以按下方步骤从源码安装。个人团队通常需要每 7 天续签。
 - `SHA256SUMS.txt`：下载两个安装包和此文件到同一目录后，运行 `shasum -a 256 -c SHA256SUMS.txt` 校验完整性。
 
-Mac 公开包使用 Developer ID（KE CHENG, 5H39F98ND4）签名并已通过 Apple 公证，下载后可直接打开。首次启动会打开两步设置窗口（权限 → 百炼 Key）；本地网络与蓝牙授权提示可能在后续使用时出现。
+Mac 公开包使用 Developer ID（KE CHENG, 5H39F98ND4）签名并已通过 Apple 公证，下载后可直接打开。首次启动会打开两步设置窗口（百炼 Key → 权限）；本地网络与蓝牙授权提示可能在后续使用时出现。
 
 iOS Release 不是免签包，也不是 TestFlight/App Store 分发；不包含发布者的个人描述文件、设备清单或签名私钥。百炼和可选 DeepSeek Key 均由使用者自行配置。
 
@@ -45,8 +45,8 @@ TestFlight 发布使用独立的签名归档流程，见 [TestFlight 发布说�
 
 首次启动、未配置百炼 Key，或尚未完成设置且辅助功能未授权时，会打开两步设置窗口：
 
-1. **权限**：「辅助功能」必需，用于向当前应用输入文字；「屏幕录制」可选，仅用于润色扫光。点「去开启」首次显示 macOS 系统授权提示，之后打开系统设置；iMic 检测到授权后自动继续，不修改 TCC，也不自行批准权限。
-2. **百炼 API Key**：点「[获取百炼 API Key ↗](https://bailian.console.aliyun.com/?tab=model#/api-key)」后复制并粘贴 Key。iMic 通过一次只读的百炼模型列表请求校验并保存，不发送音频或文字。已有 `DASHSCOPE_API_KEY` 会自动填入并校验。
+1. **百炼 API Key**：点「[获取百炼 API Key ↗](https://bailian.console.aliyun.com/?tab=model#/api-key)」后复制并粘贴 Key。iMic 通过一次只读的百炼模型列表请求校验并保存，不发送音频或文字。已有 `DASHSCOPE_API_KEY` 会自动填入并校验。
+2. **权限**：「辅助功能」必需，用于向当前应用输入文字；「屏幕录制」可选，仅用于润色扫光。点「去开启」首次显示 macOS 系统授权提示，之后打开系统设置；iMic 不修改 TCC，也不自行批准权限。开启屏幕录制后系统可能要求重新打开 iMic，重新打开后向导会回到这一步，直到点「完成」。
 
 一个百炼 Key 同时用于识别与润色，新安装默认使用百炼润色；DeepSeek 官方与自定义服务仅在设置中配置。iPhone 配对不在向导内，首次配对在主窗口显示六位配对码。随时可从菜单栏 iMic →「设置… → 高级 → 重新打开设置向导…」重新打开。
 

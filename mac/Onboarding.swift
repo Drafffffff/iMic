@@ -38,17 +38,48 @@ protocol SetupWizardHost: AnyObject {
     func setupFinished(polishEnabled: Bool)
 }
 
+/// The key comes first: it never needs a relaunch. Permissions come last because granting
+/// Screen Recording can make macOS ask to quit and reopen iMic.
 enum SetupStep: Int, CaseIterable {
-    case permissions, key
-    var tag: String { self == .permissions ? "01 PERMISSIONS" : "02 API KEY" }
+    case key, permissions
+    var tag: String { self == .key ? "01 API KEY" : "02 PERMISSIONS" }
 
-    /// Steps are derived from live state, so closing or relaunching resumes in place.
+    /// Where a fresh opening starts when no step was saved.
     static func first(for snapshot: SetupSnapshot) -> SetupStep {
-        snapshot.permission.allowed ? .key : .permissions
+        snapshot.key != nil && !snapshot.permission.allowed ? .permissions : .key
     }
 
     static func complete(_ step: SetupStep, _ snapshot: SetupSnapshot) -> Bool {
         step == .permissions ? snapshot.permission.allowed : snapshot.key != nil
+    }
+}
+
+/// The wizard's position survives a relaunch until the user presses 完成.
+enum SetupProgress {
+    static let stepKey = "setup.inProgressStep"
+    static func saved(_ defaults: UserDefaults = MacPreferences.defaults) -> SetupStep? {
+        (defaults.object(forKey: stepKey) as? Int).flatMap(SetupStep.init(rawValue:))
+    }
+    static func save(_ step: SetupStep, _ defaults: UserDefaults = MacPreferences.defaults) {
+        defaults.set(step.rawValue, forKey: stepKey)
+    }
+    static func clear(_ defaults: UserDefaults = MacPreferences.defaults) {
+        defaults.removeObject(forKey: stepKey)
+    }
+}
+
+enum SetupLaunchPolicy {
+    enum Decision: Equatable { case show, skip, skipAndMarkComplete }
+
+    /// A wizard that was started but not finished always comes back, even when a key from
+    /// the shell and an earlier permission grant would otherwise look like a finished setup.
+    /// Only installs that never opened this wizard are treated as already set up.
+    static func decide(keyPresent: Bool, completedVersion: Int, currentVersion: Int,
+                       inProgress: Bool, inputAllowed: Bool) -> Decision {
+        if !keyPresent { return .show }
+        if completedVersion >= currentVersion { return .skip }
+        if inProgress { return .show }
+        return inputAllowed ? .skipAndMarkComplete : .show
     }
 }
 
@@ -72,7 +103,7 @@ enum VerifiedKeyMemory {
     }
 }
 
-/// Two steps only: grant permissions, then paste a Bailian key. Everything else lives in Settings.
+/// Two steps only: paste a Bailian key, then grant permissions. Everything else lives in Settings.
 final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
     static let completedKey = "setup.completedVersion"
     static let version = 1
@@ -80,7 +111,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     private enum KeyState: Equatable { case idle, checking, valid, rejected, offline, format }
 
     private weak var host: SetupWizardHost?
-    private(set) var step: SetupStep = .permissions
+    private(set) var step: SetupStep = .key
     private var snapshot: SetupSnapshot
 
     private var stepLabels: [NSTextField] = []
@@ -89,7 +120,6 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     private var current: NSView?
     private let primary = NSButton(title: "", target: nil, action: nil)
     private let secondary = NSButton(title: "", target: nil, action: nil)
-    private var advanceWork: DispatchWorkItem?
 
     // Permissions
     private var accessibilityRow: PermissionRow?
@@ -124,6 +154,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         window.appearance = NSAppearance(named: .darkAqua)
         super.init(window: window)
         window.delegate = self
+        polishCheck.state = .on
         build()
         window.center()
     }
@@ -142,13 +173,9 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         guard step == .permissions else { return }
         updatePermissions()
         if allowed && !lastAllowed {
-            // Come back from System Settings on our own once approval lands.
+            // Come back from System Settings on our own once approval lands; 完成 is now enabled.
             window?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
-            advanceWork?.cancel()
-            let work = DispatchWorkItem { [weak self] in self?.show(.key) }
-            advanceWork = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
         }
     }
 
@@ -156,7 +183,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         guard let host = host else { return }
         snapshot = host.setupSnapshot()
         lastAllowed = snapshot.permission.allowed
-        show(requested ?? SetupStep.first(for: snapshot))
+        show(requested ?? SetupProgress.saved() ?? SetupStep.first(for: snapshot))
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -222,11 +249,10 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     }
 
     private func show(_ next: SetupStep) {
-        advanceWork?.cancel()
-        advanceWork = nil
         if next != .key { keyTask?.cancel(); keyTask = nil }
         window?.setContentSize(NSSize(width: 480, height: next == .key ? 480 : 420))
         step = next
+        SetupProgress.save(next)
         current?.removeFromSuperview()
         let view = next == .permissions ? buildPermissions() : buildKey()
         view.translatesAutoresizingMaskIntoConstraints = false
@@ -267,14 +293,14 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
 
     @objc private func primaryAction() {
         switch step {
-        case .permissions: show(.key)
         case .key:
-            if keyState == .valid && keyIsActive { finish() } else { verifyKey() }
+            if keyState == .valid && keyIsActive { show(.permissions) } else { verifyKey() }
+        case .permissions: finish()
         }
     }
 
     @objc private func secondaryAction() {
-        show(step == .permissions ? .key : .permissions)
+        if step == .permissions { show(.key) }
     }
 
     private func finish() {
@@ -282,7 +308,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         close()
     }
 
-    // MARK: - 01 Permissions
+    // MARK: - 02 Permissions
 
     private func buildPermissions() -> NSView {
         var items: [NSView] = [Self.title("允许 iMic 输入文字")]
@@ -298,7 +324,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
             name: "辅助功能", detail: "把识别好的文字输入到当前应用",
             action: "去开启", target: self, selector: #selector(requestAccessibility))
         let screen = PermissionRow(
-            name: "屏幕录制", detail: "可选 · 润色完成时的扫光效果",
+            name: "屏幕录制", detail: "可选 · 润色扫光。开启后系统可能要求重新打开 iMic，向导会回到这一步",
             action: "去开启", target: self, selector: #selector(requestScreenCapture))
         accessibilityRow = accessibility
         screenRow = screen
@@ -327,7 +353,8 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         staleToggle?.isHidden = allowed || requestedAt == nil
         if allowed { staleHelp?.isHidden = true }
         if !allowed, let asked = requestedAt, Date().timeIntervalSince(asked) > 15 { staleHelp?.isHidden = false }
-        footer(primary: "下一步", enabled: allowed, secondary: allowed ? nil : "跳过")
+        // Accessibility stays optional: without it text is kept in the window for copying.
+        footer(primary: allowed ? "完成" : "跳过并完成", enabled: true, secondary: "上一步")
     }
 
     @objc private func requestAccessibility() {
@@ -354,7 +381,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
 
     @objc private func toggleStale() { staleHelp?.isHidden.toggle() }
 
-    // MARK: - 02 Key
+    // MARK: - 01 Key
 
     private var enteredKey: String { keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var keyIsActive: Bool { !enteredKey.isEmpty && snapshot.key?.key == enteredKey }
@@ -383,7 +410,6 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         keyMessage.font = .systemFont(ofSize: 12)
         keyMessage.maximumNumberOfLines = 2
 
-        polishCheck.state = .on
         polishCheck.setAccessibilityLabel("同时启用 AI 润色（推荐）")
         let polishHint = Self.text("同一个百炼 Key，识别后自动整理口语、去重复。可随时在设置中关闭。", size: 11)
         let polish = Self.column([polishCheck, polishHint], spacing: 6)
@@ -429,8 +455,8 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         keyMessage.textColor = color
         let ready = keyState == .valid && keyIsActive
         polishCheck.isEnabled = ready
-        footer(primary: ready ? "完成" : keyState == .checking ? "验证中…" : "验证并完成",
-               enabled: ready || (!enteredKey.isEmpty && keyState != .checking), secondary: "上一步")
+        footer(primary: ready ? "下一步" : keyState == .checking ? "验证中…" : "验证",
+               enabled: ready || (!enteredKey.isEmpty && keyState != .checking), secondary: nil)
     }
 
     func controlTextDidChange(_ notification: Notification) {
@@ -501,7 +527,6 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
 
     func windowWillClose(_ notification: Notification) {
         keyTask?.cancel(); keyTask = nil
-        advanceWork?.cancel()
     }
 
     // MARK: - Style

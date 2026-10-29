@@ -1418,14 +1418,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// New users, or anyone missing the one required key, start in the wizard.
+    /// New users, anyone missing the one required key, and a wizard interrupted by a
+    /// relaunch (Screen Recording asks to reopen iMic) start in the wizard.
     func shouldShowSetupOnLaunch() -> Bool {
-        if key.stringValue.isEmpty { return true }
-        guard MacPreferences.defaults.integer(forKey: SetupWizard.completedKey) < SetupWizard.version else { return false }
-        // Existing installs that are already set up are not interrupted.
-        guard inputAllowed() else { return true }
-        MacPreferences.defaults.set(SetupWizard.version, forKey: SetupWizard.completedKey)
-        return false
+        let defaults = MacPreferences.defaults
+        switch SetupLaunchPolicy.decide(
+            keyPresent: !key.stringValue.isEmpty,
+            completedVersion: defaults.integer(forKey: SetupWizard.completedKey),
+            currentVersion: SetupWizard.version,
+            inProgress: SetupProgress.saved(defaults) != nil,
+            inputAllowed: inputAllowed()) {
+        case .show: return true
+        case .skip: return false
+        case .skipAndMarkComplete:
+            // Installs from before the wizard existed are not interrupted.
+            defaults.set(SetupWizard.version, forKey: SetupWizard.completedKey)
+            return false
+        }
     }
 
     func requestInputAuthorization() {
@@ -1582,7 +1591,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.popUpStatusMenu() }
         }
         if let setup = previewSetup {
-            showSetup(at: SetupStep.first(for: setup))
+            let permissionsPreview = preview == "setup-move" || preview == "setup-granted"
+            showSetup(at: permissionsPreview ? .permissions : SetupStep.first(for: setup))
         }
     }
 
@@ -1666,6 +1676,7 @@ extension AppDelegate: SetupWizardHost {
         guard preview == nil else { show(); return }
         applyPolishPreferences(LinkPolishPreferences(enabled: polishEnabled, options: DeepSeekConfiguration.options), confirmingSave: false)
         MacPreferences.defaults.set(SetupWizard.version, forKey: SetupWizard.completedKey)
+        SetupProgress.clear()
         show()
     }
 

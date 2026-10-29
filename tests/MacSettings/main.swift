@@ -21,6 +21,29 @@ let application = NSApplication.shared
 application.setActivationPolicy(.accessory)
 application.finishLaunching()
 application.activate(ignoringOtherApps: true)
+// Setup wizard launch policy: a relaunch in the middle of the wizard must come back to it.
+func decide(key: Bool, completed: Int, progress: Bool, allowed: Bool) -> SetupLaunchPolicy.Decision {
+    SetupLaunchPolicy.decide(keyPresent: key, completedVersion: completed, currentVersion: 1,
+                             inProgress: progress, inputAllowed: allowed)
+}
+check(decide(key: false, completed: 0, progress: false, allowed: false) == .show, "New user starts in the wizard")
+check(decide(key: false, completed: 1, progress: false, allowed: true) == .show, "A lost key reopens the wizard")
+check(decide(key: true, completed: 0, progress: true, allowed: true) == .show,
+      "Relaunch mid-wizard with a shell key and permissions granted must resume the wizard")
+check(decide(key: true, completed: 0, progress: true, allowed: false) == .show, "Relaunch mid-wizard resumes")
+check(decide(key: true, completed: 1, progress: true, allowed: true) == .skip, "A finished wizard stays closed")
+check(decide(key: true, completed: 0, progress: false, allowed: true) == .skipAndMarkComplete,
+      "Installs from before the wizard are not interrupted")
+check(decide(key: true, completed: 0, progress: false, allowed: false) == .show, "Missing permission shows the wizard")
+check(SetupStep.allCases.first == .key && SetupStep.allCases.last == .permissions,
+      "Key comes first; permissions, which may force a relaunch, come last")
+let progressDefaults = UserDefaults(suiteName: "iMic.setup-progress.\(UUID().uuidString)")!
+check(SetupProgress.saved(progressDefaults) == nil, "No progress before the wizard opens")
+SetupProgress.save(.permissions, progressDefaults)
+check(SetupProgress.saved(progressDefaults) == .permissions, "Progress survives as the saved step")
+SetupProgress.clear(progressDefaults)
+check(SetupProgress.saved(progressDefaults) == nil, "Finishing clears progress")
+
 let before = fileFingerprint()
 let standardBefore = UserDefaults.standard.object(forKey: "polishProvider") as? String
 let app = AppDelegate()
