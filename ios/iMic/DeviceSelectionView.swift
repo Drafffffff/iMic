@@ -134,7 +134,8 @@ struct DeviceSelectionView: View {
         case .needsCode: return "首次连接需要输入 Mac 窗口中的 6 位配对码"
         case .failed(let message): return message
         case .searching, .idle:
-            return link.selectedMacID == nil ? "从下方选择电脑" : "所选 Mac 离线或尚未发现，正在等待连接"
+            if link.isManualSelection { return "所选 Mac 离线或尚未发现，正在等待连接" }
+            return link.pairedMacIDs.isEmpty ? "正在搜索 Mac，可从下方选择电脑" : "正在寻找已配对的 Mac"
         }
     }
 

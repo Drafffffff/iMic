@@ -31,24 +31,27 @@ final class BLELinkClient: NSObject, CBCentralManagerDelegate, CBPeripheralDeleg
     private var connected = false
     private var lost = false
     private var generation: UInt64 = 0
-    private var targetMacID: String?
+    private var acceptedMacIDs: Set<UUID> = []
+    private var verifiedMacID: String?
     private var rejected: Set<UUID> = []
     private var timeout: DispatchWorkItem?
     private var transferredBytes = 0
     private var reportedBytes = 0
     private var reportTime = ProcessInfo.processInfo.systemUptime
 
-    var onConnected: (() -> Void)?
+    var onConnected: ((String) -> Void)?
     var onData: ((Data) -> Void)?
     var onLost: (() -> Void)?
 
-    func start(targetMacID: String? = nil) {
+    func start(acceptedMacIDs: [String]) {
         queue.async { [self] in
             guard self.manager == nil else { return }
             self.generation &+= 1
             let generation = self.generation
             self.lost = false
-            self.targetMacID = targetMacID
+            self.acceptedMacIDs = Set(acceptedMacIDs.compactMap(UUID.init(uuidString:)))
+            self.verifiedMacID = nil
+            guard !self.acceptedMacIDs.isEmpty else { self.fail("no paired Mac allowed"); return }
             self.rejected.removeAll()
             self.transferredBytes = 0
             self.reportedBytes = 0
@@ -174,6 +177,7 @@ final class BLELinkClient: NSObject, CBCentralManagerDelegate, CBPeripheralDeleg
     private func reset() {
         generation &+= 1
         connected = false
+        verifiedMacID = nil
         timeout?.cancel()
         timeout = nil
         manager?.stopScan()
@@ -209,6 +213,7 @@ final class BLELinkClient: NSObject, CBCentralManagerDelegate, CBPeripheralDeleg
         peripheral.delegate = nil
         manager?.cancelPeripheralConnection(peripheral)
         self.peripheral = nil
+        verifiedMacID = nil
         uplink = nil
         downlink = nil
         manager?.scanForPeripherals(withServices: [Self.service], options: nil)
@@ -276,12 +281,16 @@ final class BLELinkClient: NSObject, CBCentralManagerDelegate, CBPeripheralDeleg
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
         guard peripheral === self.peripheral, characteristic === downlink else { return }
+        guard let verifiedMacID, let identity = UUID(uuidString: verifiedMacID),
+              acceptedMacIDs.contains(identity) else {
+            rejectCandidate("unverified Mac identity"); return
+        }
         guard error == nil, characteristic.isNotifying else { fail("downlink subscription failed"); return }
         connected = true
         timeout?.cancel()
         timeout = nil
         IMicLog.write("iphone.ble", "connected uplinkMTU=\(peripheral.maximumWriteValueLength(for: .withoutResponse)) controlMTU=\(peripheral.maximumWriteValueLength(for: .withResponse))")
-        onConnected?()
+        onConnected?(verifiedMacID)
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
@@ -298,10 +307,11 @@ final class BLELinkClient: NSObject, CBCentralManagerDelegate, CBPeripheralDeleg
                 rejectCandidate("invalid Mac identity bytes=\(characteristic.value?.count ?? 0)")
                 return
             }
-            guard targetMacID == nil || targetMacID.flatMap(UUID.init(uuidString:)) == macID else {
+            guard acceptedMacIDs.contains(macID) else {
                 rejectCandidate("Mac identity mismatch")
                 return
             }
+            verifiedMacID = macID.uuidString
             guard let downlink else { rejectCandidate("downlink missing"); return }
             peripheral.setNotifyValue(true, for: downlink)
             return

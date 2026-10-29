@@ -73,6 +73,7 @@ final class LinkClient: ObservableObject {
     @Published private(set) var pairingError: String?
     @Published private(set) var pairing = false
     @Published private(set) var hasPairedMac = false
+    @Published private(set) var isManualSelection = false
     @Published private(set) var selectedMacID: String?
     @Published private(set) var selectedMacName: String?
     @Published private(set) var rememberedMacs: [RememberedMac] = []
@@ -132,6 +133,7 @@ final class LinkClient: ObservableObject {
     private var connectionGeneration = 0
     private var bleClient: BLELinkClient?
     private var usingBLE = false
+    private var bleSelectedMacID: String?
     private var bleFallbackWork: DispatchWorkItem?
     private let forceBLE: Bool
     private let epochLock = NSLock()
@@ -141,6 +143,15 @@ final class LinkClient: ObservableObject {
     private var pendingPolishPreferences: LinkPolishPreferences?
     private var polishSaveGeneration: UInt64 = 0
     private var knownNames: [String: String] = [:]
+    private var macLastConnected: [String: Double] = [:]
+    private var manualSelection = false
+    private var attemptedThisRound: Set<String> = []
+    // Revoked tokens cannot cause an automatic pairing prompt on the next retry.
+    private var rejectedPairingIDs: Set<String> = []
+    private var automaticTargetWasPaired = false
+    private var graceDeadline: TimeInterval?
+    private var graceWork: DispatchWorkItem?
+
 
     private let deviceID: String
     private let deviceName: String
@@ -195,6 +206,8 @@ final class LinkClient: ObservableObject {
         if let preferredMacID, knownNames[preferredMacID] == nil {
             knownNames[preferredMacID] = "Mac"
         }
+        macLastConnected = (UserDefaults.standard.dictionary(forKey: "imic.macLastConnected") as? [String: Double] ?? [:])
+            .filter { $0.value.isFinite }
         selectedMacID = preferredMacID
         selectedMacName = preferredMacID.map { knownNames[$0] ?? "Mac" }
         let paired = Set(knownNames.keys.filter { TokenStore.load(for: $0) != nil })
@@ -250,6 +263,7 @@ final class LinkClient: ObservableObject {
         guard !isPreview, !running else { return }
         running = true
         queue.async {
+            self.resetSelectionLocked()
             if self.forceBLE {
                 self.startBLELocked()
                 return
@@ -273,6 +287,7 @@ final class LinkClient: ObservableObject {
             guard self.foregroundRestartEpoch == nil else { return }
             let returning = self.backgroundAt != nil
             self.backgroundAt = nil
+            if returning { self.resetSelectionLocked() }
             self.reconnectAttempts = 0
             self.reconnectWork?.cancel()
             self.reconnectWork = nil
@@ -322,7 +337,8 @@ final class LinkClient: ObservableObject {
         // Only an announced old session must be failed on replacement.
         let notifyLoss = activeLinkSession != nil
         let name = currentMacName ?? "Mac"
-        let mac = discoveredMacs.first(where: { $0.id == preferredMacID }) ?? lastMac ?? directMac
+        resetSelectionLocked()
+        let mac = directMac
         closeConnectionLocked()
         let epoch = currentEpoch()
         foregroundRestartEpoch = epoch
@@ -330,6 +346,7 @@ final class LinkClient: ObservableObject {
         IMicLog.write("iphone.link", "foreground reconnect reason=\(reason)")
         publish {
             self.phase = mac == nil ? .searching : .connecting(name)
+            self.isManualSelection = false
             self.transport = nil
             if notifyLoss { self.onLost?() }
             self.queue.async {
@@ -354,6 +371,7 @@ final class LinkClient: ObservableObject {
             guard !self.ready else { return }
             self.closeConnectionLocked()
             self.reconnectWork?.cancel()
+            self.reconnectWork = nil
             self.reconnectAttempts = 0
             self.needsCode = false
             self.bleClient?.stop()
@@ -361,9 +379,10 @@ final class LinkClient: ObservableObject {
             self.usingBLE = false
             if self.forceBLE {
                 self.startBLELocked()
-            } else if let mac = self.lastMac {
+            } else if let mac = self.directMac {
                 self.connectLocked(to: mac)
             } else {
+                self.attemptedThisRound.removeAll()
                 self.startBrowserLocked()
             }
             self.scheduleBLEFallback(after: 3)
@@ -376,7 +395,7 @@ final class LinkClient: ObservableObject {
         queue.async {
             guard self.running, self.ready, self.usingBLE, !self.forceBLE,
                   self.activeLinkSession == nil else { return }
-            let candidate = self.discoveredMacs.first { $0.id == self.preferredMacID }
+            let candidate = self.networkCandidateLocked(self.discoveredMacs)
             IMicLog.write("iphone.link", "prefer network selected=\(self.preferredMacID ?? "-") discovered=\(candidate != nil)")
             self.closeConnectionLocked()
             self.reconnectAttempts = 0
@@ -396,6 +415,9 @@ final class LinkClient: ObservableObject {
         guard !isPreview else { return }
         invalidateEpoch()
         queue.async {
+            self.manualSelection = true
+            self.attemptedThisRound.removeAll()
+            self.publish { self.isManualSelection = true }
             self.preferredMacID = mac.id
             self.currentMacID = mac.id
             self.currentMacName = mac.name
@@ -418,6 +440,10 @@ final class LinkClient: ObservableObject {
         queue.async {
             self.closeConnectionLocked()
             self.reconnectWork?.cancel()
+            self.reconnectWork = nil
+            self.manualSelection = true
+            self.attemptedThisRound.removeAll()
+            self.publish { self.isManualSelection = true }
             self.preferredMacID = mac.id
             self.currentMacID = mac.id
             self.currentMacName = mac.name
@@ -444,7 +470,10 @@ final class LinkClient: ObservableObject {
             }
             if let id = self.currentMacID ?? self.preferredMacID {
                 self.knownNames.removeValue(forKey: id)
+                self.macLastConnected.removeValue(forKey: id)
+                UserDefaults.standard.set(self.macLastConnected, forKey: "imic.macLastConnected")
             }
+            self.resetSelectionLocked()
             UserDefaults.standard.set(self.knownNames, forKey: "imic.macNames")
             UserDefaults.standard.removeObject(forKey: "imic.preferredMacID")
             self.preferredMacID = nil
@@ -463,6 +492,7 @@ final class LinkClient: ObservableObject {
                 self.pairingError = nil
                 self.pairing = false
                 self.hasPairedMac = false
+                self.isManualSelection = false
                 self.selectedMacID = nil
                 self.selectedMacName = nil
                 self.rememberedMacs = remembered
@@ -487,6 +517,8 @@ final class LinkClient: ObservableObject {
             using: parameters
         )
         self.browser = browser
+        discoveredMacs = []
+        beginDiscoveryGraceLocked()
         browser.stateUpdateHandler = { [weak self] state in
             guard let self = self, self.browser === browser else { return }
             switch state {
@@ -534,15 +566,68 @@ final class LinkClient: ObservableObject {
         }
     }
 
-    private func autoConnect(_ discovered: [DiscoveredMac]) {
-        guard !ready, connection == nil, !usingBLE else { return }
-        if let preferred = preferredMacID {
-            if let match = discovered.first(where: { $0.id == preferred }) {
-                connectLocked(to: match)
-            }
-            return
+    private func resetSelectionLocked() {
+        manualSelection = false
+        attemptedThisRound.removeAll()
+        rejectedPairingIDs.removeAll()
+        graceWork?.cancel()
+        graceWork = nil
+        graceDeadline = nil
+        publish { self.isManualSelection = false }
+    }
+
+    private func beginDiscoveryGraceLocked() {
+        graceWork?.cancel()
+        graceDeadline = ProcessInfo.processInfo.systemUptime + MacSelection.preferredGrace
+        let deadline = graceDeadline
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.graceDeadline == deadline, self.running else { return }
+            self.graceWork = nil
+            self.autoConnect(self.discoveredMacs)
         }
-        if discovered.count == 1 { connectLocked(to: discovered[0]) }
+        graceWork = work
+        queue.asyncAfter(deadline: .now() + MacSelection.preferredGrace, execute: work)
+    }
+
+    private func knownPairedCandidatesLocked() -> [MacCandidate] {
+        var ids = Set(knownNames.keys).union(macLastConnected.keys).union(discoveredMacs.map(\.id))
+        if let preferredMacID { ids.insert(preferredMacID) }
+        return ids.map { MacCandidate(id: $0, paired: TokenStore.load(for: $0) != nil,
+                                     lastConnected: macLastConnected[$0]) }
+    }
+
+    private func networkCandidateLocked(_ discovered: [DiscoveredMac]) -> DiscoveredMac? {
+        let candidates = discovered.map {
+            MacCandidate(id: $0.id, paired: TokenStore.load(for: $0.id) != nil,
+                         lastConnected: macLastConnected[$0.id])
+        }
+        let preferredPaired = preferredMacID.flatMap { TokenStore.load(for: $0) } != nil
+        let expired = graceDeadline.map { ProcessInfo.processInfo.systemUptime >= $0 } ?? true
+        let chosen = MacSelection.choose(discovered: candidates, preferredID: preferredMacID,
+            graceExpired: expired, hasAnyPairedMac: knownPairedCandidatesLocked().contains { $0.paired },
+            excluded: attemptedThisRound.union(manualSelection ? [] : rejectedPairingIDs),
+            manualSelection: manualSelection, preferredIsPaired: preferredPaired)
+        let reason = chosen.map { id in
+            manualSelection ? "manual" : id == preferredMacID && preferredPaired ? "preferred" :
+                candidates.first(where: { $0.id == id })?.paired == true ? "recent" : "single_unpaired"
+        } ?? (!manualSelection && preferredPaired && !expired ? "grace" : "none")
+        IMicLog.write("iphone.link", "auto select chosen=\(chosen ?? "-") reason=\(reason) candidates=\(candidates.count)")
+        return discovered.first { $0.id == chosen }
+    }
+
+    @discardableResult
+    private func autoConnect(_ discovered: [DiscoveredMac]) -> Bool {
+        guard !ready, connection == nil, !usingBLE, activeLinkSession == nil,
+              reconnectWork == nil else { return false }
+        guard let match = networkCandidateLocked(discovered) else { return false }
+        connectLocked(to: match)
+        return true
+    }
+
+    /// One pass tries each available target once. Only the existing backoff starts a new pass.
+    private func continueAfterLossLocked(reason: String) {
+        if directMac == nil, !manualSelection, autoConnect(discoveredMacs) { return }
+        scheduleReconnect(reason: reason)
     }
 
     // MARK: - Connection
@@ -550,11 +635,14 @@ final class LinkClient: ObservableObject {
     private func connectLocked(to mac: DiscoveredMac) {
         guard running, !ready else { return }
         reconnectWork?.cancel()
+        reconnectWork = nil
         handshakeWork?.cancel()
         closeConnectionLocked()
         lastMac = mac
         currentMacID = mac.id == "direct" ? preferredMacID : mac.id
         currentMacName = mac.name
+        automaticTargetWasPaired = !manualSelection && directMac == nil &&
+            currentMacID.flatMap { TokenStore.load(for: $0) } != nil
         privateKey = LinkCrypto.makePrivateKey()
         decoder.reset()
         serverPublic = nil
@@ -564,8 +652,14 @@ final class LinkClient: ObservableObject {
         forcePair = false
         connectionGeneration += 1
         let generation = connectionGeneration
+        let isPaired = currentMacID.flatMap { TokenStore.load(for: $0) } != nil
+        let manual = manualSelection
         publish {
             self.phase = .connecting(mac.name)
+            self.selectedMacID = mac.id
+            self.selectedMacName = mac.name
+            self.hasPairedMac = isPaired
+            self.isManualSelection = manual
             self.transport = nil
         }
 
@@ -639,8 +733,7 @@ final class LinkClient: ObservableObject {
                             guard self.connection === connection else { return }
                         }
                     } catch {
-                        self.closeConnectionLocked()
-                        self.fail("链路数据异常，请重试")
+                        self.connectionLost(generation: self.connectionGeneration, reason: "链路数据异常，请重试")
                         return
                     }
                 }
@@ -680,16 +773,12 @@ final class LinkClient: ObservableObject {
         }
         self.serverPublic = serverPublic
         if let macID = message.macID {
-            if let preferred = preferredMacID, UUID(uuidString: preferred) != nil, preferred != macID {
+            if let expected = currentMacID, UUID(uuidString: expected) != nil, expected != macID {
                 throw LinkError.decodingFailed
             }
             currentMacID = macID
         }
         if let name = message.name { currentMacName = name }
-        if let macID = currentMacID {
-            preferredMacID = macID
-            rememberTarget(id: macID, name: currentMacName ?? "Mac")
-        }
         let name = currentMacName ?? "Mac"
 
         switch message.status {
@@ -710,6 +799,13 @@ final class LinkClient: ObservableObject {
             sendSealed(.auth())
             publish { self.phase = .connecting(name) }
         case "pair_required":
+            if !manualSelection, directMac == nil,
+               automaticTargetWasPaired || usingBLE || knownPairedCandidatesLocked().contains(where: { $0.paired }) {
+                if let id = currentMacID { TokenStore.delete(for: id) }
+                forcePair = true
+                reconnectAfterReset()
+                return
+            }
             IMicLog.write("iphone.link", "waiting for pair code transport=\(usingBLE ? "ble" : "tcp")")
             if let code = autoPairCode, code.count == 6 {
                 publish { self.phase = .connecting(name) }
@@ -765,6 +861,12 @@ final class LinkClient: ObservableObject {
             }
         case "ready":
             ready = true
+            attemptedThisRound.removeAll()
+            if let id = currentMacID {
+                macLastConnected[id] = Date().timeIntervalSince1970
+                UserDefaults.standard.set(macLastConnected, forKey: "imic.macLastConnected")
+                rememberTarget(id: id, name: currentMacName ?? "Mac")
+            }
             needsCode = false
             bleFallbackWork?.cancel()
             bleFallbackWork = nil
@@ -887,17 +989,34 @@ final class LinkClient: ObservableObject {
     }
 
     private func reconnectAfterReset() {
+        let skipPairing = !manualSelection && directMac == nil
+        if skipPairing, let id = currentMacID {
+            attemptedThisRound.insert(id)
+            rejectedPairingIDs.insert(id)
+        }
         handshakeWork?.cancel()
         closeConnectionLocked()
+        needsCode = false
         let epoch = currentEpoch()
-        queue.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-            guard let self = self, self.currentEpoch() == epoch else { return }
-            if let mac = self.lastMac, !self.forceBLE {
+        publish {
+            self.pairing = false
+            self.pairingError = nil
+            self.phase = .searching
+            self.refreshRememberedPublished()
+        }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.currentEpoch() == epoch else { return }
+            self.reconnectWork = nil
+            if skipPairing {
+                self.continueAfterLossLocked(reason: "配对信息已失效")
+            } else if let mac = self.lastMac, !self.forceBLE {
                 self.connectLocked(to: mac)
             } else {
                 self.startBLELocked()
             }
         }
+        reconnectWork = work
+        queue.asyncAfter(deadline: .now() + 0.6, execute: work)
     }
 
     private func connectionLost(generation: Int, reason: String) {
@@ -905,9 +1024,11 @@ final class LinkClient: ObservableObject {
         if foregroundProbe != nil { restartForegroundLocked(reason: reason); return }
         invalidateEpoch()
         failPendingWrites()
-        let wasReady = ready
+        let notifyLoss = ready || activeLinkSession != nil
         ready = false
-        IMicLog.write("iphone.link", "connection lost ready=\(wasReady) reason=\(reason)")
+        activeLinkSession = nil
+        if directMac == nil, !manualSelection, let id = currentMacID { attemptedThisRound.insert(id) }
+        IMicLog.write("iphone.link", "connection lost ready=\(notifyLoss) reason=\(reason)")
         handshakeWork?.cancel()
         waitingWork?.cancel()
         waitingWork = nil
@@ -918,24 +1039,20 @@ final class LinkClient: ObservableObject {
         connection?.stateUpdateHandler = nil
         connection?.cancel()
         connection = nil
-        if wasReady {
-            deliver { self.onLost?() }
-        }
         guard running else { return }
-        if needsCode {
-            needsCode = false
-            publish {
-                self.pairing = true
-                self.pairingError = "连接已断开，请重试"
-            }
-            scheduleReconnect(reason: reason)
-            return
-        }
+        needsCode = false
+        let epoch = currentEpoch()
+        // Deliver loss against the old session before selecting a new transport epoch.
         publish {
             self.phase = .searching
             self.transport = nil
+            self.pairing = false
+            if notifyLoss { self.onLost?() }
+            self.queue.async {
+                guard self.running, self.currentEpoch() == epoch else { return }
+                self.continueAfterLossLocked(reason: reason)
+            }
         }
-        scheduleReconnect(reason: reason)
     }
 
     private var hasConnectedNetwork: Bool {
@@ -952,7 +1069,7 @@ final class LinkClient: ObservableObject {
         bleFallbackWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self = self, self.running, !self.ready, !self.usingBLE,
-                  !self.hasConnectedNetwork else { return }
+                  !self.hasConnectedNetwork, self.connection == nil else { return }
             self.startBLELocked()
         }
         bleFallbackWork = work
@@ -961,11 +1078,15 @@ final class LinkClient: ObservableObject {
 
     private func startBLELocked() {
         guard running, !ready, !usingBLE else { return }
-        // 蓝牙仅作为已选目标的传输后备，绝不自动连接扫描到的第一台电脑。
-        guard let targetMacID = preferredMacID, UUID(uuidString: targetMacID) != nil else {
-            if forceBLE {
-                publish { self.phase = .failed("请先在同一 Wi-Fi 下选择 Mac，再使用蓝牙连接") }
-            }
+        // 蓝牙只接受本机有令牌的身份；手动等待期间绝不跳到其他 Mac。
+        guard connection == nil || forceBLE else { return }
+        let candidates = knownPairedCandidatesLocked().filter {
+            !attemptedThisRound.contains($0.id) && (!manualSelection || $0.id == preferredMacID)
+        }
+        let accepted = MacSelection.orderedPaired(candidates, preferredID: preferredMacID)
+            .filter { UUID(uuidString: $0) != nil }
+        guard !accepted.isEmpty else {
+            if forceBLE { publish { self.phase = .failed("请先在同一 Wi-Fi 下配对 Mac，再使用蓝牙连接") } }
             return
         }
         bleFallbackWork?.cancel()
@@ -977,7 +1098,6 @@ final class LinkClient: ObservableObject {
         connection?.cancel()
         connection = nil
         ready = false
-        publish { self.transport = nil }
         decoder.reset()
         cipher = nil
         pairingCipher = nil
@@ -986,11 +1106,12 @@ final class LinkClient: ObservableObject {
         invalidateEpoch()
         failPendingWrites()
         usingBLE = true
+        bleSelectedMacID = nil
         let ble = BLELinkClient()
         bleClient = ble
-        ble.onConnected = { [weak self, weak ble] in
+        ble.onConnected = { [weak self, weak ble] macID in
             guard let self, let ble else { return }
-            self.queue.async { [weak self] in self?.bleConnected(ble) }
+            self.queue.async { [weak self] in self?.bleConnected(ble, macID: macID) }
         }
         ble.onData = { [weak self, weak ble] data in
             guard let self, let ble else { return }
@@ -1001,11 +1122,12 @@ final class LinkClient: ObservableObject {
             self.queue.async { [weak self] in self?.bleLost(ble) }
         }
         IMicLog.write("iphone.link", "start BLE fallback")
-        publish { self.phase = .connecting(self.currentMacName ?? "蓝牙 Mac") }
-        ble.start(targetMacID: targetMacID)
+        let name = currentMacName ?? "蓝牙 Mac"
+        publish { self.phase = .connecting(name); self.transport = nil }
+        ble.start(acceptedMacIDs: accepted)
     }
 
-    private func bleConnected(_ ble: BLELinkClient) {
+    private func bleConnected(_ ble: BLELinkClient, macID: String) {
         guard running, usingBLE, bleClient === ble else { return }
         privateKey = LinkCrypto.makePrivateKey()
         decoder.reset()
@@ -1014,10 +1136,19 @@ final class LinkClient: ObservableObject {
         pairingCipher = nil
         pendingToken = nil
         forcePair = false
-        currentMacID = preferredMacID ?? currentMacID
-        currentMacName = currentMacName ?? "Mac"
+        guard TokenStore.load(for: macID) != nil,
+              !manualSelection || preferredMacID == macID else { bleLost(ble); return }
+        currentMacID = macID
+        bleSelectedMacID = macID
+        currentMacName = knownNames[macID] ?? "Mac"
+        automaticTargetWasPaired = !manualSelection
         IMicLog.write("iphone.link", "BLE connected; send hello mac=\(currentMacID ?? "-")")
-        publish { self.phase = .connecting("蓝牙") }
+        let name = currentMacName ?? "Mac"
+        publish {
+            self.phase = .connecting(name)
+            self.selectedMacID = macID
+            self.selectedMacName = name
+        }
         sendHello()
         let work = DispatchWorkItem { [weak self, weak ble] in
             guard let self, let ble, self.bleClient === ble, !self.ready, !self.needsCode else { return }
@@ -1044,39 +1175,39 @@ final class LinkClient: ObservableObject {
         guard usingBLE, bleClient === ble else { return }
         if foregroundProbe != nil { restartForegroundLocked(reason: "蓝牙前台连接失效"); return }
         IMicLog.write("iphone.link", "BLE lost")
-        let wasReady = ready
-        invalidateEpoch()
-        failPendingWrites()
-        usingBLE = false
-        bleClient = nil
-        ble.stop()
-        ready = false
-        decoder.reset()
-        cipher = nil
-        pairingCipher = nil
-        pendingToken = nil
-        publish { self.phase = .searching }
-        publish { self.transport = nil }
-        if wasReady { deliver { self.onLost?() } }
-        if running {
-            scheduleReconnect(reason: "蓝牙断开")
-            scheduleBLEFallback(after: 3)
+        let notifyLoss = ready || activeLinkSession != nil
+        if !manualSelection, let id = bleSelectedMacID { attemptedThisRound.insert(id) }
+        closeConnectionLocked()
+        let epoch = currentEpoch()
+        publish {
+            self.phase = .searching
+            self.transport = nil
+            if notifyLoss { self.onLost?() }
+            self.queue.async {
+                guard self.running, self.currentEpoch() == epoch else { return }
+                self.continueAfterLossLocked(reason: "蓝牙断开")
+                self.scheduleBLEFallback(after: 3)
+            }
         }
     }
 
     private func scheduleReconnect(reason: String) {
         reconnectWork?.cancel()
+        reconnectWork = nil
         guard running else { return }
         reconnectAttempts += 1
         let delay = min(8, pow(1.6, Double(reconnectAttempts - 1)))
         let work = DispatchWorkItem { [weak self] in
             guard let self = self, self.running, !self.ready else { return }
+            self.reconnectWork = nil
+            self.attemptedThisRound.removeAll()
             if self.forceBLE {
                 self.startBLELocked()
-            } else if let mac = self.lastMac {
+            } else if let mac = self.directMac {
                 self.connectLocked(to: mac)
             } else {
-                self.startBrowserLocked()
+                if self.browser == nil { self.startBrowserLocked() }
+                self.autoConnect(self.discoveredMacs)
             }
         }
         reconnectWork = work
@@ -1092,6 +1223,7 @@ final class LinkClient: ObservableObject {
         invalidateEpoch()
         failPendingWrites()
         reconnectWork?.cancel()
+        reconnectWork = nil
         bleFallbackWork?.cancel()
         bleFallbackWork = nil
         handshakeWork?.cancel()
@@ -1108,15 +1240,25 @@ final class LinkClient: ObservableObject {
         pendingToken = nil
         bleClient?.stop()
         bleClient = nil
+        bleSelectedMacID = nil
         usingBLE = false
     }
 
     private func fail(_ message: String) {
-        publish {
-            self.phase = .failed(message)
-            self.pairing = false
+        // Server-side handshake errors are candidate failures too, not live sockets
+        // that can keep blocking selection until their old timeout fires.
+        if usingBLE, let ble = bleClient {
+            bleLost(ble)
+        } else if connection != nil {
+            connectionLost(generation: connectionGeneration, reason: message)
+        } else {
+            if directMac == nil, !manualSelection, let id = currentMacID { attemptedThisRound.insert(id) }
+            publish {
+                self.phase = .failed(message)
+                self.pairing = false
+            }
+            continueAfterLossLocked(reason: message)
         }
-        scheduleReconnect(reason: message)
     }
 
     // MARK: - Pairing
@@ -1417,11 +1559,14 @@ final class LinkClient: ObservableObject {
     private func deliver(_ block: @escaping () -> Void) { publish(block) }
 
     private func rememberTarget(id: String, name: String) {
+        preferredMacID = id
         knownNames[id] = name
         UserDefaults.standard.set(id, forKey: "imic.preferredMacID")
         UserDefaults.standard.set(knownNames, forKey: "imic.macNames")
         let snapshot = knownNames
+        let manual = manualSelection
         publish {
+            self.isManualSelection = manual
             self.selectedMacID = id
             self.selectedMacName = name
             self.rememberedMacs = snapshot.map { RememberedMac(id: $0.key, name: $0.value) }
