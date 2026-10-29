@@ -5,9 +5,9 @@ enum PolishProvider: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .deepseek: return "DeepSeek 官方"
-        case .bailian: return "百炼 DeepSeek"
-        case .custom: return "自定义兼容服务"
+        case .deepseek: return "DeepSeek 官方 API"
+        case .bailian: return "百炼（推荐）"
+        case .custom: return "自定义 OpenAI 兼容服务"
         }
     }
 
@@ -37,15 +37,17 @@ enum DeepSeekConfiguration {
     static func provider(in defaults: UserDefaults) -> PolishProvider {
         defaults.string(forKey: "polishProvider").flatMap(PolishProvider.init(rawValue:)) ?? .bailian
     }
-    /// One Bailian key covers recognition and polish, so new installs default to Bailian.
-    /// Older installs that never saved a source kept the implicit DeepSeek default;
-    /// pin it once when they already have an official DeepSeek key.
-    static func migrateDefaultProvider(in defaults: UserDefaults = .standard, hasDeepSeekKey: () -> Bool) {
+    /// A missing saved choice always adopts Bailian, independent of legacy credentials.
+    static func migrateDefaultProvider(in defaults: UserDefaults = .standard, hasDeepSeekKey _: () -> Bool) {
         guard defaults.string(forKey: "polishProvider") == nil else { return }
-        defaults.set((hasDeepSeekKey() ? PolishProvider.deepseek : .bailian).rawValue, forKey: "polishProvider")
+        defaults.set(PolishProvider.bailian.rawValue, forKey: "polishProvider")
     }
     static var enabled: Bool {
-        UserDefaults.standard.object(forKey: "deepseekEnabled") as? Bool ?? false
+        enabled(in: .standard, hasBailianKey: { MicCredentials.resolve() != nil })
+    }
+    static func enabled(in defaults: UserDefaults, hasBailianKey: () -> Bool) -> Bool {
+        if let saved = defaults.object(forKey: "deepseekEnabled") as? Bool { return saved }
+        return hasBailianKey()
     }
     static var modelName: String { modelName(for: provider) }
     static func modelName(for provider: PolishProvider, defaults: UserDefaults = .standard) -> String {

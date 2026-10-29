@@ -1474,11 +1474,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let cleanedKey = key.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: endpoint.stringValue),
               url.scheme == "wss", url.host?.isEmpty == false,
-              url.path == "/api-ws/v1/inference",
-              model.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) == ASRConfiguration.model
+              url.path == "/api-ws/v1/inference"
         else {
             saveFeedback.textColor = .systemRed
-            saveFeedback.stringValue = "请检查模型和 wss:// 服务地址"
+            saveFeedback.stringValue = "请检查 wss:// 服务地址"
             return
         }
         guard validatePolishSettings() else { return }
@@ -1494,7 +1493,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             key.stringValue = MicCredentials.load()
             updateKeySource()
-            UserDefaults.standard.set(model.stringValue, forKey: "asrModel")
+            UserDefaults.standard.set(ASRConfiguration.model, forKey: "asrModel")
             UserDefaults.standard.set(endpoint.stringValue, forKey: "asrEndpoint")
         }
         for (provider, value) in polishDrafts where provider != .bailian && preview == nil {
@@ -1510,7 +1509,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DeepSeekConfiguration.save(provider: provider, model: value.model, endpoint: value.endpoint)
         }
         UserDefaults.standard.set(editingPolishProvider.rawValue, forKey: "polishProvider")
-        UserDefaults.standard.set(deepseekCheck.state == .on, forKey: "deepseekEnabled")
+        deepseekCheck.state = DeepSeekConfiguration.enabled ? .on : .off
+        polishFields?.isHidden = !DeepSeekConfiguration.enabled
+        sendFeatureSettings()
         loadPolishProviderFields()
         saveFeedback.textColor = .secondaryLabelColor
         saveFeedback.stringValue = "已保存"
@@ -1765,7 +1766,9 @@ extension AppDelegate: SetupWizardHost {
         _ = CGRequestScreenCaptureAccess()
     }
 
-    func setupFinished() {
+    func setupFinished(polishEnabled: Bool) {
+        guard preview == nil else { show(); return }
+        applyPolishPreferences(LinkPolishPreferences(enabled: polishEnabled, options: DeepSeekConfiguration.options), confirmingSave: false)
         UserDefaults.standard.set(SetupWizard.version, forKey: SetupWizard.completedKey)
         show()
     }
@@ -1777,9 +1780,9 @@ extension AppDelegate: SetupWizardHost {
     func updateKeySource() {
         guard let hint = keyHint else { return }
         switch MicCredentials.resolve()?.source {
-        case nil: hint.stringValue = "还没有 Key。一个百炼 Key 同时用于识别和润色。"
-        case .app?: hint.stringValue = "一个百炼 Key 同时用于识别和润色。"
-        case _?: hint.stringValue = "已自动读取本机配置的 Key，同时用于识别和润色。"
+        case nil: hint.stringValue = "一个百炼 Key 同时用于语音识别和 AI 润色。"
+        case .app?: hint.stringValue = "一个百炼 Key 同时用于语音识别和 AI 润色。"
+        case _?: hint.stringValue = "一个百炼 Key 同时用于语音识别和 AI 润色。已读取本机配置。"
         }
     }
 

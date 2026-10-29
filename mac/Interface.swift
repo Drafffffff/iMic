@@ -571,6 +571,11 @@ extension AppDelegate {
         model.placeholderString = ASRConfiguration.model
         endpoint.placeholderString = "wss:// 服务域名/api-ws/v1/inference"
         model.setAccessibilityLabel("语音识别模型")
+        model.stringValue = ASRConfiguration.model
+        model.isEditable = false
+        model.isSelectable = true
+        model.isBordered = false
+        model.drawsBackground = false
         endpoint.setAccessibilityLabel("百炼服务地址")
         for field in [model, endpoint] {
             field.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
@@ -606,7 +611,7 @@ extension AppDelegate {
         swipeCursorCheck = checkbox("左右滑动移动光标", #selector(toggleSwipeCursor), key: "swipeCursor", defaultValue: true)
         let gestureChecks = column([snapReturnCheck, pullDeleteCheck, swipeCursorCheck], spacing: 8)
 
-        deepseekCheck = checkbox("启用 AI 润色与转换", #selector(toggleDeepSeek), key: "deepseekEnabled", defaultValue: false)
+        deepseekCheck = checkbox("启用 AI 润色与转换", #selector(toggleDeepSeek), key: "deepseekEnabled", defaultValue: DeepSeekConfiguration.enabled)
         polishProviderPicker.addItems(withTitles: PolishProvider.allCases.map(\.title))
         polishProviderPicker.selectItem(at: PolishProvider.allCases.firstIndex(of: editingPolishProvider)!)
         polishProviderPicker.target = self

@@ -36,6 +36,7 @@
 - 本机已有的 Key（环境变量或 shell 配置）自动填入并验证，用户直接点「完成」。
 - 粘贴有效格式的 Key 立即验证；主按钮「验证并完成」。
 - 验证：`GET https://<识别服务同主机>/compatible-mode/v1/models`，10 秒超时，不发送音频或文字。200 → 「Key 可用。」并保存；401/403 → 「这个 Key 无法使用…」；网络错误 → 「暂时连不上百炼…」。
+- Key 步骤提供默认勾选的「同时启用 AI 润色（推荐）」，完成时保存选择并沿用现有偏好同步链路。
 - 完成后记录 `setup.completedVersion = 1`，回到主窗口（显示配对码）。
 
 ### 何时出现
@@ -52,7 +53,7 @@
 - 读取顺序：iMic 配置文件 → 进程环境变量 → shell 配置中的字面量赋值（`~/.zshenv`、`~/.zprofile`、`~/.zshrc`、`~/.bash_profile`、`~/.bashrc`、`~/.profile`、fish `config.fish`，只解析不执行）。从 Finder 打开的应用拿不到 shell 环境变量，所以需要解析 shell 配置。
 - 变量：百炼 `DASHSCOPE_API_KEY` / `BAILIAN_API_KEY`；DeepSeek 官方 `DEEPSEEK_API_KEY`；自定义 `IMIC_CUSTOM_POLISH_API_KEY`。来源之间不互相兜底。
 - 外部来源的 Key 直接使用，不复制到 iMic 配置文件；用户在 iMic 中更换后才写入。
-- 润色来源默认百炼；老用户从未选择过来源、且已有 DeepSeek 官方 Key 时保持 DeepSeek。DeepSeek 与自定义服务只在设置页出现。
+- 润色来源默认百炼；从未选择过来源的老用户也采用百炼，已有明确选择保持不变。DeepSeek 与自定义服务只在设置页出现。
 
 ## 安装
 

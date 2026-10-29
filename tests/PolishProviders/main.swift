@@ -84,6 +84,7 @@ final class PolishProviderTests: XCTestCase {
     }
 
     func testExistingOfficialSettingsSurviveProviderRoundTrip() throws {
+        defaults.set("deepseek", forKey: "polishProvider")
         defaults.set("existing-official-model", forKey: "deepseekModel")
         defaults.set(true, forKey: "deepseekEnabled")
         defaults.set("heavy", forKey: "deepseekStrength")
@@ -126,10 +127,22 @@ final class PolishProviderTests: XCTestCase {
         XCTAssertEqual(DeepSeekConfiguration.provider(in: defaults), .bailian)
         DeepSeekConfiguration.migrateDefaultProvider(in: defaults, hasDeepSeekKey: { false })
         XCTAssertEqual(defaults.string(forKey: "polishProvider"), "bailian")
+        defaults.removeObject(forKey: "polishProvider")
+        DeepSeekConfiguration.migrateDefaultProvider(in: defaults, hasDeepSeekKey: { true })
+        XCTAssertEqual(DeepSeekConfiguration.provider(in: defaults), .bailian)
         // An explicit choice is never rewritten.
         defaults.set("custom", forKey: "polishProvider")
         DeepSeekConfiguration.migrateDefaultProvider(in: defaults, hasDeepSeekKey: { true })
         XCTAssertEqual(DeepSeekConfiguration.provider(in: defaults), .custom)
+    }
+
+    func testPolishEnabledDefaultUsesBailianKeyAndPreservesSavedChoice() {
+        XCTAssertFalse(DeepSeekConfiguration.enabled(in: defaults, hasBailianKey: { false }))
+        XCTAssertTrue(DeepSeekConfiguration.enabled(in: defaults, hasBailianKey: { true }))
+        defaults.set(false, forKey: "deepseekEnabled")
+        XCTAssertFalse(DeepSeekConfiguration.enabled(in: defaults, hasBailianKey: { true }))
+        defaults.set(true, forKey: "deepseekEnabled")
+        XCTAssertTrue(DeepSeekConfiguration.enabled(in: defaults, hasBailianKey: { false }))
     }
 
     func testProviderCredentialStoresStaySeparateInAppFile() throws {

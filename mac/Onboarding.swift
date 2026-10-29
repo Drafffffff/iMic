@@ -35,7 +35,7 @@ protocol SetupWizardHost: AnyObject {
     func setupUseKey(_ credential: ResolvedCredential)
     func setupRequestAccessibility()
     func setupRequestScreenCapture()
-    func setupFinished()
+    func setupFinished(polishEnabled: Bool)
 }
 
 enum SetupStep: Int, CaseIterable {
@@ -106,6 +106,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     private var keyState = KeyState.idle
     private var keyTask: URLSessionDataTask?
     private var checkedKey = ""
+    private let polishCheck = NSButton(checkboxWithTitle: "同时启用 AI 润色（推荐）", target: nil, action: nil)
 
     init(host: SetupWizardHost) {
         self.host = host
@@ -224,6 +225,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         advanceWork?.cancel()
         advanceWork = nil
         if next != .key { keyTask?.cancel(); keyTask = nil }
+        window?.setContentSize(NSSize(width: 480, height: next == .key ? 480 : 420))
         step = next
         current?.removeFromSuperview()
         let view = next == .permissions ? buildPermissions() : buildKey()
@@ -274,7 +276,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     }
 
     private func finish() {
-        host?.setupFinished()
+        host?.setupFinished(polishEnabled: polishCheck.state == .on)
         close()
     }
 
@@ -356,7 +358,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     private var keyIsActive: Bool { !enteredKey.isEmpty && snapshot.key?.key == enteredKey }
 
     private func buildKey() -> NSView {
-        let intro = Self.text("iMic 用阿里云百炼识别语音。没有 Key 的话，在百炼控制台创建一个，复制回来粘贴即可。")
+        let intro = Self.text("一个百炼 Key 同时用于语音识别和 AI 润色。")
         let get = NSButton(title: "获取百炼 API Key ↗", target: self, action: #selector(openConsole))
         get.bezelStyle = .rounded
         get.controlSize = .large
@@ -377,10 +379,15 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         keyMessage.font = .systemFont(ofSize: 12)
         keyMessage.maximumNumberOfLines = 2
 
-        let view = Self.column([Self.title("填入百炼 API Key"), intro, get, field, keyMessage], spacing: 14)
+        polishCheck.state = .on
+        polishCheck.setAccessibilityLabel("同时启用 AI 润色（推荐）")
+        let polishHint = Self.text("同一个百炼 Key，识别后自动整理口语、去重复。可随时在设置中关闭。", size: 11)
+        let polish = Self.column([polishCheck, polishHint], spacing: 6)
+        polishHint.widthAnchor.constraint(equalTo: polish.widthAnchor).isActive = true
+        let view = Self.column([Self.title("填入百炼 API Key"), intro, get, field, keyMessage, polish], spacing: 14)
         view.setCustomSpacing(22, after: view.arrangedSubviews[0])
         view.setCustomSpacing(22, after: get)
-        for item in [intro, field, keyMessage] as [NSView] {
+        for item in [intro, field, keyMessage, polish] as [NSView] {
             item.widthAnchor.constraint(equalTo: view.widthAnchor).isActive = true
         }
 
@@ -417,6 +424,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         keyMessage.stringValue = message
         keyMessage.textColor = color
         let ready = keyState == .valid && keyIsActive
+        polishCheck.isEnabled = ready
         footer(primary: ready ? "完成" : keyState == .checking ? "验证中…" : "验证并完成",
                enabled: ready || (!enteredKey.isEmpty && keyState != .checking), secondary: "上一步")
     }
