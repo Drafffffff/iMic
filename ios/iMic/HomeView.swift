@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 
 struct HomeView: View {
+    @EnvironmentObject private var onboarding: OnboardingCoordinator
     @EnvironmentObject private var link: LinkClient
     @EnvironmentObject private var session: SessionModel
     @Environment(\.scenePhase) private var scenePhase
@@ -161,6 +162,16 @@ struct HomeView: View {
                 .environmentObject(link)
                 .environmentObject(session)
         }
+        .fullScreenCover(isPresented: $onboarding.presented) {
+            OnboardingView().environmentObject(onboarding).environmentObject(link).environmentObject(session)
+        }
+        .overlay(alignment: .top) {
+            if !onboarding.presented && onboarding.unfinished && !link.phase.isReady {
+                Button("还没有连接 Mac · 继续设置") { onboarding.resume() }
+                    .font(.callout).foregroundStyle(Theme.orange)
+                    .padding(12).background(Theme.ink).padding(.top, 84)
+            }
+        }
         .onAppear {
             session.spectrumStore.configureAmbientMotion(enabled: true, reducedMotion: reduceMotion)
             session.spectrumStore.setVisible(scenePhase == .active && !showPairing && !showResult && !showDevices)
@@ -190,7 +201,7 @@ struct HomeView: View {
             }
             if case .needsCode = link.phase, !showDevices {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    if !showDevices { showPairing = true }
+                    if !showDevices && !onboarding.presented { showPairing = true }
                 }
             }
             #if DEBUG
@@ -305,7 +316,7 @@ struct HomeView: View {
             case .needsCode:
                 connectionAnnounced = false
                 Haptics.shared.play(.pairingRequired)
-                if !showDevices { showPairing = true }
+                if !showDevices && !onboarding.presented { showPairing = true }
             case .ready:
                 if !connectionAnnounced {
                     Haptics.shared.play(showPairing ? .pairingSuccess : .connected)

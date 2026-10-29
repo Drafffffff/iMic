@@ -39,7 +39,7 @@ final class SpeechPreview {
 
     var isRunning: Bool { accepting || finishing }
 
-    /// 只在没有按住录音时调用；首次授权绝不插入按住路径或阻塞百炼采集。
+    /// 仅由第一次真实按住发起；异步授权不阻塞百炼采集，后续录音使用授权结果。
     func prepareAuthorization() {
         guard !isRunning, !authorizationRequested,
               SFSpeechRecognizer.authorizationStatus() == .notDetermined else { return }

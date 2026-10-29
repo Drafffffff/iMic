@@ -67,6 +67,26 @@ final class LinkClient: ObservableObject {
         case bluetooth
     }
 
+    /// Set synchronously before HomeView appears; also gates foreground activation.
+    var startDeferred = false
+    @Published private(set) var localNetworkDenied = false
+    private let practiceLock = NSLock()
+    private var practiceDepth = 0
+
+    func setPracticeActive(_ active: Bool) {
+        practiceLock.lock()
+        practiceDepth = max(0, practiceDepth + (active ? 1 : -1))
+        practiceLock.unlock()
+    }
+
+    private func permitsSend(_ kind: String) -> Bool {
+        practiceLock.lock()
+        let blocked = practiceDepth > 0
+        practiceLock.unlock()
+        if blocked { IMicLog.write("iphone.practice", "blocked send kind=\(kind)") }
+        return !blocked
+    }
+
     @Published private(set) var transport: Transport?
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var macs: [DiscoveredMac] = []
@@ -234,10 +254,16 @@ final class LinkClient: ObservableObject {
             let mode = ProcessInfo.processInfo.arguments
                 .first { $0.hasPrefix("--ui-preview=") }?
                 .replacingOccurrences(of: "--ui-preview=", with: "") ?? "idle"
-            switch mode {
-            case "pairing": phase = .needsCode(name)
-            case "offline": phase = .searching
-            default: phase = .ready(name)
+            if mode.hasPrefix("onboarding-") {
+                macs = mode == "onboarding-pair" ? [mac] : []
+                phase = mode == "onboarding-pair" ? .needsCode(name) : .idle
+                localNetworkDenied = mode == "onboarding-link-denied"
+            } else {
+                switch mode {
+                case "pairing": phase = .needsCode(name)
+                case "offline": phase = .searching
+                default: phase = .ready(name)
+                }
             }
             hasPairedMac = phase.isReady
             gestureReady = phase.isReady
@@ -260,7 +286,7 @@ final class LinkClient: ObservableObject {
     // MARK: - Lifecycle
 
     func start() {
-        guard !isPreview, !running else { return }
+        guard !startDeferred, !isPreview, !running else { return }
         running = true
         queue.async {
             self.resetSelectionLocked()
@@ -278,7 +304,7 @@ final class LinkClient: ObservableObject {
     }
 
     func activate() {
-        guard !isPreview else { return }
+        guard !startDeferred, !isPreview else { return }
         if !running {
             start()
             return
@@ -521,6 +547,15 @@ final class LinkClient: ObservableObject {
         beginDiscoveryGraceLocked()
         browser.stateUpdateHandler = { [weak self] state in
             guard let self = self, self.browser === browser else { return }
+            switch state {
+            case .waiting(let error), .failed(let error):
+                if case .dns(let code) = error, code == -65570 {
+                    self.publish { self.localNetworkDenied = true }
+                }
+            case .ready:
+                self.publish { self.localNetworkDenied = false }
+            default: break
+            }
             switch state {
             case .failed(let error):
                 self.publish {
@@ -1311,11 +1346,13 @@ final class LinkClient: ObservableObject {
     // MARK: - Audio / control
 
     func beginSession(_ session: UInt16) {
+        guard permitsSend("audio.start") else { return }
         IMicLog.write("iphone.link", "send audio.start session=\(session)")
         enqueue(.audioStart(session: Int(session)))
     }
 
     func sendAudio(_ pcm: Data, session: UInt16, seq: UInt32) {
+        guard permitsSend("audio") else { return }
         let epoch = currentEpoch()
         queue.async {
             guard epoch == self.currentEpoch() else { return }
@@ -1336,6 +1373,7 @@ final class LinkClient: ObservableObject {
     }
 
     func endSession(_ session: UInt16, samples: Int, frames: Int, completion: ((Bool) -> Void)? = nil) {
+        guard permitsSend("audio.end") else { completion?(false); return }
         guard IMicLink.isValidAudioEnd(samples: samples, frames: frames) else {
             IMicLog.write("iphone.link", "invalid audio.end samples=\(samples) frames=\(frames)")
             DispatchQueue.main.async { completion?(false) }
@@ -1351,12 +1389,14 @@ final class LinkClient: ObservableObject {
     }
 
     func cancelSession(_ session: UInt16) {
+        guard permitsSend("audio.cancel") else { return }
         IMicLog.write("iphone.link", "send audio.cancel session=\(session)")
         enqueue(.audioCancel(session: Int(session)))
     }
 
     @discardableResult
     func sendInput(_ action: String) -> Bool {
+        guard permitsSend("input") else { return false }
         guard phase.isReady, gestureSupported, gestureReady, !clearPending,
               let revision = gestureRevision else { return false }
         if action == "clear" { clearPending = true }
@@ -1375,12 +1415,14 @@ final class LinkClient: ObservableObject {
     }
 
     func sendPreview(_ text: String) {
+        guard permitsSend("preview") else { return }
         enqueue(.preview(text))
     }
 
     @MainActor
     @discardableResult
     func updatePolishPreferences(_ preferences: LinkPolishPreferences) -> Bool {
+        guard permitsSend("polish.settings") else { return false }
         guard phase.isReady, polishPreferencesSupported, polishPreferences != nil,
               !polishPreferencesSaving else {
             polishPreferencesError = "请先连接支持润色偏好设置的 Mac，并等待当前保存完成。"
@@ -1478,6 +1520,7 @@ final class LinkClient: ObservableObject {
     }
 
     private func sendFrame(_ frame: LinkFrame, replacingPreview: Bool = false, completion: ((Bool) -> Void)? = nil) {
+        guard permitsSend("frame") else { completion?(false); return }
         let epoch = currentEpoch()
         let generation = connectionGeneration
         let writeID = completion.map { _ in UUID() }

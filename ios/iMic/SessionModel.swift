@@ -175,22 +175,8 @@ final class SessionModel: ObservableObject {
         // 模拟器联调用合成语音，不需要也不应该弹麦克风授权。
         if debugTTSText != nil || debugBufferText != nil { return }
         #endif
-        if AudioCapture.permissionGranted {
-            micDenied = false
-            if !wantsRecording { speechPreview.prepareAuthorization() }
-            return
-        }
-        guard audioAuthorizationTask == nil else { return }
-        audioAuthorizationTask = Task { [weak self] in
-            let granted = await AudioCapture.requestPermission()
-            guard let self else { return }
-            defer { self.audioAuthorizationTask = nil }
-            guard !Task.isCancelled, UIApplication.shared.applicationState == .active else { return }
-            micDenied = !granted
-            if granted {
-                if !wantsRecording { speechPreview.prepareAuthorization() }
-            }
-        }
+        // Foreground activation never requests permission. Only a real hold may do so.
+        if AudioCapture.permissionGranted { micDenied = false }
     }
 
     func deactivateAudio() {
@@ -349,6 +335,7 @@ final class SessionModel: ObservableObject {
 
         // 触觉确认必须发生在任何异步工作之前：按下即响应。
         Haptics.shared.play(.press)
+        speechPreview.prepareAuthorization()
         wantsRecording = true
         notice = nil
 
