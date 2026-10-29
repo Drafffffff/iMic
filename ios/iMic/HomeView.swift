@@ -194,13 +194,13 @@ struct HomeView: View {
                     if !showDevices { showPairing = true }
                 }
             }
+            #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--ui-preview=pairing") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showPairing = true }
             }
             if ProcessInfo.processInfo.arguments.contains("--show-result") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { showResult = true }
             }
-            #if DEBUG
             let arguments = ProcessInfo.processInfo.arguments
             if arguments.contains("--ui-preview=settings") {
                 showPairing = true

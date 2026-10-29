@@ -148,7 +148,11 @@ final class LinkClient: ObservableObject {
     private let autoPairCode: String?
 
     init() {
+        #if DEBUG
         isPreview = ProcessInfo.processInfo.arguments.contains { $0.hasPrefix("--ui-preview=") }
+        #else
+        isPreview = false
+        #endif
         if let stored = UserDefaults.standard.string(forKey: "imic.deviceID"),
            UUID(uuidString: stored) != nil {
             deviceID = stored
@@ -201,6 +205,7 @@ final class LinkClient: ObservableObject {
         currentMacID = preferredMacID
         currentMacName = selectedMacName
 
+        #if DEBUG
         if isPreview {
             let name = "MacBook Pro"
             let mac = DiscoveredMac(
@@ -236,6 +241,7 @@ final class LinkClient: ObservableObject {
             }
             #endif
         }
+        #endif
     }
 
     // MARK: - Lifecycle

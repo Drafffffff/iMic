@@ -32,15 +32,15 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 iOS 界面状态可直接预览，不需要真实链路：
 
 ```bash
-xcrun simctl launch booted com.drafffffff.imic --ui-preview=idle
-xcrun simctl launch booted com.drafffffff.imic --ui-preview=result
-xcrun simctl launch booted com.drafffffff.imic --ui-preview=pairing
+xcrun simctl launch booted art.malette.imic --ui-preview=idle
+xcrun simctl launch booted art.malette.imic --ui-preview=result
+xcrun simctl launch booted art.malette.imic --ui-preview=pairing
 ```
 
 模拟器没有可用输入设备时，`--debug-tts=` 会用系统语音合成走同一条分帧/加密/识别路径：
 
 ```bash
-xcrun simctl launch booted com.drafffffff.imic \
+xcrun simctl launch booted art.malette.imic \
   --debug-host=127.0.0.1 --debug-port=47832 \
   --debug-pair-code=123456 \
   --debug-tts=把今天讨论的交互细节整理成一页说明

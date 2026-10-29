@@ -120,4 +120,4 @@ codesign --force --sign "$IDENTITY" --identifier com.drafffffff.imic --entitleme
 codesign --verify --deep --strict "$APP"
 SIGNING_LABEL="$IDENTITY"
 if [ "$IDENTITY" = "-" ]; then SIGNING_LABEL=ad-hoc; fi
-echo "已构建：$APP（签名：$SIGNING_LABEL）"
+echo "已构建：${APP}（签名：${SIGNING_LABEL}）"

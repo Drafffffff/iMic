@@ -86,11 +86,11 @@ final class SessionModel: ObservableObject {
 
     init(link: LinkClient) {
         self.link = link
+        #if DEBUG
         isPreview = ProcessInfo.processInfo.arguments.contains { $0.hasPrefix("--ui-preview=") }
         previewMode = ProcessInfo.processInfo.arguments
             .first { $0.hasPrefix("--ui-preview=") }?
             .replacingOccurrences(of: "--ui-preview=", with: "")
-        #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
         if let index = arguments.firstIndex(where: { $0.hasPrefix("--debug-tts=") }) {
             var parts = [String(arguments[index].dropFirst("--debug-tts=".count))]
@@ -115,6 +115,8 @@ final class SessionModel: ObservableObject {
             debugBufferText = nil
         }
         #else
+        isPreview = false
+        previewMode = nil
         debugTTSText = nil
         debugBufferText = nil
         #endif

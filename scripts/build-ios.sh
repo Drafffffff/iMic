@@ -36,6 +36,6 @@ if [ "$RUN" = true ]; then
   xcrun simctl boot "$DEVICE" 2>/dev/null || true
   xcrun simctl bootstatus "$DEVICE" -b
   xcrun simctl install "$DEVICE" "$APP"
-  xcrun simctl launch "$DEVICE" com.drafffffff.imic
+  xcrun simctl launch "$DEVICE" art.malette.imic
   echo "Launched on simulator: $DEVICE"
 fi

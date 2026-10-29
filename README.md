@@ -22,6 +22,8 @@ Mac 公开包使用 Developer ID（KE CHENG, 5H39F98ND4）签名并已通过 App
 
 iOS Release 不是免签包，也不是 TestFlight/App Store 分发；不包含发布者的个人描述文件、设备清单或签名私钥。百炼和可选 DeepSeek Key 均由使用者自行配置。
 
+TestFlight 发布使用独立的签名归档流程，见 [TestFlight 发布说明](docs/TESTFLIGHT.md)。当前 GitHub 的未签名 IPA 不等于 TestFlight 构建；[测试版上手说明](docs/TESTFLIGHT-QUICKSTART.md)与[隐私说明](docs/PRIVACY.md)可供测试者阅读。
+
 ## 源码构建环境
 
 - Mac：macOS 13+，Command Line Tools（`xcode-select --install`），百炼 API Key；无需完整 Xcode 或 XcodeGen。
@@ -155,10 +157,10 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 
 # App 界面预览
 open build/mac.noindex/iMic.app --args --ui-preview=ready
-xcrun simctl launch booted com.drafffffff.imic --ui-preview=result
+xcrun simctl launch booted art.malette.imic --ui-preview=result
 
 # Debug 专用弹射预览：自动装载文字，3 秒后弹射；可分别检查 8 / 120 / 1000 字
-xcrun simctl launch --terminate-running-process booted com.drafffffff.imic \
+xcrun simctl launch --terminate-running-process booted art.malette.imic \
   --ui-preview=flight --debug-flight-count=120
 # 可加 --debug-flight-origin=0.15 / 0.85 检查按钮左右触点（0–1，Debug 专用）
 ```

@@ -9,12 +9,12 @@ python3 - "$DEVICE" <<'PY'
 import pathlib, subprocess, sys, time
 device = sys.argv[1]
 container = pathlib.Path(subprocess.check_output([
-    'xcrun', 'simctl', 'get_app_container', device, 'com.drafffffff.imic', 'data'
+    'xcrun', 'simctl', 'get_app_container', device, 'art.malette.imic', 'data'
 ], text=True).strip())
 log = container / 'Library/Logs/iMic/iMic.log'
 offset = log.stat().st_size if log.exists() else 0
 subprocess.run(['xcrun', 'simctl', 'launch', '--terminate-running-process', device,
-                'com.drafffffff.imic', '--ui-preview=idle', '--debug-standby-check'], check=True)
+                'art.malette.imic', '--ui-preview=idle', '--debug-standby-check'], check=True)
 deadline = time.monotonic() + 80
 while time.monotonic() < deadline:
     data = log.read_bytes() if log.exists() else b''

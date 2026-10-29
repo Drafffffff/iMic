@@ -45,7 +45,7 @@ swiftc -swift-version 5 -O -target arm64-apple-macosx13.0 \
 
 # 避免模拟器里的 iPhone 应用自动重连并抢走测试连接。
 if [ "${IMIC_KEEP_SIMULATOR:-0}" != 1 ]; then
-  xcrun simctl terminate booted com.drafffffff.imic 2>/dev/null || true
+  xcrun simctl terminate booted art.malette.imic 2>/dev/null || true
 fi
 
 echo "==> 3/4 启动无界面 Mac（端口 ${PORT}，配对码 ${CODE}）"
