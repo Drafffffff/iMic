@@ -141,7 +141,7 @@ final class SoundDesign {
 
 // MARK: - Cues
 
-/// 五个音色家族：同一类状态共用波形与滤波，用音高走向和节奏区分成功、取消、错误。
+/// 五个音色家族：同一类状态共用波形与音区，用音高走向和节奏区分成功、取消、错误。
 enum SoundFamily: String, CaseIterable {
     case transport = "TRANSPORT"
     case string = "STRING"
@@ -263,43 +263,55 @@ enum SoundCue: String, CaseIterable, Identifiable {
         }
     }
 
-    // 音名（Hz）。主体落在 A 大调五声音阶，手机扬声器在 600 Hz 以上才清晰。
+    // 音名（Hz）。低音区（A3–E4）一律叠加脉冲谐波或高八度，手机扬声器靠谐波还原音高。
     private enum Note {
-        static let d5 = 587.33, e5 = 659.26, f5 = 698.46, g5 = 783.99
-        static let bb4 = 466.16, b4 = 493.88
-        static let a5 = 880.0, b5 = 987.77, cs6 = 1108.73, d6 = 1174.66, e6 = 1318.51
-        static let fs6 = 1479.98, a6 = 1760.0, c7 = 2093.0, e7 = 2637.02
+        static let a3 = 220.0, bb3 = 233.08, b3 = 246.94, d4 = 293.66, e4 = 329.63, f4 = 349.23
+        static let g4 = 392.0, a4 = 440.0, b4 = 493.88, d5 = 587.33, e5 = 659.26, gs5 = 830.61
+        static let a5 = 880.0, b5 = 987.77, d6 = 1174.66, e6 = 1318.51
+        static let a6 = 1760.0, c7 = 2093.0, e7 = 2637.02
     }
 
     func patch(_ variant: Int) -> SoundPatch {
         typealias V = SoundVoice
         switch self {
-        // TRANSPORT：25% 脉冲波，低通 3.2 kHz。上行=提交，下滑=取消，同音两下=太短。
+        // TRANSPORT：低音区方波/脉冲 + 高八度。单下闷击=提交，下滑=取消，急促两下=太短。
         case .release:
-            return SoundPatch(cutoff: 3_200, glow: 0, peakDB: -13, voices: [
-                V(.pulse(0.25), at: 0, length: 0.026, from: Note.e6, decay: 0.030),
-                V(.pulse(0.25), at: 0.030, length: 0.046, from: Note.a6, decay: 0.028)
+            // 投进机器的一下“咚”：A3 方波带 6 ms 下坠起音，高八度 25% 脉冲补谐波。单音、无余辉。
+            return SoundPatch(cutoff: 2_400, glow: 0, peakDB: -12, voices: [
+                V(.pulse(0.5), at: 0, length: 0.070, from: Note.a3 * 1.5, to: Note.a3, glide: 0.006, decay: 0.032),
+                V(.pulse(0.25), at: 0, length: 0.070, from: Note.a4 * 1.5, to: Note.a4, glide: 0.006, gain: 0.5, decay: 0.028),
+                V(.noise, at: 0, length: 0.005, from: 0, gain: 0.3, decay: 0.002)
             ])
         case .cancelled:
-            return SoundPatch(cutoff: 3_200, glow: 0, peakDB: -14, voices: [
-                V(.pulse(0.25), at: 0, length: 0.095, from: Note.a5, to: Note.b4, glide: 0.035, decay: 0.060)
+            return SoundPatch(cutoff: 2_600, glow: 0, peakDB: -13, voices: [
+                V(.pulse(0.25), at: 0, length: 0.130, from: Note.a4, to: Note.e4 / 2, glide: 0.045, decay: 0.075),
+                V(.pulse(0.25), at: 0, length: 0.130, from: Note.a5, to: Note.e4, glide: 0.045, gain: 0.4, decay: 0.075)
             ])
         case .tooShort:
-            return SoundPatch(cutoff: 3_200, glow: 0, peakDB: -14, voices: [
-                V(.pulse(0.25), at: 0, length: 0.032, from: Note.d5, decay: 0.030),
-                V(.pulse(0.25), at: 0.060, length: 0.032, from: Note.d5, decay: 0.030)
+            return SoundPatch(cutoff: 2_600, glow: 0, peakDB: -13, voices: [
+                V(.pulse(0.25), at: 0, length: 0.022, from: Note.g4, decay: 0.020),
+                V(.pulse(0.25), at: 0, length: 0.022, from: Note.g4 * 2, gain: 0.4, decay: 0.020),
+                V(.pulse(0.25), at: 0.036, length: 0.022, from: Note.g4, decay: 0.020),
+                V(.pulse(0.25), at: 0.036, length: 0.022, from: Note.g4 * 2, gain: 0.4, decay: 0.020)
             ])
-        // STRING：12.5% 细脉冲 + 白噪声瞬态，像弦也像 CRT 偏转线圈的“嗒”。
+        // STRING：手势音。RETURN 是 8-bit 发射音：噪声起音 + 阶梯式上扫。
         case .bowArmed:
             return SoundPatch(cutoff: 6_000, glow: 0, peakDB: -22, voices: [
                 V(.triangle, at: 0, length: 0.014, from: Note.e7, decay: 0.006)
             ])
         case .snapReturn:
-            let start = [Note.fs6, Note.a6, Note.c7][min(2, max(0, variant))]
-            let peak = [-14.0, -12.5, -11.0][min(2, max(0, variant))]
-            return SoundPatch(cutoff: 4_200, glow: 0, peakDB: peak, voices: [
-                V(.pulse(0.125), at: 0, length: 0.085, from: start, to: start / 2, glide: 0.018, decay: 0.040),
-                V(.noise, at: 0, length: 0.010, from: 0, gain: 0.35, decay: 0.003)
+            let index = min(2, max(0, variant))
+            let top = [2_000.0, 2_400.0, 2_800.0][index]
+            let length = [0.150, 0.165, 0.180][index]
+            let peak = [-11.0, -9.5, -8.0][index]
+            // 8-bit 发射“啾—”：噪声起音后，音高从 A3 按 1/120 s 一级的阶梯急速上扫到顶（芯片扫频寄存器的节拍），
+            // 低八度 50% 方波叠出厚度。上扫=送出去，和 CANCEL 的下滑、CLEAR 的静电完全相反。
+            return SoundPatch(cutoff: 5_000, glow: 0, peakDB: peak, voices: [
+                V(.pulse(0.25), at: 0, length: length, from: Note.a3, to: top, glide: 0.022,
+                  decay: length * 0.6, step: 1.0 / 120),
+                V(.pulse(0.5), at: 0, length: length, from: Note.a3 / 2, to: top / 2, glide: 0.022,
+                  gain: 0.45, decay: length * 0.6, step: 1.0 / 120),
+                V(.noise, at: 0, length: 0.016, from: 0, gain: 0.30, decay: 0.006)
             ])
         case .delete:
             return SoundPatch(cutoff: 4_200, glow: 0, peakDB: -17, voices: [
@@ -307,64 +319,83 @@ enum SoundCue: String, CaseIterable, Identifiable {
                 V(.noise, at: 0, length: 0.006, from: 0, gain: 0.25, decay: 0.002)
             ])
         case .clear:
-            return SoundPatch(cutoff: 2_600, glow: 0, peakDB: -14, voices: [
-                V(.pulse(0.25), at: 0, length: 0.140, from: Note.e6, to: 330, glide: 0.050, decay: 0.070),
-                V(.noise, at: 0, length: 0.140, from: 0, gain: 0.5, decay: 0.050)
+            // CRT 关机：一团静电噪声 + 60 ms 低音“嗵”，不带明显音高走向。
+            return SoundPatch(cutoff: 3_000, glow: 0, peakDB: -13, voices: [
+                V(.noise, at: 0, length: 0.130, from: 0, gain: 0.7, decay: 0.045),
+                V(.pulse(0.5), at: 0, length: 0.060, from: Note.a3, to: 110, glide: 0.012, gain: 0.8, decay: 0.030)
             ])
-        // SIGNAL：50% 方波 + 荧光余辉（32/64 ms 两次衰减回声）。
+        // SIGNAL：明亮方波 + 荧光余辉，音区明显高于 TRANSPORT。
         case .result:
-            return SoundPatch(cutoff: 3_600, glow: 0.22, peakDB: -14, voices: [
-                V(.pulse(0.5), at: 0, length: 0.060, from: Note.e6, decay: 0.035)
+            // 文字到达：A5 → A6 八度“叮叮”，带余辉；与 SEND 的单下低音闷击在音区、节奏、余辉上全部相反。
+            return SoundPatch(cutoff: 4_200, glow: 0.25, peakDB: -14, voices: [
+                V(.pulse(0.5), at: 0, length: 0.030, from: Note.a5, decay: 0.025),
+                V(.pulse(0.5), at: 0.045, length: 0.060, from: Note.a6, decay: 0.040)
             ])
         case .polishReady:
-            return SoundPatch(cutoff: 3_600, glow: 0.22, peakDB: -12, voices: [
-                V(.pulse(0.5), at: 0, length: 0.035, from: Note.e6, decay: 0.030),
-                V(.pulse(0.5), at: 0.040, length: 0.080, from: Note.a6, decay: 0.045)
+            // 润色完成：E 大三和弦四级上行琶音（升级音），比 TEXT 多两步、更长。
+            return SoundPatch(cutoff: 4_200, glow: 0.22, peakDB: -12, voices: [
+                V(.pulse(0.5), at: 0, length: 0.028, from: Note.e5, decay: 0.030),
+                V(.pulse(0.5), at: 0.032, length: 0.028, from: Note.gs5, decay: 0.030),
+                V(.pulse(0.5), at: 0.064, length: 0.028, from: Note.b5, decay: 0.030),
+                V(.pulse(0.5), at: 0.096, length: 0.080, from: Note.e6, decay: 0.045)
             ])
         case .copy:
             return SoundPatch(cutoff: 6_000, glow: 0, peakDB: -18, voices: [
                 V(.triangle, at: 0, length: 0.015, from: Note.c7, decay: 0.008),
                 V(.triangle, at: 0.040, length: 0.015, from: Note.c7, decay: 0.008)
             ])
-        // LINK：三角波，最柔和；上行=连上，下行=断开，同音两下=等待配对，琶音=配对成功。
+        // LINK：三角波 + 12.5% 细脉冲补谐波，中低音区，柔和。
         case .connected:
-            return SoundPatch(cutoff: 5_000, glow: 0.18, peakDB: -13, voices: [
-                V(.triangle, at: 0, length: 0.040, from: Note.cs6, decay: 0.040),
-                V(.triangle, at: 0.045, length: 0.070, from: Note.e6, decay: 0.045)
+            return SoundPatch(cutoff: 4_000, glow: 0.18, peakDB: -13, voices: [
+                V(.triangle, at: 0, length: 0.050, from: Note.a4, decay: 0.045),
+                V(.pulse(0.125), at: 0, length: 0.050, from: Note.a4, gain: 0.35, decay: 0.045),
+                V(.triangle, at: 0.055, length: 0.080, from: Note.e5, decay: 0.050),
+                V(.pulse(0.125), at: 0.055, length: 0.080, from: Note.e5, gain: 0.35, decay: 0.050)
             ])
         case .connectionLost:
-            return SoundPatch(cutoff: 5_000, glow: 0.12, peakDB: -14, voices: [
-                V(.triangle, at: 0, length: 0.045, from: Note.e6, decay: 0.040),
-                V(.triangle, at: 0.050, length: 0.090, from: Note.a5, decay: 0.055)
+            return SoundPatch(cutoff: 4_000, glow: 0.12, peakDB: -14, voices: [
+                V(.triangle, at: 0, length: 0.050, from: Note.e5, decay: 0.045),
+                V(.pulse(0.125), at: 0, length: 0.050, from: Note.e5, gain: 0.35, decay: 0.045),
+                V(.triangle, at: 0.055, length: 0.100, from: Note.a4, decay: 0.060),
+                V(.pulse(0.125), at: 0.055, length: 0.100, from: Note.a4, gain: 0.35, decay: 0.060)
             ])
         case .pairingRequired:
+            // 光标闪烁：三下同音短点，和 SHORT 的急促两下在音色（三角 vs 脉冲）与次数上区分。
             return SoundPatch(cutoff: 5_000, glow: 0, peakDB: -15, voices: [
-                V(.triangle, at: 0, length: 0.035, from: Note.e6, decay: 0.030),
-                V(.triangle, at: 0.075, length: 0.035, from: Note.e6, decay: 0.030)
+                V(.triangle, at: 0, length: 0.020, from: Note.e6, decay: 0.015),
+                V(.triangle, at: 0.060, length: 0.020, from: Note.e6, decay: 0.015),
+                V(.triangle, at: 0.120, length: 0.020, from: Note.e6, decay: 0.015)
             ])
         case .pairingSuccess:
-            return SoundPatch(cutoff: 5_000, glow: 0.20, peakDB: -12, voices: [
-                V(.triangle, at: 0, length: 0.040, from: Note.a5, decay: 0.040),
-                V(.triangle, at: 0.045, length: 0.040, from: Note.cs6, decay: 0.040),
-                V(.triangle, at: 0.090, length: 0.090, from: Note.e6, decay: 0.060)
-            ])
-        // ALERT：方波低通 2.2 kHz，音域压低；小二度=否定。
+            // 握手：A5/E6 交替颤音后落在 A6，和 POLISH 的方波琶音在音色与节奏上区分。
+            let times = [0.0, 0.028, 0.056, 0.084]
+            let notes = [Note.a5, Note.e6, Note.a5, Note.e6]
+            return SoundPatch(cutoff: 5_000, glow: 0.20, peakDB: -13, voices:
+                zip(times, notes).map { V(.triangle, at: $0, length: 0.024, from: $1, decay: 0.030) }
+                + [V(.triangle, at: 0.115, length: 0.090, from: Note.a6, decay: 0.060)]
+            )
+        // ALERT：低音区方波 + 高八度，小二度=否定。
         case .pairingFailed:
-            return SoundPatch(cutoff: 2_200, glow: 0, peakDB: -13, voices: [
-                V(.pulse(0.5), at: 0, length: 0.050, from: Note.f5, decay: 0.040),
-                V(.pulse(0.5), at: 0.060, length: 0.060, from: Note.e5, decay: 0.045)
+            return SoundPatch(cutoff: 2_400, glow: 0, peakDB: -12, voices: [
+                V(.pulse(0.5), at: 0, length: 0.050, from: Note.f4, decay: 0.040),
+                V(.pulse(0.5), at: 0, length: 0.050, from: Note.f4 * 2, gain: 0.4, decay: 0.040),
+                V(.pulse(0.5), at: 0.060, length: 0.070, from: Note.e4, decay: 0.050),
+                V(.pulse(0.5), at: 0.060, length: 0.070, from: Note.e4 * 2, gain: 0.4, decay: 0.050)
             ])
         case .warning:
-            return SoundPatch(cutoff: 2_200, glow: 0, peakDB: -14, voices: [
-                V(.pulse(0.5), at: 0, length: 0.070, from: Note.d5, decay: 0.040)
-            ])
+            // 三下急促 D4“嘟嘟嘟”：与 SEND 的单下闷击、SHORT 的两下、ERROR 的不协和双音按次数区分。
+            return SoundPatch(cutoff: 2_400, glow: 0, peakDB: -13, voices: [0.0, 0.030, 0.060].flatMap { at in [
+                V(.pulse(0.5), at: at, length: 0.020, from: Note.d4, decay: 0.018),
+                V(.pulse(0.5), at: at, length: 0.020, from: Note.d5, gain: 0.5, decay: 0.018)
+            ] })
         case .error:
-            return SoundPatch(cutoff: 2_000, glow: 0, peakDB: -11, voices: [
-                V(.pulse(0.5), at: 0, length: 0.060, from: Note.bb4, decay: 0.050),
-                V(.pulse(0.5), at: 0, length: 0.060, from: Note.b4, decay: 0.050),
-                V(.pulse(0.5), at: 0.080, length: 0.070, from: Note.bb4, decay: 0.050),
-                V(.pulse(0.5), at: 0.080, length: 0.070, from: Note.b4, decay: 0.050)
-            ])
+            let hits: [(Double, Double)] = [(0, 0.070), (0.090, 0.090)]
+            return SoundPatch(cutoff: 2_200, glow: 0, peakDB: -11, voices: hits.flatMap { at, length in
+                [Note.bb3, Note.b3].flatMap { pitch in [
+                    V(.pulse(0.5), at: at, length: length, from: pitch, decay: 0.055),
+                    V(.pulse(0.5), at: at, length: length, from: pitch * 2, gain: 0.4, decay: 0.055)
+                ] }
+            })
         }
     }
 }
@@ -382,9 +413,12 @@ struct SoundVoice {
     var gain: Double
     var attack: Double
     var decay: Double
+    /// >0 时滑音按此间隔阶梯量化（芯片扫频的 8-bit 质感）。
+    var step: Double
 
     init(_ wave: Wave, at: Double, length: Double, from: Double, to: Double? = nil,
-         glide: Double = 0.02, gain: Double = 1, attack: Double = 0.0015, decay: Double) {
+         glide: Double = 0.02, gain: Double = 1, attack: Double = 0.0015, decay: Double, step: Double = 0) {
+        self.step = step
         self.wave = wave
         self.at = at
         self.length = length
@@ -410,7 +444,7 @@ struct SoundPatch {
 
 enum SoundSynth {
     /// 改动任何参数时递增，避免沿用旧缓存文件名。
-    static let renderVersion = 2
+    static let renderVersion = 7
     static let sampleRate = 44_100.0
     static let glowDelay = 0.032
     static let glowTail = 0.070
@@ -418,7 +452,7 @@ enum SoundSynth {
     static let tail = 0.008
 
     /// 合成单声道浮点样本：振荡器（PolyBLEP 脉冲 / 三角 / 噪声）→ 线性起音 + 指数衰减 + 4 ms 收尾
-    /// → 荧光余辉 → 两级一阶低通 → 150 Hz 高通去直流 → 峰值归一化到 peakDB。
+    /// → 荧光余辉 → 两级一阶低通 → 90 Hz 高通去直流 → 峰值归一化到 peakDB。
     static func render(_ patch: SoundPatch) -> [Float] {
         let count = Int((patch.duration * sampleRate).rounded(.up))
         var buffer = [Double](repeating: 0, count: count)
@@ -431,7 +465,8 @@ enum SoundSynth {
                 let t = Double(frame) / sampleRate
                 let frequency: Double
                 if let target = voice.to {
-                    frequency = target + (voice.from - target) * exp(-t / voice.glide)
+                    let clock = voice.step > 0 ? (t / voice.step).rounded(.down) * voice.step : t
+                    frequency = target + (voice.from - target) * exp(-clock / voice.glide)
                 } else {
                     frequency = voice.from
                 }
@@ -465,7 +500,7 @@ enum SoundSynth {
             }
         }
         let lowA = 1 - exp(-2 * Double.pi * patch.cutoff / sampleRate)
-        let highRC = 1 / (2 * Double.pi * 150)
+        let highRC = 1 / (2 * Double.pi * 90)
         let highA = highRC / (highRC + 1 / sampleRate)
         var low1 = 0.0, low2 = 0.0, highY = 0.0, highX = 0.0
         var peak = 0.0
