@@ -42,8 +42,10 @@
 | `./scripts/build-mac.sh` | 通过 | 30.04 | `11.log` |
 | `./scripts/build-ios.sh` | 通过 | 9.81 | `12.log` |
 | `xcodebuild test …` | 待执行：用户暂停前台测试 | — | — |
-| `./scripts/testflight.sh archive-unsigned` | 初次预检通过；最终版归档复验待执行 | — | `14.log`（预检） |
-| `./scripts/testflight.sh check` | 待最终版归档复验 | — | — |
+| `./scripts/testflight.sh archive-unsigned` | 通过 | 27.27 | `14-final.log` |
+| `./scripts/testflight.sh check` | 通过 | 0.09 | `15-final.log` |
+
+Release 检查使用 `IMIC_TESTFLIGHT_DIR=build/quick-switch-final-testflight.noindex`，归档源码对应 `e5e2071`。输出明确为 `signed=false`、`privacyManifest=passed`、`releaseDebugEntrypoints=absent`、`platform=IOS`；没有导出签名 IPA、上传或安装。因用户暂停前台，先执行了不占前台的 Release 检查；UI 恢复后再补齐 UI 报告。
 
 额外检查：`./scripts/test-ios-quick-mac-switch.sh` 通过。直接编译正式协调器、返回计时器和菜单模型；仅替换连接／会话／触感的边界对象，不模拟协议或放宽认证。覆盖：
 
@@ -55,7 +57,7 @@
 
 按照最新的前台协调要求，UI 测试暂未启动，也未把任务书中记载的失败冒充为已在本地复现。
 
-干净基线来自 `git archive a8363e9bb898077046d05d92592aeb64a90104eb`，保存于 `build/quick-switch-clean-base/`；其 iOS build 与 build-for-testing 已通过。前台恢复后先执行该基线 UI 套件，复现已知失败，再运行本分支全量 UI 套件。
+干净基线来自 `git archive a8363e9bb898077046d05d92592aeb64a90104eb`，保存于 `build/quick-switch-clean-base/`；其 iOS build 与 build-for-testing 已通过。前台恢复后先执行该基线 UI 套件，复现已知失败，再运行本分支全量 UI 套件。尚未创建 PR，避免提交缺少完整 UI 报告的审核请求。
 
 新增 `QuickMacSwitchUITests` 共七项：两次点击留在主页、管理设备、新 Mac 嵌入配对、设备页自动返回、录音中取消切换、离线目标、录音中点击当前目标无操作。每项都保留截图附件。既有 `DisplayUITests` 仅调整“管理设备”导航路径；不修改已知录音失败的断言。
 
