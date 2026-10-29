@@ -2,7 +2,7 @@ import SwiftUI
 
 struct DisplayPreferencesSection: View {
     @AppStorage(PhosphorEffect.preferenceKey) private var material=PhosphorEffect.crt.rawValue
-    @AppStorage(PhosphorAttachStyle.preferenceKey) private var attach=PhosphorAttachStyle.charge.rawValue
+    @AppStorage(PhosphorAttachStyle.preferenceKey) private var attach=PhosphorAttachStyle.flow.rawValue
 
     var body:some View{
         let selected=material

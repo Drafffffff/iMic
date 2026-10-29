@@ -7,7 +7,7 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(PhosphorEffect.preferenceKey) private var displayMaterial = PhosphorEffect.crt.rawValue
-    @AppStorage(PhosphorAttachStyle.preferenceKey) private var attachStyle = PhosphorAttachStyle.charge.rawValue
+    @AppStorage(PhosphorAttachStyle.preferenceKey) private var attachStyle = PhosphorAttachStyle.flow.rawValue
 
     @State private var pressing = false
     /// The current load has been shot or cleared: nothing is left to fire until the next take.
@@ -135,7 +135,7 @@ struct HomeView: View {
                                              pressed: pressing && session.phase == .listening,
                                              processing: stringProcessing || debugStringStatus == 1,
                                              ready: stringReady || debugStringStatus == 2,
-                                             attach: PhosphorAttachStyle(rawValue: attachStyle) ?? .charge)
+                                             attach: PhosphorAttachStyle(rawValue: attachStyle) ?? .flow)
                             if !receiver.unifiedAvailable {
                             ClearDropZone(motion: stringMotion, distance: max(1, proxy[torus].midY - 84),
                                           enabled: canUseString && session.pullDeleteEnabled)

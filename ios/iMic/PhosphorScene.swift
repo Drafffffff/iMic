@@ -13,7 +13,7 @@ final class PhosphorScene {
     var effect: PhosphorEffect = .crt
     var reduceTransparency = false
     var clearProgress:Float=0
-    var attachStyle:PhosphorAttachStyle = .charge
+    var attachStyle:PhosphorAttachStyle = .flow
     private var press=PhosphorPressSpring()
 
     func setPressed(_ pressed:Bool,now:Double){press.set(pressed:pressed,at:now)}

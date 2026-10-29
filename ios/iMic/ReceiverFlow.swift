@@ -86,7 +86,7 @@ struct ReceiverFlowView: UIViewRepresentable {
     var pressed = false
     var processing = false
     var ready = false
-    var attach: PhosphorAttachStyle = .charge
+    var attach: PhosphorAttachStyle = .flow
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
@@ -240,7 +240,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
                    artwork: PhosphorArtworkState? = nil, dimmed: Bool = false,
                    effect: PhosphorEffect = .crt, reduceTransparency: Bool = false,
                    clearEnabled:Bool=false, pressed:Bool=false,
-                   processing:Bool=false, ready:Bool=false, attach:PhosphorAttachStyle = .charge) {
+                   processing:Bool=false, ready:Bool=false, attach:PhosphorAttachStyle = .flow) {
         if scene.attachStyle != attach { scene.attachStyle = attach; spectrum.wake() }
         let changed = self.store !== store || self.spectrum !== spectrum || self.torus != torus
             || self.source != source || self.reduced != reduced
