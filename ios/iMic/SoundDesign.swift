@@ -271,7 +271,7 @@ enum SoundCue: String, CaseIterable, Identifiable {
     }
 
     /// 8-bit 踢鼓：硬起音的 25% 脉冲 + 4-bit 三角，同步从 ~190 Hz 半音阶梯下坠到 ~50 Hz，
-    /// 起音叠 3 ms 高频噪声“咔嗒”。只用于提交、发射、清空这类动作音。
+    /// 起音叠 3 ms 高频噪声“咔嗒”。只用于提交、发射这类动作音。
     /// 手机外放还原不了 50 Hz，脉冲波的 2/3 次谐波负责让“咚”在外放上听得见；耳机上有完整低频。
     private static func kick(at: Double = 0, from: Double = 190, to: Double = 50, length: Double = 0.060,
                              gain: Double = 1) -> [SoundVoice] {
@@ -307,25 +307,30 @@ enum SoundCue: String, CaseIterable, Identifiable {
                 V(.pulse(0.25), at: at, length: 0.022, from: Note.g4, decay: 0.020),
                 V(.pulse(0.25), at: at, length: 0.022, from: Note.g4 * 2, gain: 0.4, decay: 0.020)
             ] })
-        // STRING：弦手势。RETURN 是踢鼓 + 半音阶梯上扫的发射音；CLEAR 是降频噪声 + 踢鼓。
+        // STRING：弦手势。RETURN 是踢鼓 + 噪声爆破 + 暗呼啸的发射音；CLEAR 是 CRT 关机的亮“滋”。
         case .bowArmed:
             return SoundPatch(cutoff: 6_000, glow: 0, peakDB: -22, crushRate: 22_050, bits: 8, voices: [
                 V(.triangle, at: 0, length: 0.016, from: Note.e7, decay: 0.008)
             ])
         case .snapReturn:
             let index = min(2, max(0, variant))
-            let top = [2_000.0, 2_400.0, 2_800.0][index]
-            let length = [0.150, 0.165, 0.180][index]
-            let peak = [-10.0, -8.5, -7.0][index]
-            // 发射：起音一记踢鼓把“推力”打出来，同时 25% 脉冲从 A3 按 1/120 s 半音阶梯急速上扫到顶，
-            // 低八度 50% 方波叠厚度，起音噪声做“膛口”。上扫=送出去，与 CANCEL 的下行相反。
-            return SoundPatch(cutoff: 4_800, glow: 0, peakDB: peak, crushRate: 16_000, bits: 8, voices:
-                Self.kick(length: 0.070, gain: 0.9) + [
-                    V(.pulse(0.25), at: 0, length: length, from: Note.a3, to: top, glide: 0.022,
-                      decay: length * 0.6, step: 1.0 / 120),
-                    V(.pulse(0.5), at: 0, length: length, from: Note.a3 / 2, to: top / 2, glide: 0.022,
-                      gain: 0.4, decay: length * 0.6, step: 1.0 / 120),
-                    V(.noise, at: 0, length: 0.016, from: 9_000, gain: 0.3, decay: 0.006)
+            let kickFrom = [170.0, 190.0, 210.0][index]
+            let kickLength = [0.055, 0.065, 0.075][index]
+            let whoosh = [0.090, 0.130, 0.170][index]
+            let rush = [8_000.0, 10_000.0, 12_000.0][index]
+            let speed = [0.028, 0.024, 0.020][index]
+            let peak = [-8.5, -7.0, -5.5][index]
+            // 发射：厚、短、狠，没有清亮的音头和上扬的旋律。
+            // 力量：硬起音踢鼓 + 30 ms 低时钟噪声爆破（推力）；速度：噪声时钟从 1.5 kHz 急速上冲到 8–12 kHz 的“呼—”，
+            // 下面一层 50% 方波从 A3 半音阶梯坠到 ~70 Hz 加重量；整段低通从 5 kHz 收到 700 Hz、音量同步衰减，像物体飞远，不留余音。
+            // 力度越大：踢鼓越高越长，呼啸越快越长越亮。
+            return SoundPatch(cutoff: 5_000, cutoffEnd: 700, glow: 0, peakDB: peak, crushRate: 16_000, bits: 7, voices:
+                Self.kick(from: kickFrom, to: 45, length: kickLength) + [
+                    V(.noise, at: 0, length: 0.030, from: 4_000, gain: 0.8, decay: 0.010),
+                    V(.noise, at: 0.010, length: whoosh, from: 1_500, to: rush, glide: speed,
+                      gain: 0.6, attack: 0.012, decay: whoosh * 0.45, step: 1.0 / 240),
+                    V(.pulse(0.5), at: 0, length: whoosh, from: Note.a3, to: 70, glide: speed * 1.5,
+                      gain: 0.45, decay: whoosh * 0.4, step: 1.0 / 120)
                 ])
         case .delete:
             return SoundPatch(cutoff: 4_200, glow: 0, peakDB: -17, crushRate: 16_000, bits: 8, voices: [
@@ -333,12 +338,14 @@ enum SoundCue: String, CaseIterable, Identifiable {
                 V(.noise, at: 0, length: 0.006, from: 8_000, gain: 0.3, decay: 0.002)
             ])
         case .clear:
-            // CRT 关机：噪声通道时钟从 12 kHz 降到 1.5 kHz（“嘶—噗”），叠一记偏重的踢鼓。无音高走向。
-            return SoundPatch(cutoff: 3_000, glow: 0, peakDB: -11, crushRate: 11_025, bits: 7, voices:
-                Self.kick(from: 160, to: 45, length: 0.075, gain: 0.8) + [
-                    V(.noise, at: 0, length: 0.130, from: 12_000, to: 1_500, glide: 0.040,
-                      gain: 0.7, decay: 0.050, step: 1.0 / 120)
-                ])
+            // CRT 关机：12.5% 细脉冲从 E6 半音阶梯急坠到 A3 的“滋—”，叠一层高时钟静电；不带踢鼓，
+            // 与 RETURN 的低频冲击 + 暗呼啸区分（亮、轻、塌缩感）。
+            return SoundPatch(cutoff: 4_500, glow: 0, peakDB: -12, crushRate: 11_025, bits: 7, voices: [
+                V(.pulse(0.125), at: 0, length: 0.090, from: Note.e6, to: Note.a3, glide: 0.018,
+                  gain: 0.7, decay: 0.045, step: 1.0 / 240),
+                V(.noise, at: 0, length: 0.100, from: 12_000, to: 3_000, glide: 0.040,
+                  gain: 0.5, decay: 0.035, step: 1.0 / 120)
+            ])
         // SIGNAL：信息提示，不加低音冲击；高音区方波 + 低保真回声。
         case .result:
             // 识别完成：A5 → A6 八度“叮叮”，50% 空心方波，带两次颗粒回声。和 SEND 的踢鼓在音区、节奏、尾巴上全部相反。
@@ -450,6 +457,8 @@ struct SoundVoice {
 
 struct SoundPatch {
     var cutoff: Double
+    /// 非 nil 时低通截止频率随时间从 cutoff 指数收到此值（“远去”）。
+    var cutoffEnd: Double? = nil
     var glow: Double
     var peakDB: Double
     /// lo-fi：采样保持降到此采样率，再量化到 `bits` 位。
@@ -464,7 +473,7 @@ struct SoundPatch {
 
 enum SoundSynth {
     /// 改动任何参数时递增，避免沿用旧缓存文件名。
-    static let renderVersion = 9
+    static let renderVersion = 11
     static let sampleRate = 44_100.0
     static let glowDelay = 0.036
     static let glowTail = 0.080
@@ -547,12 +556,17 @@ enum SoundSynth {
                 buffer[index] = held
             }
         }
-        let lowA = 1 - exp(-2 * Double.pi * patch.cutoff / sampleRate)
+        var lowA = 1 - exp(-2 * Double.pi * patch.cutoff / sampleRate)
+        let sweep = patch.duration * 0.3
         let highRC = 1 / (2 * Double.pi * 30)
         let highA = highRC / (highRC + 1 / sampleRate)
         var low1 = 0.0, low2 = 0.0, highY = 0.0, highX = 0.0
         var peak = 0.0
         for index in 0..<count {
+            if let end = patch.cutoffEnd {
+                let cutoff = end + (patch.cutoff - end) * exp(-Double(index) / sampleRate / sweep)
+                lowA = 1 - exp(-2 * Double.pi * cutoff / sampleRate)
+            }
             low1 += lowA * (buffer[index] - low1)
             low2 += lowA * (low1 - low2)
             highY = highA * (highY + low2 - highX)
