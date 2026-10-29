@@ -14,7 +14,7 @@
 |---|---|
 | 应用名称 | iMic |
 | 平台及最低系统 | iPhone，iOS 17.0+ |
-| 版本及构建号 | 1.4.3，Build 2 |
+| 版本及构建号 | 1.4.4，Build 3 |
 | Bundle ID | `art.malette.imic` |
 | 开发团队 | KE CHENG |
 | Team ID | `5H39F98ND4` |
@@ -77,10 +77,10 @@ SHA-1 在这里仅用于识别证书。包内 `Certificates/AppleDistribution-KE
 | 路径 | 用途 |
 |---|---|
 | `README.md` | 本核心说明，请从此处开始 |
-| `iOS/iMic.xcarchive/` | iPhone 1.4.3 Build 2 的未签名 Release 归档，含调试符号 |
+| `iOS/iMic.xcarchive/` | iPhone 1.4.4 Build 3 的未签名 Release 归档，含调试符号 |
 | `iOS/ArchiveSource.zip` | 与最终归档对应的隔离构建源码快照 |
 | `iOS/ExportOptions.plist` | App Store Connect 导出配置，支持后续外部测试 |
-| `Mac/iMic-1.4.3-macOS-universal.dmg` | 配套 Mac 客户端，Developer ID 签名，已验证公证票据 |
+| `Mac/iMic-1.4.4-macOS-universal.dmg` | 配套 Mac 客户端，Developer ID 签名，已验证公证票据 |
 | `Certificates/AppleDistribution-KECHENG.cer` | 用于核对签名身份的公开证书 |
 | `Source/` | 当前项目源码、测试、许可证与发布工具，含本次尚未提交 Git 的准备改动 |
 | `Docs/TESTFLIGHT.md` | Beta 描述、What to Test、英文 Review Notes 和完整发布步骤 |

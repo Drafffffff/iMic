@@ -14,8 +14,8 @@
 
 从 [GitHub Releases](https://github.com/Drafffffff/iMic/releases/latest) 下载：
 
-- `iMic-1.4.3-macOS-universal.dmg`：macOS 13+，同时支持 Apple Silicon 与 Intel。打开镜像，把 `iMic.app` 拖入「Applications」，再从应用程序中启动。
-- `iMic-1.4.3-iOS-unsigned.ipa`：iOS 17+ 的 iPhone 真机包，**未签名，不能直接点击安装**。需通过 AltStore、SideStore、Sideloadly 等工具，用自己的 Apple ID/开发团队重新签名；也可以按下方步骤从源码安装。个人团队通常需要每 7 天续签。
+- `iMic-1.4.4-macOS-universal.dmg`：macOS 13+，同时支持 Apple Silicon 与 Intel。打开镜像，把 `iMic.app` 拖入「Applications」，再从应用程序中启动。
+- `iMic-1.4.4-iOS-unsigned.ipa`：iOS 17+ 的 iPhone 真机包，**未签名，不能直接点击安装**。需通过 AltStore、SideStore、Sideloadly 等工具，用自己的 Apple ID/开发团队重新签名；也可以按下方步骤从源码安装。个人团队通常需要每 7 天续签。
 - `SHA256SUMS.txt`：下载两个安装包和此文件到同一目录后，运行 `shasum -a 256 -c SHA256SUMS.txt` 校验完整性。
 
 Mac 公开包使用 Developer ID（KE CHENG, 5H39F98ND4）签名并已通过 Apple 公证，下载后可直接打开。首次启动会打开两步设置窗口（权限 → 百炼 Key）；本地网络与蓝牙授权提示可能在后续使用时出现。

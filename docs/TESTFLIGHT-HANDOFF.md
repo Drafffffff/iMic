@@ -4,7 +4,7 @@
 
 ## 当前结果
 
-已准备 iPhone 端 **1.4.3（Build 2）**、隐私清单、无 alpha 图标、独立的归档/导出/上传脚本，以及中英文测试和审核说明。
+已准备 iPhone 端 **1.4.4（Build 3）**、隐私清单、无 alpha 图标、独立的归档/导出/上传脚本，以及中英文测试和审核说明。
 
 旧 Bundle ID 的历史归档位于 `build/testflight.noindex/1.4.3-2/iMic.xcarchive`，不能用于新 App 分发。新 ID 的未签名归档已生成并通过包内容校验，位于独立目录 `build/testflight-bundleid.noindex/iMic.xcarchive`。**这是未签名的 Release 归档，目前没有可安装的 TestFlight IPA，没有上传成功，也没有创建成功的 App Store Connect 应用记录。**
 
