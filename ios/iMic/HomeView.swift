@@ -156,7 +156,6 @@ struct HomeView: View {
         }
         }
         .statusBarHidden(false)
-        .simultaneousGesture(TapGesture().onEnded { session.spectrumStore.wake() })
         .sheet(isPresented: $showPairing) {
             PairingSheet()
                 .environmentObject(link)

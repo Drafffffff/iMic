@@ -36,8 +36,8 @@ private struct LiveApplicationView: View {
             .environmentObject(session)
             .preferredColorScheme(.dark)
             .background {
-                IdleScreenObserver(busy: session.phase == .listening || session.phase == .transcribing || session.isUploading)
-                    .frame(width: 0, height: 0)
+                IdleScreenObserver(busy: session.phase == .listening || session.phase == .transcribing || session.isUploading,
+                                   onActivity: { session.spectrumStore.wake() })
             }
     }
 }

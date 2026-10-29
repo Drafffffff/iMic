@@ -4,6 +4,7 @@ import UIKit
 /// Lives at the application root; the window recognizer also observes sheets/navigation.
 struct IdleScreenObserver: UIViewRepresentable {
     var busy: Bool
+    var onActivity: () -> Void
     @Environment(\.scenePhase) private var scenePhase
 
     func makeUIView(context: Context) -> IdleScreenProbe { IdleScreenProbe() }
@@ -11,6 +12,7 @@ struct IdleScreenObserver: UIViewRepresentable {
     func updateUIView(_ view: IdleScreenProbe, context: Context) {
         view.busy = busy
         view.active = scenePhase == .active
+        view.onActivity = onActivity
         view.configure()
     }
 
@@ -20,7 +22,9 @@ struct IdleScreenObserver: UIViewRepresentable {
 final class IdleScreenProbe: UIView {
     var busy = false
     var active = false
+    var onActivity: (() -> Void)?
     private weak var observedWindow: UIWindow?
+    private var shade: CALayer?
     private var dimming: IdleScreenDimming?
     private var observer: IdleActivityRecognizer?
     private var tokens: [NSObjectProtocol] = []
@@ -38,20 +42,49 @@ final class IdleScreenProbe: UIView {
         configure()
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        updateShadeFrame()
+    }
+
+    private func updateShadeFrame() {
+        guard let shade, let window = observedWindow, shade.frame != window.bounds else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        shade.frame = window.bounds
+        CATransaction.commit()
+    }
+
     func configure() {
         if observedWindow !== window {
             detach()
-            if let window, let screen = window.windowScene?.screen {
+            if let window {
                 observedWindow = window
+                // A drawing layer cannot join hit testing or change UIKit's touch routing.
+                let shade = CALayer()
+                shade.frame = window.bounds
+                shade.backgroundColor = UIColor.black.cgColor
+                shade.opacity = 0
+                shade.zPosition = 1_000
+                window.layer.addSublayer(shade)
+                self.shade = shade
                 let controller = IdleScreenDimming(
-                    read: { Double(screen.brightness) },
-                    write: { screen.brightness = CGFloat($0) },
-                    onState: {
-                        IMicLog.write("iphone.power", String(format: "screen idle %@ brightness=%.3f", $0.rawValue, Double(screen.brightness)))
+                    write: { [weak shade] opacity in
+                        guard let shade else { return }
+                        CATransaction.begin()
+                        CATransaction.setDisableActions(true)
+                        shade.opacity = Float(opacity)
+                        CATransaction.commit()
+                    },
+                    onState: { [weak shade] state in
+                        IMicLog.write("iphone.power", String(format: "screen idle %@ shade=%.3f", state.rawValue, Double(shade?.opacity ?? 0)))
                     })
                 dimming = controller
                 let activity = IdleActivityRecognizer()
-                activity.onTouching = { [weak controller] in controller?.setTouching($0) }
+                activity.onTouching = { [weak controller, weak self] touching in
+                    controller?.setTouching(touching)
+                    if touching { self?.onActivity?() }
+                }
                 observer = activity
                 window.addGestureRecognizer(activity)
                 let center = NotificationCenter.default
@@ -59,23 +92,25 @@ final class IdleScreenProbe: UIView {
                     object: nil, queue: .main) { [weak controller] _ in
                         MainActor.assumeIsolated { controller?.setActive(false) }
                     })
-                tokens.append(center.addObserver(forName: UIScreen.brightnessDidChangeNotification,
-                    object: screen, queue: .main) { [weak controller] _ in
-                        MainActor.assumeIsolated { controller?.brightnessChanged() }
-                    })
                 for name in [UITextField.textDidChangeNotification, UITextView.textDidChangeNotification] {
-                    tokens.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak controller] _ in
-                        MainActor.assumeIsolated { controller?.noteActivity() }
+                    tokens.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak controller, weak self] _ in
+                        MainActor.assumeIsolated {
+                            controller?.noteActivity()
+                            self?.onActivity?()
+                        }
                     })
                 }
             }
         }
+        updateShadeFrame()
         dimming?.setBusy(busy)
         dimming?.setActive(active && UIApplication.shared.applicationState == .active)
     }
 
     func detach() {
         dimming?.setActive(false)
+        shade?.removeFromSuperlayer()
+        shade = nil
         if let observer { observedWindow?.removeGestureRecognizer(observer) }
         for token in tokens { NotificationCenter.default.removeObserver(token) }
         tokens.removeAll()
