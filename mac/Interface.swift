@@ -115,6 +115,7 @@ extension AppDelegate {
     func button(_ title: String, _ action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
         button.bezelStyle = .rounded
+        button.setAccessibilityLabel(title)
         return button
     }
 
@@ -123,6 +124,7 @@ extension AppDelegate {
         button.isBordered = false
         button.contentTintColor = nil
         button.font = .systemFont(ofSize: 12, weight: .medium)
+        button.setAccessibilityLabel(title)
         return button
     }
 
@@ -197,12 +199,6 @@ extension AppDelegate {
         return field
     }
 
-    private func menuItem(_ title: String, _ action: Selector, _ key: String = "") -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
-        item.target = self
-        return item
-    }
-
     // MARK: - Main window
 
     func buildUI() {
@@ -215,21 +211,7 @@ extension AppDelegate {
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         statusItem.button?.setAccessibilityLabel("iMic")
 
-        let menu = NSMenu()
-        menu.addItem(menuItem("打开 iMic", #selector(show)))
-        menu.addItem(menuItem("设置向导…", #selector(showSetupAction)))
-        menu.addItem(menuItem("复制配对码", #selector(copyPairCode)))
-        menu.addItem(menuItem("重新生成配对码", #selector(rotatePairCode)))
-        menu.addItem(.separator())
-        menu.addItem(menuItem("设置…", #selector(showSettings), ","))
-        menu.addItem(.separator())
-        menu.addItem(menuItem("退出 iMic", #selector(quit), "q"))
-        statusMenu = menu
-        let appMenu = NSMenu()
-        let root = NSMenuItem()
-        root.submenu = menu
-        appMenu.addItem(root)
-        NSApp.mainMenu = appMenu
+        buildStatusMenu()
 
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 580),
@@ -308,6 +290,27 @@ extension AppDelegate {
             pairPanel.addArrangedSubview(view)
         }
 
+        let pairActions = row([linkButton("复制配对码", #selector(copyPairCode)),
+            linkButton("重新生成", #selector(rotatePairCode))], spacing: 16)
+        pairCollapseButton = linkButton("收起", #selector(hidePairCode))
+        pairActions.addArrangedSubview(pairCollapseButton)
+        pairPanel.addArrangedSubview(pairActions)
+        firstPairSteps.stringValue = "01   在 iPhone 上安装并打开 iMic\n\n02   让 iPhone 与 Mac 连接同一 Wi-Fi\n\n03   点 iPhone 顶部的电脑名称，输入配对码"
+        firstPairSteps.font = .systemFont(ofSize: 13)
+        firstPairSteps.textColor = .imicMuted
+        firstPairSteps.preferredMaxLayoutWidth = 388
+        waitingPanel.orientation = .vertical; waitingPanel.alignment = .leading; waitingPanel.spacing = 18
+        let waitingTitle = label("等待 iPhone 连接", size: 22, color: .imicIvory, weight: .semibold)
+        pairedNames.font = .systemFont(ofSize: 14, weight: .medium)
+        pairedNames.textColor = .imicIvory; pairedNames.preferredMaxLayoutWidth = 388
+        pairedNames.maximumNumberOfLines = 3; pairedNames.lineBreakMode = .byTruncatingTail
+        let waitingHint = label("打开 iPhone 上的 iMic 即可自动连接。\n请保持两台设备在同一网络。", size: 12)
+        for view in [waitingTitle, pairedNames, waitingHint,
+                     linkButton("配对新 iPhone…", #selector(pairNewPhone))] {
+            waitingPanel.addArrangedSubview(view)
+        }
+        waitingPanel.edgeInsets = NSEdgeInsets(top: 24, left: 0, bottom: 18, right: 0)
+
         // Stage
         emptyMark.image = MicBrand.logo(size: 42)
         emptyMark.imageScaling = .scaleProportionallyUpOrDown
@@ -372,6 +375,14 @@ extension AppDelegate {
             fullWidth(view, in: stageStack)
         }
 
+        issueLabel.font = .systemFont(ofSize: 11); issueLabel.textColor = .imicMuted
+        issueLabel.preferredMaxLayoutWidth = 275
+        issueLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        issueButton = linkButton("打开设置", #selector(performIssueAction))
+        issueButton.setContentHuggingPriority(.required, for: .horizontal)
+        issueRow = row([issueLabel, issueButton], spacing: 12)
+        issueRow.isHidden = true
+
         // Controls
         automatic.target = self
         automatic.action = #selector(toggleAutoInput)
@@ -396,18 +407,17 @@ extension AppDelegate {
         flexible.setContentHuggingPriority(.init(1), for: .vertical)
         flexible.heightAnchor.constraint(greaterThanOrEqualToConstant: 0).isActive = true
         let stack = column([
-            header, cueView!, pairPanel, stageStack, flexible, controlsRow!, permissionRow!
+            header, cueView!, waitingPanel, pairPanel, firstPairSteps, stageStack, flexible, issueRow!, controlsRow!, permissionRow!
         ], spacing: 16)
         stack.detachesHiddenViews = true
         attach(stack, to: content, inset: 26, top: 46)
-        for view in [header, cueView!, pairPanel, stageStack, controlsRow!, permissionRow!] as [NSView] {
+        for view in [header, cueView!, waitingPanel, pairPanel, firstPairSteps, stageStack, issueRow!, controlsRow!, permissionRow!] as [NSView] {
             fullWidth(view, in: stack)
         }
         flexible.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         buildSettings()
         refreshUI()
-        if preview == nil { window.orderFront(nil) }
     }
 
     @objc func statusMenuButton(_ sender: NSButton) {
@@ -419,8 +429,15 @@ extension AppDelegate {
     func refreshUI() {
         guard window != nil else { return }
         let connected = connectedName != nil
-        let showStage = connected || !transcriptText.isEmpty || currentSession != nil
-        pairPanel.isHidden = showStage
+        let revealingPairCode = pairPanelVisible && currentSession == nil
+        let showStage = (connected || !transcriptText.isEmpty || currentSession != nil) && !revealingPairCode
+        let pairedWaiting = store.isPaired && !connected && transcriptText.isEmpty && currentSession == nil
+        waitingPanel.isHidden = !pairedWaiting
+        pairedNames.stringValue = store.devices.prefix(3).map(\.name).joined(separator: " · ")
+            + (store.devices.count > 3 ? " · 另 \(store.devices.count - 3) 台（见 iPhone 设置页）" : "")
+        pairCollapseButton.isHidden = !store.isPaired && !connected && transcriptText.isEmpty
+        pairPanel.isHidden = showStage || (pairedWaiting && !pairPanelVisible && !pairingRequested)
+        firstPairSteps.isHidden = showStage || store.isPaired || connected
         stageStack.isHidden = !showStage
 
         let code = PairingCode.formatted(store.currentCode())
@@ -489,6 +506,8 @@ extension AppDelegate {
 
         refreshInputPermission()
         updateStatusBar()
+        refreshStatusMenu()
+        refreshCloudFailure()
         if settingsWindow != nil { rebuildPairedList() }
     }
 

@@ -258,8 +258,10 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
 
     private func footer(primary title: String, enabled: Bool, secondary skip: String?) {
         primary.title = title
+        primary.setAccessibilityLabel(title)
         primary.isEnabled = enabled
         secondary.title = skip ?? ""
+        secondary.setAccessibilityLabel(skip ?? "")
         secondary.isHidden = skip == nil
     }
 
@@ -360,6 +362,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     private func buildKey() -> NSView {
         let intro = Self.text("一个百炼 Key 同时用于语音识别和 AI 润色。")
         let get = NSButton(title: "获取百炼 API Key ↗", target: self, action: #selector(openConsole))
+        get.setAccessibilityLabel(get.title)
         get.bezelStyle = .rounded
         get.controlSize = .large
 
@@ -372,6 +375,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         keyField.setContentHuggingPriority(.init(1), for: .horizontal)
         keyField.stringValue = snapshot.key?.key ?? ""
         let paste = NSButton(title: "粘贴", target: self, action: #selector(pasteKey))
+        paste.setAccessibilityLabel(paste.title)
         paste.bezelStyle = .rounded
         paste.controlSize = .large
         let field = Self.row([keyField, paste], spacing: 8)

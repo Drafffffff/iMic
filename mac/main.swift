@@ -28,7 +28,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let pairPanel = NSStackView()
     let pairCodeLabel = NSTextField(labelWithString: "000 000")
     let pairHint = NSTextField(labelWithString: "")
-    var pairPanelVisible = true
+    var pairCollapseButton: NSButton!
+    var pairPanelVisible = false
+    let waitingPanel = NSStackView()
+    let pairedNames = NSTextField(wrappingLabelWithString: "")
+    let firstPairSteps = NSTextField(wrappingLabelWithString: "")
+    var menuStatusItem: NSMenuItem!
+    var menuPolishItem: NSMenuItem!
+    var menuModeItems: [NSMenuItem] = []
+    var menuIssueAction: NSMenuItem!
+    let issueLabel = NSTextField(wrappingLabelWithString: "")
+    var issueButton: NSButton!
+    var issueRow: NSStackView!
+    var cloudFailure: CloudFailure?
+    var issueProvider = PolishProvider.bailian
+    var issueIsRecognition = false
+    var connectionRecovered = false
+    var issueGeneration = UUID()
+    var connectionCheck: URLSessionDataTask?
+    var polishFallback = false
+    var polishFallbackIsCommand = false
     let stageTitle = NSTextField(labelWithString: "")
     let stageHint = NSTextField(labelWithString: "")
     let transcript = NSTextView()
@@ -183,8 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         installLinkHandlers()
         link.start()
-        show()
-        if shouldShowSetupOnLaunch() { showSetup() }
+        presentLaunchWindows(needsSetup: shouldShowSetupOnLaunch())
 
         watchdog = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.tick()
@@ -214,6 +232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .connected(let name):
                 self.connectedName = name
                 self.pairingRequested = false
+                self.pairPanelVisible = false
                 self.setStatus("已连接 \(name)")
                 self.sendFeatureSettings()
             case .failed(let message):
@@ -381,6 +400,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         polishOutputPicker?.selectItem(at: PolishOutput.languages.firstIndex(of: saved.options.output) ?? 0)
         updatePolishOptionControls(saved.options)
         settingsCoordinator?.resize()
+        refreshStatusMenu()
         IMicLog.write("mac.settings", "polish source=\(confirmingSave ? "phone" : "mac") enabled=\(saved.enabled) mode=\(saved.options.mode.rawValue) tone=\(saved.options.tone.rawValue) output=\(saved.options.output.rawValue)")
         if confirmingSave {
             link.send(.polishSaved(features: featureMask, polish: saved))
@@ -609,7 +629,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         liveInputBlocked = false
         inputMismatchSince = nil
         inserting = false
+        clearCloudFailure()
         currentSession = session
+        pairPanelVisible = false
         sendGestureState()
         frames = 0
         samples = 0
@@ -672,8 +694,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recognizer.onFinal = { [weak self] text, latency in
             self?.finishSession(session, text: text, latency: latency)
         }
+        recognizer.onFailure = { [weak self] failure in
+            guard let self, self.currentSession == session else { return }
+            self.showCloudFailure(failure, provider: .bailian, recognition: true)
+        }
         recognizer.onError = { [weak self] message in
             guard let self = self, self.currentSession == session else { return }
+            if self.cloudFailure == nil { self.showCloudFailure(.service, provider: .bailian, recognition: true) }
             self.abortSession(notifyPhone: true, message: message)
         }
         recognizer.start(
@@ -799,12 +826,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let polishAddress = DeepSeekConfiguration.endpoint(for: provider)
         // 终端命令模式下，润色失败不能把原话当命令输入，改为单行注释。
         let fallback = options.fallbackText(for: raw)
+        polishFallbackIsCommand = options.isCommand
         do {
             _ = try DeepSeekClient.validatedURL(provider: provider, model: polishModel, endpoint: polishAddress)
             guard PolishCredentials.valid(polishKey, for: provider) else { throw PolishConfigurationError.key }
         } catch {
             IMicLog.write("mac.polish", "skipped provider=\(provider.rawValue) reason=invalid_configuration")
             settingsCoordinator?.showServiceError("\(provider.title)：\(error.localizedDescription)，已保留原文。")
+            showCloudFailure(polishKey.isEmpty ? .key : .address, provider: provider)
             choosePolishResult(session, raw: fallback, polished: nil, latency: latency)
             return
         }
@@ -816,6 +845,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let deadline = DispatchWorkItem { [weak self] in
             guard let self, self.currentSession == session else { return }
             IMicLog.write("mac.polish", "fallback reason=hard_deadline session=\(session)")
+            self.showCloudFailure(.network, provider: provider)
             self.choosePolishResult(session, raw: fallback, polished: nil, latency: latency)
         }
         polishDeadlineWork = deadline
@@ -826,7 +856,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model: polishModel,
             endpoint: polishAddress,
             provider: provider,
-            options: options
+            options: options,
+            failure: { [weak self] failure in
+                guard let self, self.currentSession == session, self.polishFinalChoice.source == nil else { return }
+                self.showCloudFailure(failure, provider: provider)
+            }
         ) { [weak self] polished in
             guard let self = self, self.currentSession == session else { return }
             self.choosePolishResult(session, raw: fallback, polished: polished, latency: latency)
@@ -835,6 +869,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func choosePolishResult(_ session: Int, raw: String, polished: String?, latency: Double) {
         guard currentSession == session, let final = polishFinalChoice.settle(raw: raw, polished: polished) else { return }
+        polishFallback = polished == nil
         polishDeadlineWork?.cancel(); polishDeadlineWork = nil
         polishTask?.cancel(); polishTask = nil
         if !headless { setStatus("正在完成输入…") }
@@ -937,6 +972,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         transcriptText = clean
         lastLatencyMS = latency
         lastInsertSucceeded = pasted
+        refreshCloudFailure()
         link.send(.result(
             session: session,
             text: clean,
@@ -1219,8 +1255,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func statusClicked() {
-        if NSApp.currentEvent?.type == .rightMouseUp, let button = statusItem.button {
-            statusMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.minY), in: button)
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            popUpStatusMenu()
         } else if window.isVisible && NSApp.isActive {
             window.orderOut(nil)
         } else {
@@ -1458,6 +1494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         IMicLog.write("mac.ui", "status=\(text) transient=\(transient)")
         stateLabel.stringValue = text
         stateLabel.toolTip = text
+        refreshStatusMenu()
         statusResetWork?.cancel()
         statusResetWork = nil
         if transient {
@@ -1494,12 +1531,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showPreview(_ preview: String) {
         NSApp.appearance = NSAppearance(named: .darkAqua)
-        connectedName = preview == "ready" || preview == "result" || preview == "listening" || preview == "processing" ? "iPhone 17 Pro" : nil
+        connectedName = preview == "ready" || preview == "result" || preview == "listening" || preview == "processing" || preview == "menu" ? "iPhone 17 Pro" : nil
         switch preview {
         case "pairing":
             pairingRequested = true
             setStatus("在 iPhone 输入配对码")
             pairHint.stringValue = "在 iPhone 输入这个配对码"
+        case "paired-waiting":
+            try? store.trust(deviceID: UUID().uuidString, name: "iPhone 17 Pro", token: Data(repeating: 0x42, count: 32))
+            setStatus("等待 iPhone 连接")
         case "ready":
             setStatus("已连接 iPhone 17 Pro")
         case "listening":
@@ -1537,6 +1577,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if preview == "settings" || preview.hasPrefix("settings-") {
             if let pane = SettingsPane(rawValue: String(preview.dropFirst("settings-".count))) { settingsCoordinator?.select(pane) }
             showSettings()
+        }
+        if preview == "menu" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.popUpStatusMenu() }
         }
         if let setup = previewSetup {
             showSetup(at: SetupStep.first(for: setup))

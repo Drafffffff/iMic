@@ -17,6 +17,6 @@ PY
 SOURCES=()
 while IFS= read -r source; do SOURCES+=("$source"); done < "$WORK/sources.txt"
 xcrun swiftc -swift-version 5 -framework AppKit -framework Network -framework CryptoKit \
-  -framework ApplicationServices -framework Vision -framework ScreenCaptureKit \
+  -framework ApplicationServices -framework Vision -framework ScreenCaptureKit -framework ServiceManagement \
   "${SOURCES[@]}" "$ROOT/tests/MacSettings/main.swift" -o "$WORK/settings-tests"
 "$WORK/settings-tests" --ui-preview=settings-external-key

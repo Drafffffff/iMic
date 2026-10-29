@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import ApplicationServices
 import CoreBluetooth
 import CryptoKit
@@ -105,6 +106,8 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         let pane = SettingsPane.allCases[tabs.selectedTabViewItemIndex]
         defaults.set(pane.rawValue, forKey: "settings.selectedPane")
         if pane == .permissions { refreshPermissions() }
+        if pane == .general { refreshLoginState() }
+        window.recalculateKeyViewLoop()
         resize()
     }
     func resize() {
@@ -116,8 +119,12 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         tabs.tabViewItems[tabs.selectedTabViewItemIndex].viewController?.preferredContentSize = NSSize(width: 560, height: height)
         let frameSize = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: 560, height: height)).size
         let top = window.frame.maxY
-        window.setFrame(NSRect(x: window.frame.minX, y: top - frameSize.height, width: frameSize.width, height: frameSize.height),
-                        display: true, animate: window.isVisible)
+        var frame = NSRect(x: window.frame.minX, y: top - frameSize.height, width: frameSize.width, height: frameSize.height)
+        if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
+            frame.origin.y = max(visible.minY, min(frame.origin.y, visible.maxY - frame.height))
+            frame.origin.x = max(visible.minX, min(frame.origin.x, visible.maxX - frame.width))
+        }
+        window.setFrame(frame, display: true, animate: window.isVisible)
     }
     func show() { refreshCredentials(); refreshPermissions(); refreshLoginState(); resize() }
 
@@ -468,6 +475,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
 
     func refreshPermissions() {
         guard accessStatus != nil else { return }
+        app?.refreshInputPermission(); app?.refreshStatusMenu()
         let access = preview || app?.inputAllowed() == true
         let capture = !preview && CGPreflightScreenCaptureAccess()
         let ble = !preview && CBManager.authorization == .allowedAlways
@@ -491,13 +499,51 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         (stacks[.iphone]?.arrangedSubviews.first(where: { $0.identifier?.rawValue == "settingsPairCode" }) as? NSTextField)?.stringValue = "配对码：\(PairingCode.formatted(app!.store.currentCode()))"
     }
     @objc private func toggleShowMain(_ sender: NSButton) { defaults.set(sender.state == .on, forKey: "showMainWindowOnLaunch") }
-    // The next stage connects these controls to SMAppService; build-directory apps stay disabled.
     func refreshLoginState() {
-        loginCheck?.isEnabled = false
-        loginHint?.stringValue = "请从「应用程序」里的 iMic 设置登录时启动。"
+        guard loginCheck != nil else { return }
+        loginSettingsButton.isHidden = true
+        guard !preview, SetupLocation.classify(PermissionApplication.current) == .applications else {
+            loginCheck.isEnabled = false; loginCheck.state = .off
+            loginHint.stringValue = "请从「应用程序」里的 iMic 设置登录时启动。"
+            return
+        }
+        loginCheck.isEnabled = true
+        switch SMAppService.mainApp.status {
+        case .enabled:
+            loginCheck.state = .on; loginHint.stringValue = "登录 Mac 后在菜单栏启动。"
+        case .requiresApproval:
+            loginCheck.state = .on
+            loginHint.stringValue = "需要在「系统设置 → 通用 → 登录项」中允许。"
+            loginSettingsButton.isHidden = false
+        case .notRegistered:
+            loginCheck.state = .off; loginHint.stringValue = "关闭时不会在登录 Mac 后自动启动。"
+        case .notFound:
+            loginCheck.state = .off; loginCheck.isEnabled = false
+            loginHint.stringValue = "系统未找到此应用的登录项，请从「应用程序」重新打开 iMic。"
+        @unknown default:
+            loginCheck.state = .off; loginCheck.isEnabled = false
+            loginHint.stringValue = "无法读取系统登录项状态。"
+        }
     }
-    @objc private func toggleLogin() { refreshLoginState() }
-    @objc private func openLoginSettings() { }
+    @objc private func toggleLogin() {
+        guard !preview, SetupLocation.classify(PermissionApplication.current) == .applications else { refreshLoginState(); return }
+        let enable = loginCheck.state == .on
+        do {
+            if enable { try SMAppService.mainApp.register() }
+            else { try SMAppService.mainApp.unregister() }
+            refreshLoginState()
+        } catch {
+            refreshLoginState()
+            loginHint.stringValue = "登录项设置失败，请检查系统登录项与应用签名。"
+            loginSettingsButton.isHidden = false
+            IMicLog.write("mac.settings", "login_item_failed code=\((error as NSError).code)")
+        }
+        resize()
+    }
+    @objc private func openLoginSettings() {
+        guard !preview else { return }
+        SMAppService.openSystemSettingsLoginItems()
+    }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         let dirty = fields.values.filter(\.dirty).sorted {

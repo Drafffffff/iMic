@@ -36,13 +36,14 @@ iconutil -c icns "$OUT/iMic.iconset" -o "$APP/Contents/Resources/iMic.icns"
 
 build_binary() {
   swiftc -swift-version 5 -O -target "${1}-apple-macosx13.0" -sdk "$SDK" \
-    -framework AppKit -framework Network -framework CryptoKit -framework ApplicationServices -framework Vision -framework ScreenCaptureKit \
+    -framework AppKit -framework Network -framework CryptoKit -framework ApplicationServices -framework Vision -framework ScreenCaptureKit -framework ServiceManagement \
     "$ROOT/shared/iMicLink.swift" \
     "$ROOT/shared/IMicLog.swift" \
     "$ROOT/shared/DeepSeekPolicy.swift" \
     "$ROOT/shared/TextRevision.swift" \
     "$ROOT/shared/PolishOptions.swift" \
     "$ROOT/shared/GestureControl.swift" \
+    "$ROOT/mac/CloudFailure.swift" \
     "$ROOT/mac/DeepSeek.swift" \
     "$ROOT/mac/BLEBridge.swift" \
     "$ROOT/mac/PairingStore.swift" \
@@ -62,6 +63,7 @@ build_binary() {
     "$ROOT/mac/TextPolishEffect.swift" \
     "$ROOT/mac/Brand.swift" \
     "$ROOT/mac/StatusBar.swift" \
+    "$ROOT/mac/MacExperience.swift" \
     "$ROOT/mac/Interface.swift" \
     "$ROOT/mac/main.swift" \
     -o "$2"

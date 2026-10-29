@@ -191,12 +191,13 @@ enum DeepSeekClient {
         text: String, key: String, model: String, endpoint: String,
         provider: PolishProvider, options: PolishOptions,
         session: URLSession? = nil,
+        failure: ((CloudFailure) -> Void)? = nil,
         completion: @escaping (String?) -> Void
     ) -> URLSessionDataTask? {
         guard !text.isEmpty,
               let request = try? request(text: text, key: key, model: model, endpoint: endpoint, provider: provider, options: options) else {
             IMicLog.write("mac.polish", "skipped provider=\(provider.rawValue) reason=invalid_configuration")
-            DispatchQueue.main.async { completion(nil) }
+            DispatchQueue.main.async { failure?(.service); completion(nil) }
             return nil
         }
         let started = Date()
@@ -213,7 +214,10 @@ enum DeepSeekClient {
             // Never log endpoints, response bodies, error descriptions or credentials.
             let code = (error as NSError?)?.code ?? 0
             IMicLog.write("mac.polish", "\(result == nil ? "fallback" : "ok") provider=\(provider.rawValue) model=\(diagnosticModel) status=\(status) code=\(code) in=\(text.count) out=\(result?.count ?? 0) ms=\(milliseconds)")
-            DispatchQueue.main.async { completion(result) }
+            DispatchQueue.main.async {
+                if result == nil { failure?(CloudFailure.classify(status: status, error: error)) }
+                completion(result)
+            }
         }
         task.resume()
         return task

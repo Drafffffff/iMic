@@ -330,14 +330,16 @@ final class PolishProviderTests: XCTestCase {
         configuration.protocolClasses = [PolishResponseProtocol.self]
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
-        for outcome in [503, -1] {
+        for outcome in [401, 403, 503, -1] {
             let done = expectation(description: "polish \(outcome)")
             let data = try response(content: raw)
             PolishResponseProtocol.handler = { _ in
                 if outcome == -1 { throw URLError(.notConnectedToInternet) }
                 return (outcome, data)
             }
-            DeepSeekClient.polish(text: raw, key: customKey, model: "custom", endpoint: "https://custom.example/v1/chat/completions", provider: .custom, options: .default, session: session) { result in
+            var failure: CloudFailure?
+            DeepSeekClient.polish(text: raw, key: customKey, model: "custom", endpoint: "https://custom.example/v1/chat/completions", provider: .custom, options: .default, session: session, failure: { failure = $0 }) { result in
+                XCTAssertEqual(failure, outcome == 401 || outcome == 403 ? .key : outcome == -1 ? .network : .service)
                 XCTAssertTrue(Thread.isMainThread)
                 XCTAssertNil(result)
                 done.fulfill()

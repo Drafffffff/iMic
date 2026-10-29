@@ -69,12 +69,17 @@ private final class ASRWebSocketTransport:ASRMessageTransport {
     func send(_ message:ASRWireMessage,completion:@escaping (Error?)->Void) {
         let frame:URLSessionWebSocketTask.Message
         switch message {case .text(let text):frame = .string(text);case .audio(let pcm):frame = .data(pcm)}
-        socket.send(frame){error in DispatchQueue.main.async{completion(error)}}
+        socket.send(frame){error in DispatchQueue.main.async {
+            let status = (self.socket.response as? HTTPURLResponse)?.statusCode ?? 0
+            completion(error != nil && (status == 401 || status == 403) ? NSError(domain: "iMic.ASR.HTTP", code: status) : error)
+        }}
     }
     func receive(completion:@escaping (Result<Data,Error>)->Void) {
         socket.receive{result in DispatchQueue.main.async {
             switch result {
-            case .failure(let error):completion(.failure(error))
+            case .failure(let error):
+                let status = (self.socket.response as? HTTPURLResponse)?.statusCode ?? 0
+                completion(.failure(status == 401 || status == 403 ? NSError(domain: "iMic.ASR.HTTP", code: status) : error))
             case .success(let message):
                 switch message {
                 case .string(let text):completion(.success(Data(text.utf8)))
@@ -129,6 +134,7 @@ final class BailianASR {
     init(manual:Bool=true,transportFactory:@escaping (URLRequest)->ASRMessageTransport = {ASRWebSocketTransport($0)}) {
         self.transportFactory=transportFactory
     }
+    var onFailure: ((CloudFailure) -> Void)?
     func start(key:String,endpoint:String,model:String) {
         guard !started,!cancelled else{return}
         started=true;startedAt=Date()
@@ -152,11 +158,11 @@ final class BailianASR {
                 "vad_model":"near_meeting_16k","heartbeat":true]]]){[weak self] error in
             guard let self=self,!self.cancelled else{return}
             self.sending=false
-            if error != nil{self.fail("识别任务启动失败")}else{self.pump()}
+            if let error {self.failTransport(error)}else{self.pump()}
         }
         if !cancelled && !ready {
             startupTimer=Timer.scheduledTimer(withTimeInterval:10,repeats:false){[weak self] _ in
-                if self?.ready != true{self?.fail("百炼连接超时，请检查网络、Key、地域和模型")}
+                if self?.ready != true{self?.failTransport(URLError(.timedOut))}
             }
         }
     }
@@ -239,7 +245,7 @@ final class BailianASR {
         transport?.receive{[weak self] result in
             guard let self=self,!self.cancelled else{return}
             switch result {
-            case .failure:self.fail("百炼连接中断，请检查 Key、网络、地域和模型")
+            case .failure(let error):self.failTransport(error)
             case .success(let data):
                 guard data.count<=1_000_000,let object=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any] else{
                     self.fail("百炼返回了无效的识别事件");return
@@ -305,6 +311,7 @@ final class BailianASR {
             let raw=header["error_code"] as? String ?? "unknown"
             let code=String(raw.prefix(64).filter{$0.isASCII && ($0.isLetter || $0.isNumber || $0=="_" || $0=="-" || $0==".")})
             IMicLog.write("mac.asr", "task failed code=\(code) queued=\(queuedBytes)")
+            onFailure?(CloudFailure.classify(code: code))
             fail("百炼识别失败（\(code.isEmpty ? "unknown":code)）")
         default:break
         }
@@ -313,6 +320,13 @@ final class BailianASR {
         cancelled=true;timer?.invalidate();timer=nil;startupTimer?.invalidate();startupTimer=nil
         completionDeadline=nil;queue.removeAll();queueHead=0;queueOffset=0;queuedBytes=0
         transport?.cancel();transport=nil
+    }
+    private func failTransport(_ error: Error) {
+        guard !cancelled else { return }
+        let ns = error as NSError
+        let issue = CloudFailure.classify(status: ns.domain == "iMic.ASR.HTTP" ? ns.code : 0, error: error)
+        onFailure?(issue)
+        fail(issue.title(service: "百炼"))
     }
     private func fail(_ message:String){guard !cancelled else{return};IMicLog.write("mac.asr", "fail reason=\(message) queued=\(queuedBytes)");cancel();onError?(message)}
 }

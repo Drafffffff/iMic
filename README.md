@@ -46,7 +46,7 @@ iOS Release 不是免签包，也不是 TestFlight/App Store 分发；不包含�
 1. **权限**：「辅助功能」必需，用于向当前应用输入文字；「屏幕录制」可选，仅用于润色扫光。点「去开启」首次显示 macOS 系统授权提示，之后打开系统设置；iMic 检测到授权后自动继续，不修改 TCC，也不自行批准权限。
 2. **百炼 API Key**：点「[获取百炼 API Key ↗](https://bailian.console.aliyun.com/?tab=model#/api-key)」后复制并粘贴 Key。iMic 通过一次只读的百炼模型列表请求校验并保存，不发送音频或文字。已有 `DASHSCOPE_API_KEY` 会自动填入并校验。
 
-一个百炼 Key 同时用于识别与润色，新安装默认使用百炼润色；DeepSeek 官方与自定义服务仅在设置中配置。iPhone 配对不在向导内，主窗口仍显示六位配对码。随时可从菜单栏 iMic 图标 →「设置向导…」重新打开。
+一个百炼 Key 同时用于识别与润色，新安装默认使用百炼润色；DeepSeek 官方与自定义服务仅在设置中配置。iPhone 配对不在向导内，首次配对在主窗口显示六位配对码。随时可从菜单栏 iMic →「设置… → 高级 → 重新打开设置向导…」重新打开。
 
 ### Mac 常见问题
 
@@ -55,6 +55,10 @@ iOS Release 不是免签包，也不是 TestFlight/App Store 分发；不包含�
 - **Key 保存与读取**：所有在 iMic 中输入的 Key 保存于 `~/Library/Application Support/iMic/credentials.json`，目录权限 `0700`、文件权限 `0600`，仅当前用户可读；不使用钥匙串，也不再写入 shell 配置。每个服务依次读取此文件 → 进程环境变量 → `~/.zshenv`、`~/.zprofile`、`~/.zshrc`、`~/.bash_profile`、`~/.bashrc`、`~/.profile`、`~/.config/fish/config.fish` 中的字面量赋值（只解析，不执行）。百炼使用 `DASHSCOPE_API_KEY` / `BAILIAN_API_KEY`，DeepSeek 官方使用 `DEEPSEEK_API_KEY`，自定义服务使用 `IMIC_CUSTOM_POLISH_API_KEY`，不跨服务代用。
 - **iPhone 找不到 Mac**：确认在同一 Wi-Fi，并在「系统设置 → 隐私与安全性 → 本地网络」允许 iMic；必要时在 Mac 设置中开启蓝牙兜底。
 - **卸载**：退出 iMic，删除 `/Applications/iMic.app` 与 `~/Library/Application Support/iMic`（Key、配对令牌和备份）；可选执行 `defaults delete com.drafffffff.imic` 清除偏好。
+
+完成设置后，启动默认只显示菜单栏图标；再次从 Finder 打开或点击图标可显示主窗口。「设置 → 通用」可以开启启动时显示主窗口，以及登录时启动。登录项只允许在「应用程序」中的 iMic 配置，并以系统登录项的实际状态为准。
+
+右键菜单栏图标可查看连接状态、开关 AI 润色或切换转换模式；这些设置会同步给 iPhone。「设置…」快捷键为 ⌘,，设置分页可用 ⌘1…⌘5 切换。已配对时，主窗口以等待设备自动连接为主；「配对新 iPhone…」再展开配对码。
 
 ### 2. 构建 iPhone 端
 

@@ -24,6 +24,13 @@ private final class RecognitionTransport: ASRMessageTransport {
         receiver = nil
         callback?(.success(data))
     }
+    func fail(_ error: Error) { let callback = receiver; receiver = nil; callback?(.failure(error)) }
+    func serviceFailure(_ code: String) throws {
+        let value: [String: Any] = ["header": ["task_id": taskID, "event": "task-failed", "error_code": code,
+            "error_message": "sensitive service detail must not reach UI"]]
+        let callback = receiver; receiver = nil
+        callback?(.success(try JSONSerialization.data(withJSONObject: value)))
+    }
     func sentence(_ id: Int, _ text: String, ended: Bool, heartbeat: Bool = false, task: String? = nil) throws {
         try event("result-generated", sentence: ["sentence_id": id, "text": text, "sentence_end": ended, "heartbeat": heartbeat], task: task)
     }
@@ -57,6 +64,29 @@ final class ASRStreamingTests: XCTestCase {
         try transport.event("task-finished")
     }
 
+    func testTransportFailuresCarryActionableReasonsWithoutServiceBody() throws {
+        var issue: CloudFailure?
+        recognizer.onFailure = { issue = $0 }
+        transport.fail(NSError(domain: "iMic.ASR.HTTP", code: 401))
+        XCTAssertEqual(issue, .key)
+        XCTAssertEqual(failures, ["百炼拒绝了 Key"])
+        XCTAssertTrue(finals.isEmpty)
+    }
+    func testNetworkFailureIsRetryableWithoutRetainingAudio() throws {
+        var issue: CloudFailure?
+        recognizer.onFailure = { issue = $0 }
+        transport.fail(URLError(.notConnectedToInternet))
+        XCTAssertEqual(issue, .network)
+        XCTAssertEqual(failures, ["无法连接百炼，检查网络"])
+        XCTAssertTrue(finals.isEmpty)
+    }
+    func testRegionOrModelFailureOffersAddressCheckAndRedactsBody() throws {
+        var issue: CloudFailure?
+        recognizer.onFailure = { issue = $0 }
+        try transport.serviceFailure("ModelNotFound")
+        XCTAssertEqual(issue, .address)
+        XCTAssertFalse(failures.joined().contains("sensitive"))
+    }
     func testInterimCorrectionsStayDisplayOnlyUntilSentenceEnds() throws {
         try transport.sentence(1, "明天上午", ended: false)
         try transport.sentence(1, "明天下午三点开会", ended: false)
