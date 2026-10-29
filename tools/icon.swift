@@ -10,7 +10,7 @@ let microphoneSVG = """
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 3 else {
-    FileHandle.standardError.write(Data("usage: icon <mac|ios> <output-dir>\n".utf8))
+    FileHandle.standardError.write(Data("usage: icon <mac|ios|site> <output-dir>\n".utf8))
     exit(2)
 }
 let mode = arguments[1]
@@ -97,6 +97,11 @@ if mode == "mac" {
     ]
     for (name, size) in specs {
         guard let data = png(pixels: size) else { continue }
+        try data.write(to: output.appendingPathComponent(name))
+    }
+} else if mode == "site" {
+    for (name, size): (String, CGFloat) in [("favicon.png", 32), ("apple-touch-icon.png", 180), ("icon-512.png", 512)] {
+        guard let data = png(pixels: size) else { fatalError("Cannot render site icon") }
         try data.write(to: output.appendingPathComponent(name))
     }
 } else {

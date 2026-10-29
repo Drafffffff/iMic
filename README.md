@@ -1,5 +1,7 @@
 # iMic
 
+[官网与帮助](https://drafffffff.github.io/iMic/) · [下载 Mac 版](https://drafffffff.github.io/iMic/#download)
+
 把 iPhone 变成 Mac 的语音输入键。按住底部横条说话，松开后文字直接落进 Mac 当前应用。
 
 - **iPhone 端**：SwiftUI，黑色 + 橙色像素界面，按住说话、上滑取消、触感反馈。
