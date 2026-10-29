@@ -162,9 +162,6 @@ struct HomeView: View {
                 .environmentObject(link)
                 .environmentObject(session)
         }
-        .fullScreenCover(isPresented: $onboarding.presented) {
-            OnboardingView().environmentObject(onboarding).environmentObject(link).environmentObject(session)
-        }
         .overlay(alignment: .top) {
             if !onboarding.presented && onboarding.unfinished && !link.phase.isReady {
                 Button("还没有连接 Mac · 继续设置") { onboarding.resume() }

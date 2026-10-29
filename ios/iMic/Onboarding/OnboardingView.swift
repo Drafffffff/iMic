@@ -131,9 +131,12 @@ struct OnboardingView: View {
         .onChange(of: link.macs.map(\.id)) { _, _ in advanceToPair() }
         .onChange(of: link.phase) { _, _ in advanceToPair() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active, openedSettings, searching {
-                openedSettings = false
-                link.retry()
+            guard searching else { return }
+            if phase == .active {
+                if openedSettings { openedSettings = false; link.retry() }
+                else { link.activate() }
+            } else if phase == .background {
+                link.enterBackground()
             }
         }
         .task(id: searchGeneration) {
