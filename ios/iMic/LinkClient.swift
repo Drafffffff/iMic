@@ -78,6 +78,7 @@ final class LinkClient: ObservableObject {
     @Published private(set) var selectedMacName: String?
     @Published private(set) var rememberedMacs: [RememberedMac] = []
     @Published private(set) var pairedMacIDs: Set<String> = []
+    @Published private(set) var macConnectionDates: [String: Double] = [:]
     @Published private(set) var polishPreferences: LinkPolishPreferences?
     @Published private(set) var polishPreferencesSupported = false
     /// Mac 是否支持润色输出模式（翻译 / 终端命令）；不支持时设置页不显示该项。
@@ -208,6 +209,7 @@ final class LinkClient: ObservableObject {
         }
         macLastConnected = (UserDefaults.standard.dictionary(forKey: "imic.macLastConnected") as? [String: Double] ?? [:])
             .filter { $0.value.isFinite }
+        macConnectionDates = macLastConnected
         selectedMacID = preferredMacID
         selectedMacName = preferredMacID.map { knownNames[$0] ?? "Mac" }
         let paired = Set(knownNames.keys.filter { TokenStore.load(for: $0) != nil })
@@ -238,6 +240,17 @@ final class LinkClient: ObservableObject {
             case "pairing": phase = .needsCode(name)
             case "offline": phase = .searching
             default: phase = .ready(name)
+            }
+            pairedMacIDs = phase.isReady ? [mac.id] : []
+            if mode == "devices-multi" || mode == "devices-multi-recording" {
+                let studio = DiscoveredMac(id: "preview-studio", name: "Mac Studio", endpoint: .hostPort(host: "127.0.0.1", port: 2))
+                let mini = DiscoveredMac(id: "preview-mini", name: "Mac mini", endpoint: .hostPort(host: "127.0.0.1", port: 3))
+                macs = [mac, studio, mini]
+                rememberedMacs = [RememberedMac(id: mac.id, name: mac.name),
+                    RememberedMac(id: studio.id, name: studio.name), RememberedMac(id: "preview-office", name: "Office iMac")]
+                pairedMacIDs = [mac.id, studio.id, "preview-office"]
+                macConnectionDates = [mac.id: 300, studio.id: 200, "preview-office": 100]
+                transport = .network
             }
             hasPairedMac = phase.isReady
             gestureReady = phase.isReady
@@ -412,6 +425,9 @@ final class LinkClient: ObservableObject {
 
     /// 调用前由 SessionModel 停止当前会话；换设备不删除任何配对令牌。
     func connect(to mac: DiscoveredMac) {
+        #if DEBUG
+        if isPreview { previewSelect(RememberedMac(id: mac.id, name: mac.name), nearby: true); return }
+        #endif
         guard !isPreview else { return }
         invalidateEpoch()
         queue.async {
@@ -431,6 +447,9 @@ final class LinkClient: ObservableObject {
     }
 
     func selectRememberedMac(_ mac: RememberedMac) {
+        #if DEBUG
+        if isPreview { previewSelect(mac, nearby: macs.contains { $0.id == mac.id }); return }
+        #endif
         guard !isPreview else { return }
         if let nearby = macs.first(where: { $0.id == mac.id }) {
             connect(to: nearby)
@@ -461,6 +480,28 @@ final class LinkClient: ObservableObject {
         }
     }
 
+    #if DEBUG
+    private func previewSelect(_ mac: RememberedMac, nearby: Bool) {
+        selectedMacID = mac.id
+        selectedMacName = mac.name
+        isManualSelection = true
+        hasPairedMac = pairedMacIDs.contains(mac.id)
+        pairingError = nil
+        pairing = !hasPairedMac
+        transport = nil
+        if !hasPairedMac { phase = .needsCode(mac.name); return }
+        phase = nearby ? .connecting(mac.name) : .searching
+        guard nearby else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            guard let self, self.selectedMacID == mac.id else { return }
+            self.phase = .ready(mac.name)
+            self.transport = .network
+            self.gestureReady = true
+            self.onReady?(mac.name)
+        }
+    }
+    #endif
+
     func forgetMac() {
         guard !isPreview else { return }
         invalidateEpoch()
@@ -485,6 +526,7 @@ final class LinkClient: ObservableObject {
             self.forcePair = true
             self.closeConnectionLocked()
             self.startBrowserLocked()
+            let connectionDates = self.macLastConnected
             let remembered = self.knownNames.map { RememberedMac(id: $0.key, name: $0.value) }
             self.publish {
                 self.phase = .searching
@@ -496,6 +538,7 @@ final class LinkClient: ObservableObject {
                 self.selectedMacID = nil
                 self.selectedMacName = nil
                 self.rememberedMacs = remembered
+                self.macConnectionDates = connectionDates
                 self.refreshRememberedPublished()
             }
         }
@@ -1564,9 +1607,11 @@ final class LinkClient: ObservableObject {
         UserDefaults.standard.set(id, forKey: "imic.preferredMacID")
         UserDefaults.standard.set(knownNames, forKey: "imic.macNames")
         let snapshot = knownNames
+        let connectionDates = macLastConnected
         let manual = manualSelection
         publish {
             self.isManualSelection = manual
+            self.macConnectionDates = connectionDates
             self.selectedMacID = id
             self.selectedMacName = name
             self.rememberedMacs = snapshot.map { RememberedMac(id: $0.key, name: $0.value) }

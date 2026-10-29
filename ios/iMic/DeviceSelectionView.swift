@@ -4,8 +4,10 @@ import SwiftUI
 struct DeviceSelectionView: View {
     @EnvironmentObject private var link: LinkClient
     @EnvironmentObject private var session: SessionModel
-    @State private var pendingSelection: RememberedMac?
-    @State private var confirmSwitch = false
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var macSwitch = MacSwitchCoordinator()
+    @StateObject private var automaticReturn = MacSwitchReturn()
+    var pairing: DiscoveredMac? = nil
 
     private var nearbyIDs: Set<String> { Set(link.macs.map(\.id)) }
     private var otherRemembered: [RememberedMac] {
@@ -63,14 +65,16 @@ struct DeviceSelectionView: View {
         .navigationTitle("连接电脑")
         .navigationBarTitleDisplayMode(.inline)
         .tint(Theme.orange)
-        .confirmationDialog("取消当前语音并切换 Mac？", isPresented: $confirmSwitch, titleVisibility: .visible) {
-            Button("取消语音并切换", role: .destructive) {
-                if let mac = pendingSelection { performSelection(mac) }
-                pendingSelection = nil
-            }
-            Button("继续当前语音", role: .cancel) { pendingSelection = nil }
-        } message: {
-            Text("当前录音或识别会停止，不会把尚未发送的内容交给另一台 Mac。已完成的识别结果会保留。")
+        .macSwitchConfirmation(macSwitch)
+        .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in cancelAutomaticReturn() })
+        .onAppear {
+            if let pairing { beginAutomaticReturn(to: pairing.id, paired: false) }
+        }
+        .onChange(of: link.phase) { _, _ in updateAutomaticReturn() }
+        .onChange(of: link.selectedMacID) { _, _ in updateAutomaticReturn() }
+        .onDisappear {
+            cancelAutomaticReturn()
+            macSwitch.cancel()
         }
     }
 
@@ -103,6 +107,7 @@ struct DeviceSelectionView: View {
             }
             if !link.phase.isReady && !needsPairing {
                 Button("重新连接 / 搜索") {
+                    cancelAutomaticReturn()
                     Haptics.shared.play(.tap)
                     link.retry()
                 }
@@ -113,6 +118,7 @@ struct DeviceSelectionView: View {
             if link.phase.isReady, link.transport == .bluetooth,
                session.phase != .listening, session.phase != .transcribing {
                 Button("改用局域网") {
+                    cancelAutomaticReturn()
                     Haptics.shared.play(.tap)
                     link.reconnectUsingNetwork()
                 }
@@ -150,14 +156,9 @@ struct DeviceSelectionView: View {
     private func deviceRow(id: String, name: String, nearby: Bool) -> some View {
         let selected = id == link.selectedMacID
         return Button {
-            guard !selected else { return }
-            Haptics.shared.play(.selection)
-            let mac = RememberedMac(id: id, name: name)
-            if session.phase == .listening || session.phase == .transcribing {
-                pendingSelection = mac
-                confirmSwitch = true
-            } else {
-                performSelection(mac)
+            cancelAutomaticReturn()
+            macSwitch.request(RememberedMac(id: id, name: name), link: link, session: session) { id, paired in
+                beginAutomaticReturn(to: id, paired: paired)
             }
         } label: {
             HStack(spacing: 12) {
@@ -189,8 +190,13 @@ struct DeviceSelectionView: View {
         .accessibilityLabel("\(name)，\(selected ? "当前目标" : "切换到这台 Mac")，\(link.pairedMacIDs.contains(id) ? "已配对" : "需要配对")")
     }
 
-    private func performSelection(_ mac: RememberedMac) {
-        session.cancelForDeviceSwitch()
-        link.selectRememberedMac(mac)
+    private func beginAutomaticReturn(to id: String, paired: Bool) {
+        automaticReturn.begin(id: id, paired: paired, link: link) { dismiss() }
     }
+
+    private func updateAutomaticReturn() {
+        automaticReturn.update(link: link) { dismiss() }
+    }
+
+    private func cancelAutomaticReturn() { automaticReturn.cancel() }
 }

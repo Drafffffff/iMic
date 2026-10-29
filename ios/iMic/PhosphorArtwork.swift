@@ -123,7 +123,7 @@ struct PhosphorArtwork: View {
                     Rectangle().fill(state.connectionColor).frame(width:3.5,height:3.5)
                     Text(state.connection).font(.system(size:9.5,weight:.regular,design:.monospaced))
                         .tracking(0.3).foregroundStyle(Theme.muted).lineLimit(1).truncationMode(.middle)
-                    Image(systemName:"chevron.right").font(.system(size:8,weight:.regular)).foregroundStyle(Theme.muted)
+                    Image(systemName:"chevron.down").font(.system(size:8,weight:.regular)).foregroundStyle(Theme.muted)
                 }.frame(maxWidth:150,minHeight:44,alignment:.trailing)
                 PixelSymbol(kind:.settings,color:Theme.ivory.opacity(0.72)).frame(width:19.5,height:19.5).frame(width:44,height:44)
             }.padding(.trailing,-12).offset(y:-9)

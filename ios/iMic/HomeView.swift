@@ -20,6 +20,8 @@ struct HomeView: View {
     @State private var showCopied = false
     @State private var showResult = false
     @State private var showDevices = false
+    @State private var devicePairing: DiscoveredMac?
+    @StateObject private var macSwitch = MacSwitchCoordinator()
     @StateObject private var receiver = ReceiverFlowStore()
     @State private var connectionAnnounced = false
     @State private var stringAxis: StringAxis?
@@ -149,7 +151,7 @@ struct HomeView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(isPresented: $showDevices) {
-            DeviceSelectionView()
+            DeviceSelectionView(pairing: devicePairing)
                 .environmentObject(link)
                 .environmentObject(session)
                 .toolbar(.visible, for: .navigationBar)
@@ -334,12 +336,16 @@ struct HomeView: View {
         .onChange(of: session.liveTranscript) { _, text in
             receiver.update(text: text)
         }
+        .macSwitchConfirmation(macSwitch)
         .onChange(of: showDevices) { _, presented in
             if presented {
                 showPairing = false
                 stringMotion.cancel()
                 receiver.cancelFlight()
+            } else {
+                devicePairing = nil
             }
+            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showResult && !showPairing)
         }
         .onChange(of: showPairing) { _, presented in
             if presented { stringMotion.cancel() }
@@ -411,28 +417,8 @@ struct HomeView: View {
             }
             Spacer(minLength: 12)
             HStack(spacing: 5) {
-                Button {
-                    Haptics.shared.play(.tap)
-                    showPairing = false
-                    showDevices = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Rectangle().fill(connectionColor).frame(width: 3.5, height: 3.5)
-                        Text(connectionLabel)
-                            .font(.system(size: 9.5, weight: .regular, design: .monospaced))
-                            .tracking(0.3)
-                            .foregroundStyle(Theme.muted)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 8, weight: .regular))
-                            .foregroundStyle(Theme.muted)
-                    }
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
-                }
-                .frame(maxWidth: 150, alignment: .trailing)
-                .accessibilityLabel("连接电脑，\(connectionLabel)，点击切换 Mac")
+                quickMacSwitch
+
                 Button {
                     Haptics.shared.play(.tap)
                     showPairing = true
@@ -828,6 +814,77 @@ struct HomeView: View {
 
     // MARK: - Derived copy
 
+    private var nearbyUnpairedMacs: [DiscoveredMac] {
+        link.macs.filter { !link.pairedMacIDs.contains($0.id) }
+    }
+
+    private var quickMacSwitch: some View {
+        Group {
+            if QuickMacTarget.paired(in: link).isEmpty && nearbyUnpairedMacs.isEmpty {
+                Button { openDevices() } label: { connectionButtonLabel }
+            } else {
+                Menu {
+                    ForEach(QuickMacTarget.paired(in: link)) { mac in
+                        Button {
+                            macSwitch.request(RememberedMac(id: mac.id, name: mac.name), link: link, session: session)
+                        } label: {
+                            if mac.current {
+                                Label("\(mac.name) · \(mac.status)", systemImage: "checkmark")
+                            } else {
+                                Text("\(mac.name) · \(mac.status)")
+                            }
+                        }
+                        .accessibilityLabel(mac.accessibilityLabel)
+                        .accessibilityIdentifier("quick-mac-\(mac.id)")
+                    }
+                    if !nearbyUnpairedMacs.isEmpty {
+                        Section("新的 Mac · 需要配对") {
+                            ForEach(nearbyUnpairedMacs) { mac in
+                                Button(mac.name) {
+                                    macSwitch.request(RememberedMac(id: mac.id, name: mac.name), link: link, session: session) { _, _ in
+                                        openDevices(pairing: mac)
+                                    }
+                                }
+                                .accessibilityLabel("\(mac.name)，附近的新 Mac，需要配对")
+                                .accessibilityIdentifier("quick-mac-\(mac.id)")
+                            }
+                        }
+                    }
+                    Divider()
+                    Button("管理设备…") { openDevices() }
+                } label: { connectionButtonLabel }
+                .menuOrder(.fixed)
+            }
+        }
+        .frame(maxWidth: 150, alignment: .trailing)
+        .accessibilityLabel("连接电脑，当前 \(connectionLabel)，点击切换 Mac")
+        .accessibilityIdentifier("quick-mac-switch")
+    }
+
+    private var connectionButtonLabel: some View {
+        HStack(spacing: 6) {
+            Rectangle().fill(connectionColor).frame(width: 3.5, height: 3.5)
+            Text(connectionLabel)
+                .font(.system(size: 9.5, weight: .regular, design: .monospaced))
+                .tracking(0.3)
+                .foregroundStyle(Theme.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 8, weight: .regular))
+                .foregroundStyle(Theme.muted)
+        }
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+    }
+
+    private func openDevices(pairing: DiscoveredMac? = nil) {
+        Haptics.shared.play(.tap)
+        devicePairing = pairing
+        showPairing = false
+        showDevices = true
+    }
+
     private var connectionColor: Color {
         switch link.phase {
         case .ready: return Theme.orange
@@ -839,9 +896,11 @@ struct HomeView: View {
     private var connectionLabel: String {
         switch link.phase {
         case .ready(let name): return name
-        case .connecting(let name): return "LINKING \(name)".uppercased()
+        case .connecting(let name): return "连接中 · \(name)"
         case .needsCode(let name): return "PAIR \(name)".uppercased()
-        case .searching: return "SEARCHING"
+        case .searching:
+            if link.isManualSelection, let name = link.selectedMacName { return "连接中 · \(name)" }
+            return "SEARCHING"
         case .failed: return "OFFLINE"
         case .idle: return "STANDBY"
         }

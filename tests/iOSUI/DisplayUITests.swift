@@ -61,6 +61,7 @@ final class DisplayUITests:XCTestCase{
         let app=launch()
         let device=app.buttons.matching(NSPredicate(format:"label BEGINSWITH %@","连接电脑，")).firstMatch
         XCTAssertTrue(device.waitForExistence(timeout:8));device.tap()
+        if app.buttons["管理设备…"].waitForExistence(timeout:2) { app.buttons["管理设备…"].tap() }
         XCTAssertTrue(app.navigationBars["连接电脑"].waitForExistence(timeout:8))
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(app.buttons["HOLD TO SPEAK"].waitForExistence(timeout:8))
