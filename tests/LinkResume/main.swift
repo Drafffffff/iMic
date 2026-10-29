@@ -84,7 +84,7 @@ server.start()
 
 Task { @MainActor in
     var exitCode: Int32 = 0
-    let preferenceKeys = ["imic.deviceID", "imic.preferredMacID", "imic.macNames"]
+    let preferenceKeys = ["imic.deviceID", "imic.preferredMacID", "imic.macNames", "imic.macLastConnected"]
     let saved = preferenceKeys.map { UserDefaults.standard.object(forKey: $0) }
     defer {
         TokenStore.delete(for: store.macID)

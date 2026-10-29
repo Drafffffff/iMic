@@ -37,7 +37,7 @@ server.onPolishPreferences = { requested, phoneFeatures in
 server.start()
 Task { @MainActor in
     var result: Int32 = 0
-    let keys = ["imic.deviceID", "imic.preferredMacID", "imic.macNames"]
+    let keys = ["imic.deviceID", "imic.preferredMacID", "imic.macNames", "imic.macLastConnected"]
     let previous = keys.map { UserDefaults.standard.object(forKey: $0) }
     defer {
         TokenStore.delete(for: store.macID)
