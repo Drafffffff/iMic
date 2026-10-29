@@ -2,6 +2,79 @@ import AppKit
 import XCTest
 
 final class PolishEffectTests: XCTestCase {
+    func testOverlayFrameNeverMovesToFitTheVisibleWorkArea() {
+        _ = NSApplication.shared
+        let rect = NSRect(x: -2568, y: 21, width: 2576, height: 1343)
+        let panel = SweepPanel(contentRect: rect, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.isReleasedWhenClosed = false
+        XCTAssertEqual(panel.constrainFrameRect(rect, to: NSScreen.screens.last), rect)
+        XCTAssertFalse(panel.canBecomeKey); XCTAssertFalse(panel.canBecomeMain)
+        XCTAssertFalse(panel.isVisible, "A geometry test must not open a foreground window")
+        panel.close()
+    }
+    func testInitialAndFinalRowsUseTheActualSecondaryScreenPanelOrigin() {
+        let screenTop: CGFloat = 1440
+        let glyph = CGRect(x: -2266, y: 1287, width: 346, height: 17)
+        let requested = CGRect(x: -2568, y: 21, width: 2576, height: 1343)
+        let displaced = requested.offsetBy(dx: 0, dy: -8)
+        let initial = SweepPanelCoordinates.row(glyph, panel: requested, screenTop: screenTop)
+        let final = SweepPanelCoordinates.row(glyph, panel: displaced, screenTop: screenTop)
+        XCTAssertEqual(initial.minY+requested.minY, final.minY+displaced.minY)
+        XCTAssertEqual(screenTop-(initial.maxY+requested.minY), glyph.minY)
+        let wrongScreenY = screenTop-(initial.maxY+displaced.minY)
+        XCTAssertEqual(wrongScreenY-glyph.minY, 8, "Using the requested origin after AppKit shifts the panel reproduces the initial downward offset")
+        let point = SweepPanelCoordinates.point(CGPoint(x: glyph.maxX, y: glyph.midY), panel: displaced, screenTop: screenTop)
+        XCTAssertEqual(point.x+displaced.minX, glyph.maxX)
+        XCTAssertEqual(screenTop-point.y-displaced.minY, glyph.midY)
+    }
+
+    func testBottomAnchoredShrinkFollowsTheVisibleTopInsteadOfTheBottom() {
+        let old = CGRect(x: 20, y: 300, width: 500, height: 90)
+        let new = CGRect(x: 25, y: 330, width: 500, height: 60)
+        let delta = FieldFollow.delta(from: old, to: new)
+        XCTAssertEqual(delta.dx, 5); XCTAssertEqual(delta.dy, 30)
+        // An underline under row 1 must move down with the new top edge.
+        XCTAssertEqual(CGRect(x: 30, y: 310, width: 100, height: 20).offsetBy(dx: delta.dx, dy: delta.dy).minY, 340)
+        XCTAssertEqual(FieldFollow.delta(from: old, to: CGRect(x: 20, y: 300, width: 500, height: 160)).dy, 0)
+    }
+    func testFieldResizeIsFollowableButWindowReplacementIsFatal() {
+        let old = FieldFollow.Geometry(windowID: 1, window: CGRect(x: 0, y: 0, width: 800, height: 600),
+            element: CGRect(x: 20, y: 300, width: 500, height: 90), visible: CGRect(x: 20, y: 300, width: 500, height: 90))
+        var new = old; new.element.origin.y += 30; new.visible.origin.y += 30; new.element.size.height -= 30
+        XCTAssertEqual(FieldFollow.classify(old: old, new: new), .followable)
+        new = old; new.windowID = 2
+        XCTAssertEqual(FieldFollow.classify(old: old, new: new), .fatal)
+        new = old; new.window.origin.y += 30
+        XCTAssertEqual(FieldFollow.classify(old: old, new: new), .fatal)
+        XCTAssertEqual(FieldFollow.classify(old: old, new: nil), .fatal)
+    }
+    func testAnimatedGeometryResetsStabilityAndBoundsTheVisualDeadline() {
+        var geometry = FieldFollow.Geometry(windowID: 1, window: CGRect(x: 0, y: 0, width: 800, height: 600),
+            element: CGRect(x: 20, y: 300, width: 500, height: 90), visible: CGRect(x: 20, y: 300, width: 500, height: 90))
+        var tracker = FieldFollow.Stability()
+        tracker.observe(geometry, at: 0)
+        tracker.observe(geometry, at: 0.03)
+        XCTAssertNil(tracker.stableSince)
+        tracker.observe(geometry, at: 0.06)
+        XCTAssertEqual(tracker.stableSince, 0.06)
+        XCTAssertEqual(tracker.deadline(start: 0), 0.36, accuracy: 0.001)
+        geometry.visible.origin.y += 1
+        tracker.observe(geometry, at: 0.09)
+        XCTAssertNil(tracker.stableSince)
+        XCTAssertEqual(tracker.deadline(start: 0), 0.9)
+        tracker.observe(geometry, at: 0.85); tracker.observe(geometry, at: 0.88)
+        XCTAssertEqual(tracker.deadline(start: 0), 0.9)
+    }
+    func testEstimateUsesLatestFieldOriginExactlyOnceAfterFollowing() {
+        let old = CGRect(x: 20, y: 100, width: 120, height: 90)
+        let new = CGRect(x: 30, y: 130, width: 120, height: 60)
+        let rows = [CGRect(x: 30, y: 110, width: 70, height: 20), CGRect(x: 30, y: 135, width: 70, height: 20)]
+        let estimate = PolishEndpointEstimate.layout(original: String(repeating: "字", count: 14), final: "字字字", rows: rows,
+            field: new, referenceField: old)
+        XCTAssertEqual(estimate.first?.minX, 40)
+        XCTAssertEqual(estimate.first?.minY, 140)
+    }
+
     func testWindowFallbackIncludesFloatingDialogButNeverOtherApp() {
         let main = PolishWindowSelection.Candidate(id: 1, pid: 10, frame: CGRect(x: 0, y: 0, width: 800, height: 600), layer: 0, visible: true)
         let dialog = PolishWindowSelection.Candidate(id: 2, pid: 10, frame: CGRect(x: 100, y: 100, width: 400, height: 200), layer: 8, visible: true)

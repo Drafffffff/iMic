@@ -5,7 +5,7 @@ Every case opens its own throwaway document or test page, types a draft at a
 chosen caret position, lets the sweep run, replaces it with a "polished" final
 text and records screenshots plus the effect log. It never presses Return.
 """
-import base64, json, math, os, subprocess, sys, time, urllib.parse
+import base64, json, math, os, subprocess, sys, time, urllib.parse, plistlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 APP = os.environ.get("IMIC_SELFTEST_APP", os.path.join(ROOT, "build/polish-apps.noindex/iMic.app"))
@@ -30,7 +30,10 @@ GROW_F = "第一行：文字从少量扩展成完整内容。\n第二行：输�
 SCROLL_PRE = "".join(f"这是第 {i} 行已有的文字，用来把输入区域撑到需要滚动。\n" for i in range(1, 31))
 
 # name: (pre, post, typed, final, multiline_only)
+RESIZE_DRAFT = "第一行是要整理的草稿，保留按住说话的节奏。\n第二行讨论输入框从三行缩成两行时的位置。\n第三行检查骨架线是否紧贴文字而没有跳动。"
 CASES = {
+    "shrink": ("", "", RESIZE_DRAFT, "保留按住说话的节奏。\n检查两行文字与骨架线的位置。", True),
+    "shrink-to-one": ("", "", RESIZE_DRAFT, "检查缩成一行后骨架线和文字仍然对齐。", True),
     "empty":      ("", "", MED, MED_F, False),
     "after":      ("已有的前文内容。", "", MIX, MIX_F, False),
     "before":     ("", "后面已有的文字。", MED, MED_F, False),
@@ -112,6 +115,10 @@ def new_window(app):
 SHELL_CASES = {"empty", "after", "spaces", "short", "long-line", "shorten"}
 
 TARGETS = {
+    "chrome-grow-bottom": (page("Google Chrome", "grow-bottom"), True),
+    "chrome-grow-top": (page("Google Chrome", "grow-top"), True),
+    "chrome-grow-animated": (page("Google Chrome", "grow-animated"), True),
+    "chrome-grow-max": (page("Google Chrome", "grow-max"), True),
     "chrome-input":    (page("Google Chrome", "input"), False),
     "chrome-textarea": (page("Google Chrome", "textarea"), True),
     "chrome-rich":     (page("Google Chrome", "rich"), True),
@@ -126,7 +133,19 @@ TARGETS = {
     "otty":            (new_window("Otty"), False),
 }
 
+def bundle_for_target(target):
+    app = ("Google Chrome" if target.startswith("chrome-") else "Safari" if target.startswith("safari-")
+           else {"textedit": "TextEdit", "zed": "Zed", "cursor": "Cursor", "terminal": "Terminal", "iterm": "iTerm", "otty": "Otty"}[target])
+    for root in ("/Applications", "/System/Applications", "/System/Applications/Utilities"):
+        path = os.path.join(root, app + ".app", "Contents/Info.plist")
+        if os.path.exists(path):
+            with open(path, "rb") as f: return plistlib.load(f)["CFBundleIdentifier"]
+    raise RuntimeError("Test target is not installed: " + app)
+
 def run_case(target, case):
+    growing = target.startswith("chrome-grow-")
+    if growing and case not in ("shrink", "grow", "shrink-to-one"): return None
+    if not growing and case in ("shrink", "shrink-to-one"): return None
     prepare, multiline = TARGETS[target]
     pre, post, typed, final, multiline_only = CASES[case]
     if multiline_only and not multiline:
@@ -138,9 +157,14 @@ def run_case(target, case):
     keys, cleanup = prepare(case)
     name = f"{target}--{case}"
     env = ["--env", f"IMIC_RESULT_DELAY={os.environ['IMIC_RESULT_DELAY']}"] if os.environ.get("IMIC_RESULT_DELAY") else []
-    subprocess.run(["open", "-n", "-g", "-W"] + env + [APP, "--args", f"--out={OUT}", f"--name={name}",
-                    "--keys=" + ",".join(keys), f"--type-b64={b64(typed)}", f"--final-b64={b64(final)}",
-                    "--cleanup=" + ",".join(cleanup)] + (["--probe-enhanced"] if os.environ.get("IMIC_PROBE_ENHANCED") else []), check=False)
+    args = [f"--expected-bundle={bundle_for_target(target)}", f"--out={OUT}", f"--name={name}", "--keys=" + ",".join(keys),
+            f"--type-b64={b64(typed)}", f"--final-b64={b64(final)}", "--cleanup=" + ",".join(cleanup)]
+    if os.environ.get("IMIC_PROBE_ENHANCED"): args.append("--probe-enhanced")
+    if os.environ.get("IMIC_SELFTEST_LAUNCH") == "direct":
+        # Uses the invoking tool's existing grants; never edits TCC or installs an app.
+        subprocess.run([os.path.join(APP, "Contents/MacOS/iMic")] + args, check=False)
+    else:
+        subprocess.run(["open", "-n", "-g", "-W"] + env + [APP, "--args"] + args, check=False)
     time.sleep(0.6)
     try:
         with open(os.path.join(OUT, name + ".json")) as handle:
@@ -190,3 +214,5 @@ if __name__ == "__main__":
             print(json.dumps(row, ensure_ascii=False), flush=True)
     with open(os.path.join(OUT, "summary.json"), "w") as handle:
         json.dump(rows, handle, ensure_ascii=False, indent=1)
+    # An interrupted fixture is not a passing visual regression run.
+    if any(row.get("status") != "ok" for row in rows): sys.exit(1)

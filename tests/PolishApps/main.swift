@@ -14,6 +14,7 @@ struct Options {
     var typed = ""
     var final = ""
     var cleanup: [String] = []
+    var expectedBundle = ""
 
     init(_ arguments: [String]) {
         func decode(_ value: String) -> String {
@@ -28,6 +29,7 @@ struct Options {
             case "--keys": keys = parts[1].split(separator: ",").map(String.init)
             case "--type-b64": typed = decode(parts[1])
             case "--final-b64": final = decode(parts[1])
+            case "--expected-bundle": expectedBundle = parts[1]
             case "--cleanup": cleanup = parts[1].split(separator: ",").map(String.init)
             default: break
             }
@@ -35,6 +37,11 @@ struct Options {
     }
 }
 
+if CommandLine.arguments.contains("--check-permissions") {
+    let ax = AXIsProcessTrusted(), capture = CGPreflightScreenCaptureAccess()
+    print("accessibility=\(ax) screen_capture=\(capture)")
+    exit(ax && capture ? 0 : 2)
+}
 let options = Options(CommandLine.arguments)
 let startedAt = Date()
 var result: [String: Any] = ["name": options.name]
@@ -86,7 +93,7 @@ func post(_ token: String, pid: pid_t) {
         for down in [true, false] {
             guard let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else { continue }
             event.flags = flags
-            event.post(tap: .cghidEventTap)
+            event.postToPid(pid)
         }
         usleep(name == "delete" ? 3_000 : 25_000)
     }
@@ -245,25 +252,36 @@ func markerSteps(_ element: AXUIElement, pid: pid_t) -> [String: Any] {
 // MARK: - Screenshots
 
 @available(macOS 14.0, *)
+private var captureCache: (SCContentFilter, SCStreamConfiguration)?
+
+@available(macOS 14.0, *)
 func snapshot(_ region: CGRect, _ label: String) {
+    var requested = result["snapshotRequestedMS"] as? [String: Int] ?? [:]
+    requested[label] = Int(Date().timeIntervalSince(startedAt)*1000)
+    result["snapshotRequestedMS"] = requested
     Task {
-        guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true),
-              let display = content.displays.first(where: { CGDisplayBounds($0.displayID).intersects(region) }) ?? content.displays.first
-        else { return }
-        let bounds = CGDisplayBounds(display.displayID)
-        let local = region.intersection(bounds).offsetBy(dx: -bounds.minX, dy: -bounds.minY)
-        guard local.width > 4, local.height > 4 else { return }
-        let configuration = SCStreamConfiguration()
-        configuration.sourceRect = local
-        configuration.width = Int(local.width*2); configuration.height = Int(local.height*2)
-        configuration.showsCursor = false
-        configuration.scalesToFit = true
-        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let filter: SCContentFilter, configuration: SCStreamConfiguration
+        if let cache = captureCache { (filter, configuration) = cache }
+        else {
+            guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true),
+                  let display = content.displays.first(where: { CGDisplayBounds($0.displayID).intersects(region) }) ?? content.displays.first
+            else { return }
+            let bounds = CGDisplayBounds(display.displayID)
+            let local = region.intersection(bounds).offsetBy(dx: -bounds.minX, dy: -bounds.minY)
+            guard local.width > 4, local.height > 4 else { return }
+            configuration = SCStreamConfiguration()
+            configuration.sourceRect = local
+            configuration.width = Int(local.width*2); configuration.height = Int(local.height*2)
+            configuration.showsCursor = false; configuration.scalesToFit = true
+            filter = SCContentFilter(display: display, excludingWindows: [])
+            captureCache = (filter, configuration)
+        }
         guard let image = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration) else { return }
         let url = options.out.appendingPathComponent("\(options.name)-\(label).png")
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else { return }
-        CGImageDestinationAddImage(destination, image, nil)
-        CGImageDestinationFinalize(destination)
+        CGImageDestinationAddImage(destination, image, nil); CGImageDestinationFinalize(destination)
+        var timings = result["snapshotCompletedMS"] as? [String: Int] ?? [:]
+        timings[label] = Int(Date().timeIntervalSince(startedAt)*1000); result["snapshotCompletedMS"] = timings
     }
 }
 
@@ -273,8 +291,16 @@ func run() {
     guard AXIsProcessTrusted() else { result["error"] = "accessibility_not_granted"; finish("error"); return }
     guard let front = NSWorkspace.shared.frontmostApplication else { finish("error"); return }
     let pid = front.processIdentifier
+    guard options.expectedBundle.isEmpty || front.bundleIdentifier == options.expectedBundle else {
+        result["error"] = "unexpected_frontmost_app"; finish("error"); return
+    }
     result["app"] = front.bundleIdentifier ?? front.localizedName ?? "?"
     result["capture"] = CGPreflightScreenCaptureAccess()
+    func fixtureHasSheet() -> Bool {
+        guard let node = focused(pid) else { return false }
+        return attribute(node, kAXRoleAttribute) as? String == "AXSheet"
+    }
+    guard !fixtureHasSheet() else { result["error"] = "fixture_modal_sheet"; finish("error"); return }
     for key in options.keys {
         if key == "focus-web" { result["focusWeb"] = focusWebField(pid); usleep(300_000) }
         else if key.hasPrefix("wait:") { usleep(useconds_t((Int(key.dropFirst(5)) ?? 0) * 1000)) }
@@ -283,6 +309,10 @@ func run() {
         } else { post(key, pid: pid) }
     }
     usleep(150_000)
+    guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
+        result["error"] = "frontmost_changed_before_fixture_input"; finish("error"); return
+    }
+    guard !fixtureHasSheet() else { result["error"] = "fixture_modal_sheet"; finish("error"); return }
     type(options.typed, pid: pid)
     usleep(450_000)
 
@@ -337,12 +367,25 @@ func run() {
         region = CGRect(x: point.x-620, y: point.y-170, width: 900, height: 300)
     }
 
+    if options.name.contains("chrome-grow-") { region = field.insetBy(dx: -40, dy: -180) }
+    if let owner = attribute(element, kAXWindowAttribute), CFGetTypeID(owner) == AXUIElementGetTypeID(),
+       let window = frame(owner as! AXUIElement) { region = region.intersection(window) }
     let target = InputTarget.capture(pid: pid)
+    let visualStartedAt = Date()
     let effect = TextPolishEffect()
+    let fixtureLock = NSLock()
+    var fixtureInterrupted = false
+    func mayTypeFixture() -> Bool {
+        fixtureLock.lock(); let stopped = fixtureInterrupted; fixtureLock.unlock()
+        return !stopped && NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+    }
     effect.beginSession()
     effect.prepare(pid: pid, element: target.visualElement, text: options.typed,
                    allowed: { NSWorkspace.shared.frontmostApplication?.processIdentifier == pid },
-                   interrupted: { phases.append("interrupted") })
+                   interrupted: {
+                       fixtureLock.lock(); fixtureInterrupted = true; fixtureLock.unlock()
+                       phases.append("interrupted")
+                   })
     var last = ""
     var shots = Set<String>()
     var wrote: Date?
@@ -355,6 +398,8 @@ func run() {
                 // Let the landing squash settle before the geometry shot.
                 DispatchQueue.main.asyncAfter(deadline: .now()+0.25) { snapshot(region, "hold") }
             }
+            if let wrote, Date().timeIntervalSince(wrote) > 0.08, !shots.contains("mid1") { shots.insert("mid1"); snapshot(region, "mid1") }
+            if let wrote, Date().timeIntervalSince(wrote) > 0.20, !shots.contains("mid2") { shots.insert("mid2"); snapshot(region, "mid2") }
             if let wrote, Date().timeIntervalSince(wrote) > 0.12, !shots.contains("loading") { shots.insert("loading"); snapshot(region, "loading") }
             if let wrote, Date().timeIntervalSince(wrote) > 0.24, !shots.contains("reshaped") { shots.insert("reshaped"); snapshot(region, "reshaped") }
             if let wrote, Date().timeIntervalSince(wrote) > 0.3, !shots.contains("final") { shots.insert("final"); snapshot(region, "final") }
@@ -369,14 +414,27 @@ func run() {
     let resultDelay = Double(ProcessInfo.processInfo.environment["IMIC_RESULT_DELAY"] ?? "") ?? 0.9
     DispatchQueue.main.asyncAfter(deadline: .now()+resultDelay) {
         effect.deliverAfterSweep {
-            // Deletes go to the same process queue as the typing, then settle, so
-            // the two streams cannot interleave (iMic's own revisions are ordered too).
-            deleteBackward(options.typed.count, pid: pid)
-            usleep(250_000)
-            type(options.final, pid: pid)
-            wrote = Date()
-            DispatchQueue.main.asyncAfter(deadline: .now()+0.06) {
-                effect.finishDelivery(succeeded: true, finalText: options.final, verified: false)
+            // Do not block the animation's main thread while the composer
+            // collapses and grows. This worker posts one ordered input sequence.
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard mayTypeFixture() else {
+                    DispatchQueue.main.async { result["error"] = "frontmost_changed_before_fixture_replacement"; effect.cancel(); finish("error") }
+                    return
+                }
+                deleteBackward(options.typed.count, pid: pid)
+                usleep(250_000)
+                guard mayTypeFixture() else {
+                    DispatchQueue.main.async { result["error"] = "fixture_interrupted_during_replacement"; effect.cancel(); finish("error") }
+                    return
+                }
+                type(options.final, pid: pid)
+                DispatchQueue.main.async {
+                    wrote = Date()
+                    result["writeCompletedMS"] = Int(Date().timeIntervalSince(startedAt)*1000)
+                    DispatchQueue.main.asyncAfter(deadline: .now()+0.06) {
+                        effect.finishDelivery(succeeded: true, finalText: options.final, verified: false)
+                    }
+                }
             }
         }
     }
@@ -385,10 +443,11 @@ func run() {
         if let wrote, Date().timeIntervalSince(wrote) < 2.0 || effect.phase == .writing && Date().timeIntervalSince(wrote) < 3.0 {
             DispatchQueue.main.asyncAfter(deadline: .now()+0.1) { end() }; return
         }
-        if wrote == nil, Date().timeIntervalSince(startedAt) < 8 { DispatchQueue.main.asyncAfter(deadline: .now()+0.1) { end() }; return }
+        if wrote == nil, Date().timeIntervalSince(visualStartedAt) < 8 { DispatchQueue.main.asyncAfter(deadline: .now()+0.1) { end() }; return }
         timer.invalidate()
+        guard wrote != nil else { result["error"] = "fixture_no_final_delivery"; effect.cancel(); finish("error"); return }
         if let element = focused(pid), let point = caret(element) { result["caretFinal"] = [Int(point.x), Int(point.y)] }
-        options.cleanup.forEach { post($0, pid: pid) }
+        if mayTypeFixture() { options.cleanup.forEach { post($0, pid: pid) } }
         effect.cancel()
         finish("ok")
     }

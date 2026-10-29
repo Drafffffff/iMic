@@ -142,6 +142,62 @@ enum TextViewport {
     }
 }
 
+/// Both the initial sweep and later layout must use the overlay's actual
+/// screen-space origin, including on a secondary display with a nonzero origin.
+enum SweepPanelCoordinates {
+    static func row(_ rect: CGRect, panel: CGRect, screenTop: CGFloat) -> CGRect {
+        CGRect(x: rect.minX-panel.minX, y: screenTop-rect.maxY-panel.minY, width: rect.width, height: rect.height)
+    }
+    static func point(_ point: CGPoint, panel: CGRect, screenTop: CGFloat) -> CGPoint {
+        CGPoint(x: point.x-panel.minX, y: screenTop-point.y-panel.minY)
+    }
+}
+
+/// AX screen coordinates grow downward. The top-left of the visible field is
+/// the text origin for both top-anchored and bottom-anchored auto-growing fields.
+/// These values are visual hints only and cannot authorize input.
+enum FieldFollow {
+    static let sampleInterval: TimeInterval = 0.03
+    static let stableGrace: TimeInterval = 0.3
+    static let maximumSettlement: TimeInterval = 0.9
+    struct Geometry: Equatable {
+        var windowID: UInt32
+        var window: CGRect
+        var element: CGRect
+        var visible: CGRect
+    }
+    enum Change { case fatal, followable, none }
+    static func same(_ a: CGRect, _ b: CGRect) -> Bool {
+        abs(a.minX-b.minX) < 0.5 && abs(a.minY-b.minY) < 0.5
+            && abs(a.width-b.width) < 0.5 && abs(a.height-b.height) < 0.5
+    }
+    static func classify(old: Geometry, new: Geometry?) -> Change {
+        guard let new, new.windowID == old.windowID, same(old.window, new.window),
+              !new.visible.isEmpty, !new.visible.isInfinite, !new.visible.isNull,
+              !new.element.isEmpty else { return .fatal }
+        return same(old.element, new.element) && same(old.visible, new.visible) ? .none : .followable
+    }
+    static func delta(from old: CGRect, to new: CGRect) -> CGVector {
+        CGVector(dx: new.minX-old.minX, dy: new.minY-old.minY)
+    }
+    struct Stability {
+        private var last: Geometry?
+        private var unchanged = 0
+        private var unchangedSince: TimeInterval?
+        private(set) var stableSince: TimeInterval?
+        mutating func observe(_ geometry: Geometry, at time: TimeInterval) {
+            if let last, FieldFollow.classify(old: last, new: geometry) == .none {
+                unchanged += 1
+                if unchanged >= 2 && time-(unchangedSince ?? time) >= sampleInterval*2-0.0001 && stableSince == nil { stableSince = time }
+            } else { unchanged = 0; stableSince = nil; unchangedSince = time }
+            last = geometry
+        }
+        func deadline(start: TimeInterval) -> TimeInterval {
+            min(start + maximumSettlement, (stableSince ?? (start + maximumSettlement)) + stableGrace)
+        }
+    }
+}
+
 /// Visual fallback only: approximate reflow using the two transcripts and the
 /// observed line pitch/advance. It is not a caret or text-delivery assertion.
 enum PolishEndpointEstimate {

@@ -12,12 +12,15 @@ out, runs = sys.argv[1], sys.argv[2:]
 os.makedirs(os.path.join(out, "shots"), exist_ok=True)
 
 APPS = [
+    ("chrome-grow-bottom", "Chrome · 底部固定"), ("chrome-grow-top", "Chrome · 顶部固定"),
+    ("chrome-grow-animated", "Chrome · 160ms 高度过渡"), ("chrome-grow-max", "Chrome · 四行封顶及内部滚动"),
     ("textedit", "TextEdit"), ("safari-textarea", "Safari · textarea"), ("safari-rich", "Safari · 富文本"),
     ("terminal", "Terminal.app"), ("chrome-input", "Chrome · 单行 input"), ("chrome-textarea", "Chrome · textarea"),
     ("chrome-rich", "Chrome · 富文本"), ("chrome-chat-dark", "Chrome · 底部深色对话框"),
     ("cursor", "Cursor"), ("zed", "Zed"), ("iterm", "iTerm"), ("otty", "Otty"),
 ]
 CASES = {
+    "shrink": "三行缩成两行", "shrink-to-one": "三行缩成一行",
     "empty": "空白输入框", "after": "已有文字之后", "before": "已有文字之前", "middle": "行中间",
     "spaces": "前后带空格", "short": "两字短文本", "nl-before": "前面有换行", "nl-after": "后面有换行",
     "between": "两个段落之间", "grow": "一行扩成四行", "scrolled": "长文滚动后", "long-line": "超长单行", "shorten": "润色后变短",
@@ -59,6 +62,8 @@ def classify(data):
         elif "fallback=window_ocr" in line: tier = "window_ocr"
     if tier == "-" and any("ocr lines=" in l and "ocr lines=0" not in l for l in effect): tier = "ocr"
     skipped = next((l.split("reason=")[1] for l in effect if "skipped reason=" in l), "")
+    if data.get("role") == "AXSheet": skipped = "fixture_modal_sheet"
+    elif data.get("error"): skipped = data["error"]
     _, sweep = end(effect, "sweep lines=")
     release, landed = end(effect, "release source=")
     caret_typed, caret_final = data.get("caretTyped") or None, data.get("caretFinal") or None
@@ -66,12 +71,12 @@ def classify(data):
         caret_typed = caret_final = None   # terminal AX carets are half-width for CJK; judge by screenshot
     sweep_delta = round(math.dist(sweep, caret_typed)) if sweep and caret_typed else None
     release_delta = round(math.dist(landed, caret_final)) if landed and caret_final else None
-    if data.get("status") != "ok" or data.get("error"):
+    if data.get("status") != "ok" or data.get("error") or data.get("role") == "AXSheet":
         verdict = "error"
     elif skipped and not release:
         verdict = "skip"
     elif release == "display_deadline_estimated":
-        verdict = "estimate" if (release_delta or 0) > 3 else "ok"
+        verdict = "estimate"
     elif release:
         verdict = "ok" if release_delta is None or release_delta <= 3 else "offset"
     else:
@@ -115,10 +120,10 @@ for key, title in APPS:
 <td>{html.escape(info['tier'])}{reason}</td><td>{delta(info['sweep'])}</td>
 <td>{html.escape(info['release'])}</td><td>{delta(info['release_delta'])}</td>
 <td><span class="badge {css}">{label}</span></td>
-<td class="shots">{shot(data, 'hold')}{shot(data, 'final')}</td></tr>""")
+<td class="shots">{shot(data, 'hold')}{shot(data, 'mid1')}{shot(data, 'mid2')}{shot(data, 'final')}</td></tr>""")
     note = f'<p class="note">{html.escape(NOTES[key])}</p>' if key in NOTES else ""
     sections.append(f"""<section id="{key}"><h2>{html.escape(title)}</h2>{note}
-<table><thead><tr><th>情形</th><th>定位方式</th><th>扫光端点偏差</th><th>收尾依据</th><th>收尾端点偏差</th><th>结论</th><th>保持阶段 / 收尾截图</th></tr></thead>
+<table><thead><tr><th>情形</th><th>定位方式</th><th>扫光端点偏差</th><th>收尾依据</th><th>收尾端点偏差</th><th>结论</th><th>保持 / 写入后约80ms / 约200ms / 收尾截图</th></tr></thead>
 <tbody>{''.join(body)}</tbody></table></section>""")
     summary.append(f"""<tr><td><a href="#{key}">{html.escape(title)}</a></td><td>{counts['ok']}</td><td>{counts['estimate'] + counts['offset']}</td>
 <td>{counts['skip'] + counts['error']}</td><td>{html.escape(NOTES.get(key, ''))}</td></tr>""")
@@ -138,7 +143,7 @@ th {{ font-weight: 600; background: #f2f2f2; position: sticky; top: 0; }}
 <h1>iMic 输入框扫光验证报告</h1>
 <p class="muted">数据来源（后者覆盖前者的同名用例）：{html.escape(' → '.join(os.path.basename(os.path.normpath(r)) for r in runs))}</p>
 <p>偏差是扫光或收尾端点与系统插入光标之间的距离；编辑器不提供光标位置时（Chrome、Zed、部分 Cursor）显示「—」，需要看截图。
-「估算」表示最终布局没拿到确认几何、按字宽估算的端点偏离光标超过 3px；「偏差」表示已确认位置但端点仍偏离光标超过 3px；「未显示」表示定位失败、直接输入文字，不影响输入本身。</p>
+截图调度后还需系统截图完成，具体完成时间见 JSON 的 snapshotCompletedMS 与 writeCompletedMS。\n「估算」表示最终布局没有拿到确认几何，使用了字宽估算；光标不可读时也不能算作已确认通过。「偏差」表示已确认位置但端点仍偏离光标超过 3px；「未显示」表示定位失败、直接输入文字，不影响输入本身。</p>
 <h2>汇总</h2>
 <table><thead><tr><th>应用</th><th>通过</th><th>估算 / 偏差</th><th>未显示</th><th>备注</th></tr></thead><tbody>{''.join(summary)}</tbody></table>
 {''.join(sections)}
