@@ -5,6 +5,7 @@ final class OnboardingCoordinator: ObservableObject {
     static let completedKey = "imic.onboarding.completedVersion"
     static let stepKey = "imic.onboarding.step"
     static let tutorialKey = "imic.tutorial.completedVersion"
+    private static let practiceOriginKey = "imic.onboarding.practiceReturnsToMac"
     @Published var presented = false
     @Published private(set) var step: OnboardingStep = .welcome
     @Published private(set) var practiceReturnsToMac = false
@@ -20,7 +21,7 @@ final class OnboardingCoordinator: ObservableObject {
         let args = ProcessInfo.processInfo.arguments
         if args.contains("--debug-reset-onboarding") {
             try? FileManager.default.removeItem(at: IMicLog.fileURL)
-            [Self.completedKey, Self.stepKey, Self.tutorialKey].forEach { defaults.removeObject(forKey: $0) }
+            [Self.completedKey, Self.stepKey, Self.tutorialKey, Self.practiceOriginKey].forEach { defaults.removeObject(forKey: $0) }
         }
         preview = args.first { $0.hasPrefix("--ui-preview=onboarding-") }
             .map { String($0.dropFirst("--ui-preview=onboarding-".count)) }
@@ -45,7 +46,7 @@ final class OnboardingCoordinator: ObservableObject {
             case .show(let saved):
                 step = saved; presented = true
                 searchRequested = saved == .link || saved == .pair
-                practiceReturnsToMac = saved == .practice && !link.hasPairedMac && link.pairedMacIDs.isEmpty
+                practiceReturnsToMac = saved == .practice && defaults.bool(forKey: Self.practiceOriginKey)
             }
         }
         link.startDeferred = presented
@@ -54,9 +55,17 @@ final class OnboardingCoordinator: ObservableObject {
 
     func go(_ next: OnboardingStep) {
         step = next
-        if preview == nil { defaults.set(next.rawValue, forKey: Self.stepKey) }
+        if next != .practice { practiceReturnsToMac = false }
+        if preview == nil {
+            defaults.set(next.rawValue, forKey: Self.stepKey)
+            if next != .practice { defaults.removeObject(forKey: Self.practiceOriginKey) }
+        }
     }
-    func practiceFromMac() { practiceReturnsToMac = true; go(.practice) }
+    func practiceFromMac() {
+        practiceReturnsToMac = true
+        if preview == nil { defaults.set(true, forKey: Self.practiceOriginKey) }
+        go(.practice)
+    }
     func finishPractice() {
         defaults.set(1, forKey: Self.tutorialKey)
         go(practiceReturnsToMac ? .mac : .ready)
@@ -66,6 +75,7 @@ final class OnboardingCoordinator: ObservableObject {
     func complete() {
         defaults.set(OnboardingPolicy.version, forKey: Self.completedKey)
         defaults.removeObject(forKey: Self.stepKey)
+        defaults.removeObject(forKey: Self.practiceOriginKey)
         presented = false
     }
 }

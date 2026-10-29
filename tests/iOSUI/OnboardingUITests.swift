@@ -98,6 +98,19 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["https://drafffffff.github.io/iMic/?from=ios#download"].exists)
         shot(app, "Download and copied URL")
     }
+    func testPracticeFromMacRestoresItsReturnDestination() {
+        let app = launch(["--debug-reset-onboarding"])
+        tap("开始", in: app)
+        tap("先看看怎么用", in: app)
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        XCTAssertTrue(app.staticTexts["HOLD"].waitForExistence(timeout: 15))
+        for _ in 0..<5 { tap("跳过", in: app) }
+        tap("完成练习", in: app)
+        XCTAssertTrue(app.buttons["已经装好了"].waitForExistence(timeout: 5))
+        shot(app, "Restored practice returns to Mac setup")
+    }
     func testRestoresMacStepAfterRelaunch() {
         let app = launch(["--debug-reset-onboarding"])
         tap("开始", in: app)
