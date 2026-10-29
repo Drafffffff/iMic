@@ -118,7 +118,6 @@ final class OnboardingUITests: XCTestCase {
         let app = launch(["--ui-preview=onboarding-search-timeout"])
         XCTAssertTrue(app.staticTexts["2. iPhone 和 Mac 是否在同一个 Wi-Fi？"].exists)
         shot(app, "Timeout troubleshooting")
-        tap("打开设置", in: app)
     }
     func testExistingPairedPreviewSkipsOnboarding() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-preview=idle"]; app.launch()
