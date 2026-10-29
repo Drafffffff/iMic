@@ -64,10 +64,10 @@ enum VerifiedKeyMemory {
     static func digest(_ key: String) -> String {
         SHA256.hash(data: Data(key.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
     }
-    static func isVerified(_ key: String, defaults: UserDefaults = .standard) -> Bool {
+    static func isVerified(_ key: String, defaults: UserDefaults = MacPreferences.defaults) -> Bool {
         defaults.string(forKey: defaultsKey) == digest(key)
     }
-    static func remember(_ key: String, defaults: UserDefaults = .standard) {
+    static func remember(_ key: String, defaults: UserDefaults = MacPreferences.defaults) {
         defaults.set(digest(key), forKey: defaultsKey)
     }
 }

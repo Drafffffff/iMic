@@ -12,12 +12,13 @@ private let portArgument = launchArguments.first { $0.hasPrefix("--port=") }
     .flatMap { UInt16($0.dropFirst("--port=".count)) }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let store = PairingStore()
+    let store = PairingStore(directory: previewMode == nil ? PairingStore.defaultDirectory : FileManager.default.temporaryDirectory.appendingPathComponent("iMic-preview-\(UUID().uuidString)"))
     lazy var link = LinkServer(store: store, port: portArgument)
 
     var statusItem: NSStatusItem!
     var window: NSWindow!
     var settingsWindow: NSWindow!
+    var settingsCoordinator: SettingsWindowCoordinator?
     var setupWizard: SetupWizard?
     /// Fake wizard state for --ui-preview=setup-*; never used with real permissions.
     var previewSetup: SetupSnapshot?
@@ -45,8 +46,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let automatic = NSButton(checkboxWithTitle: "自动输入", target: nil, action: nil)
     var copyButton: NSButton!
     let key = NSSecureTextField()
-    var keyHint: NSTextField!
-    let model = NSTextField(string: ASRConfiguration.current().model)
     let endpoint = NSTextField(string: ASRConfiguration.current().endpoint)
     let permissionState = NSTextField(labelWithString: "")
     let settingsPermissionLabel = NSTextField(labelWithString: "")
@@ -54,8 +53,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var settingsPermissionButton: NSButton!
     var testInputButton: NSButton!
     let saveFeedback = NSTextField(labelWithString: "")
-    var advanced: NSStackView!
-    var advancedButton: NSButton!
     var pairedList: NSStackView!
     var cueView: NSView!
     var snapReturnCheck: NSButton!
@@ -64,16 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var deepseekCheck: NSButton!
     /// Mode, tone, language and service; shown only while polish is on.
     var polishFields: NSStackView?
-    let deepseekKey = NSSecureTextField()
-    let deepseekModel = NSTextField(string: DeepSeekConfiguration.modelName)
-    var deepseekHint: NSTextField!
     let polishProviderPicker = NSPopUpButton(frame: .zero, pullsDown: false)
-    let polishEndpoint = NSTextField()
-    var polishAdvanced: NSStackView!
-    var polishAdvancedButton: NSButton!
-    var polishAddressHint: NSTextField!
-    var editingPolishProvider = DeepSeekConfiguration.provider
-    var polishDrafts: [PolishProvider: (model: String, endpoint: String, key: String)] = [:]
     var polishToneButtons: NSSegmentedControl!
     var polishModeButtons: NSSegmentedControl!
     var polishOptionsHint: NSTextField!
@@ -180,7 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.setActivationPolicy(.accessory)
         buildUI()
-        automatic.state = UserDefaults.standard.object(forKey: "automaticInput") as? Bool ?? true ? .on : .off
+        automatic.state = MacPreferences.defaults.object(forKey: "automaticInput") as? Bool ?? true ? .on : .off
         refreshInputPermission()
         refreshUI()
         updateStatusBar()
@@ -341,19 +329,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var snapReturnEnabled: Bool {
-        UserDefaults.standard.object(forKey: "snapReturn") as? Bool ?? true
+        MacPreferences.defaults.object(forKey: "snapReturn") as? Bool ?? true
     }
     private var pullDeleteEnabled: Bool {
-        UserDefaults.standard.object(forKey: "pullDelete") as? Bool ?? true
+        MacPreferences.defaults.object(forKey: "pullDelete") as? Bool ?? true
     }
     private var swipeCursorEnabled: Bool {
-        UserDefaults.standard.object(forKey: "swipeCursor") as? Bool ?? true
+        MacPreferences.defaults.object(forKey: "swipeCursor") as? Bool ?? true
     }
     private var livePreviewEnabled: Bool {
-        UserDefaults.standard.object(forKey: "livePreview") as? Bool ?? true
+        MacPreferences.defaults.object(forKey: "livePreview") as? Bool ?? true
     }
     private var bleFallbackEnabled: Bool {
-        UserDefaults.standard.object(forKey: "bleFallback") as? Bool ?? true
+        MacPreferences.defaults.object(forKey: "bleFallback") as? Bool ?? true
     }
     private var featureMask: Int {
         (livePreviewEnabled ? 0b0001 : 0)
@@ -370,15 +358,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         LinkPolishPreferences(enabled: DeepSeekConfiguration.enabled, options: DeepSeekConfiguration.options)
     }
 
-    private func sendFeatureSettings() {
+    func sendFeatureSettings() {
         guard link.isConnected else { return }
         IMicLog.write("mac.settings", "send features=\(featureMask)")
         link.send(.settings(features: featureMask, polish: polishPreferences))
         sendGestureState()
     }
 
-    private func applyPolishPreferences(_ preferences: LinkPolishPreferences, confirmingSave: Bool) {
-        let defaults = UserDefaults.standard
+    func applyPolishPreferences(_ preferences: LinkPolishPreferences, confirmingSave: Bool) {
+        let defaults = MacPreferences.defaults
         defaults.set(preferences.enabled, forKey: "deepseekEnabled")
         defaults.set(preferences.options.strength.rawValue, forKey: "deepseekStrength")
         defaults.set(preferences.options.scenario.rawValue, forKey: "deepseekScenario")
@@ -392,6 +380,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         polishModeButtons?.selectedSegment = PolishMode.allCases.firstIndex(of: saved.options.mode) ?? 0
         polishOutputPicker?.selectItem(at: PolishOutput.languages.firstIndex(of: saved.options.output) ?? 0)
         updatePolishOptionControls(saved.options)
+        settingsCoordinator?.resize()
         IMicLog.write("mac.settings", "polish source=\(confirmingSave ? "phone" : "mac") enabled=\(saved.enabled) mode=\(saved.options.mode.rawValue) tone=\(saved.options.tone.rawValue) output=\(saved.options.output.rawValue)")
         if confirmingSave {
             link.send(.polishSaved(features: featureMask, polish: saved))
@@ -690,7 +679,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recognizer.start(
             key: key.stringValue,
             endpoint: endpoint.stringValue,
-            model: model.stringValue
+            model: ASRConfiguration.model
         )
     }
 
@@ -815,8 +804,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard PolishCredentials.valid(polishKey, for: provider) else { throw PolishConfigurationError.key }
         } catch {
             IMicLog.write("mac.polish", "skipped provider=\(provider.rawValue) reason=invalid_configuration")
-            deepseekHint?.stringValue = "\(provider.title)：\(error.localizedDescription)，已保留原文。"
-            deepseekHint?.textColor = .systemRed
+            settingsCoordinator?.showServiceError("\(provider.title)：\(error.localizedDescription)，已保留原文。")
             choosePolishResult(session, raw: fallback, polished: nil, latency: latency)
             return
         }
@@ -1267,31 +1255,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func showSettings() {
         refreshInputPermission()
         rebuildPairedList()
+        settingsCoordinator?.show()
         settingsWindow.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc func toggleAutoInput() {
         if currentSession != nil, !committedInputText.isEmpty { liveInputBlocked = true }
-        UserDefaults.standard.set(automatic.state == .on, forKey: "automaticInput")
+        MacPreferences.defaults.set(automatic.state == .on, forKey: "automaticInput")
         refreshInputPermission()
         refreshUI()
     }
 
     @objc func toggleSnapReturn() {
-        UserDefaults.standard.set(snapReturnCheck.state == .on, forKey: "snapReturn")
+        MacPreferences.defaults.set(snapReturnCheck.state == .on, forKey: "snapReturn")
         IMicLog.write("mac.settings", "snapReturn=\(snapReturnCheck.state == .on)")
         sendFeatureSettings()
     }
 
     @objc func togglePullDelete() {
-        UserDefaults.standard.set(pullDeleteCheck.state == .on, forKey: "pullDelete")
+        MacPreferences.defaults.set(pullDeleteCheck.state == .on, forKey: "pullDelete")
         IMicLog.write("mac.settings", "pullDelete=\(pullDeleteCheck.state == .on)")
         sendFeatureSettings()
     }
 
     @objc func toggleSwipeCursor() {
-        UserDefaults.standard.set(swipeCursorCheck.state == .on, forKey: "swipeCursor")
+        MacPreferences.defaults.set(swipeCursorCheck.state == .on, forKey: "swipeCursor")
         IMicLog.write("mac.settings", "swipeCursor=\(swipeCursorCheck.state == .on)")
         sendFeatureSettings()
     }
@@ -1303,92 +1292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    func rememberPolishDraft() {
-        polishDrafts[editingPolishProvider] = (
-            deepseekModel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
-            polishEndpoint.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
-            deepseekKey.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-    }
-
-    @objc func changePolishProvider() {
-        rememberPolishDraft()
-        guard PolishProvider.allCases.indices.contains(polishProviderPicker.indexOfSelectedItem) else { return }
-        editingPolishProvider = PolishProvider.allCases[polishProviderPicker.indexOfSelectedItem]
-        loadPolishProviderFields()
-        saveFeedback.textColor = .imicMuted
-        saveFeedback.stringValue = "来源切换将在保存后生效"
-    }
-
-    func loadPolishProviderFields() {
-        let provider = editingPolishProvider
-        let draft = polishDrafts[provider]
-        deepseekModel.stringValue = draft?.model ?? DeepSeekConfiguration.modelName(for: provider)
-        polishEndpoint.stringValue = draft?.endpoint ?? DeepSeekConfiguration.endpoint(for: provider)
-        deepseekKey.stringValue = provider == .bailian ? key.stringValue : (draft?.key ?? PolishCredentials.load(for: provider))
-        deepseekKey.isEnabled = provider != .bailian
-        deepseekKey.placeholderString = "\(provider.title) API Key"
-        deepseekKey.setAccessibilityLabel("\(provider.title) API Key")
-        deepseekKey.toolTip = provider == .bailian ? "复用上方百炼 API Key；请在上方修改" : nil
-        deepseekModel.placeholderString = provider.defaultModel.isEmpty ? "服务提供的模型名称" : provider.defaultModel
-        polishEndpoint.placeholderString = provider == .custom ? "https://example.com/v1/chat/completions" : provider.defaultEndpoint
-        deepseekHint.textColor = .imicMuted
-        let active = DeepSeekConfiguration.provider.title
-        switch provider {
-        case .deepseek:
-            deepseekHint.stringValue = "当前生效：\(active)。\(credentialNote(for: provider))失败保留原文。"
-            polishAddressHint.stringValue = "完整 Chat Completions 地址，仅允许 api.deepseek.com 的 HTTPS 地址。关闭思考，只整理口述内容。"
-        case .bailian:
-            deepseekHint.stringValue = "当前生效：\(active)。复用上方百炼 Key，一个 Key 同时用于识别与润色；请在上方修改。"
-            polishAddressHint.stringValue = "填完整地址：https://业务空间ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions；默认是北京 DashScope。Key、模型须与地域匹配；关闭思考。"
-        case .custom:
-            deepseekHint.stringValue = "当前生效：\(active)。\(credentialNote(for: provider))不复用其他来源。"
-            polishAddressHint.stringValue = "填写完整 HTTPS Chat Completions 地址，例如 https://example.com/v1/chat/completions，不是 Base URL。不支持思考专用模型；HTTP 仅允许 127.0.0.1 或 [::1] 本机联调。"
-        }
-        let expanded = provider == .custom
-        polishAdvancedButton.state = expanded ? .on : .off
-        updatePolishAdvanced()
-    }
-
-    @objc func togglePolishAdvanced() {
-        updatePolishAdvanced()
-    }
-
-    func updatePolishAdvanced() {
-        let expanded = polishAdvancedButton.state == .on
-        polishAdvanced.isHidden = !expanded
-        polishAdvancedButton.image = NSImage(
-            systemSymbolName: expanded ? "chevron.down" : "chevron.right", accessibilityDescription: nil
-        )
-        polishAdvancedButton.setAccessibilityLabel(expanded ? "收起润色模型与地址" : "展开润色模型与地址")
-    }
-
-    func validatePolishSettings() -> Bool {
-        rememberPolishDraft()
-        guard let draft = polishDrafts[editingPolishProvider] else { return false }
-        do {
-            _ = try DeepSeekClient.validatedURL(provider: editingPolishProvider, model: draft.model, endpoint: draft.endpoint)
-            let selectedKey = editingPolishProvider == .bailian
-                ? key.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) : draft.key
-            if deepseekCheck.state == .on || !selectedKey.isEmpty {
-                guard PolishCredentials.valid(selectedKey, for: editingPolishProvider) else { throw PolishConfigurationError.key }
-            }
-            for (provider, value) in polishDrafts where provider != .bailian && !value.key.isEmpty {
-                guard PolishCredentials.valid(value.key, for: provider) else {
-                    saveFeedback.textColor = .systemRed
-                    saveFeedback.stringValue = "\(provider.title)：API Key 格式无效"
-                    return false
-                }
-            }
-            return true
-        } catch {
-            saveFeedback.textColor = .systemRed
-            saveFeedback.stringValue = error.localizedDescription
-            polishAdvancedButton.state = .on
-            updatePolishAdvanced()
-            return false
-        }
-    }
+    func loadPolishProviderFields() { settingsCoordinator?.refreshCredentials() }
 
     @objc func changePolishOptions(_ sender: NSSegmentedControl) {
         let modes = PolishMode.allCases
@@ -1416,17 +1320,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             : "\(options.tone.detail)\n例如：\(options.tone.example)"
         polishOptionsHint?.stringValue = options.isCommand
             ? "命令语法固定为 zsh，不受输出语言影响；语言选择会保留。"
-            : options.summary
+            : "转换结果使用所选语言。"
     }
 
     @objc func toggleLivePreview() {
-        UserDefaults.standard.set(livePreviewCheck.state == .on, forKey: "livePreview")
+        MacPreferences.defaults.set(livePreviewCheck.state == .on, forKey: "livePreview")
         IMicLog.write("mac.settings", "livePreview=\(livePreviewCheck.state == .on)")
         sendFeatureSettings()
     }
 
     @objc func togglePolishSweep() {
-        UserDefaults.standard.set(polishSweepCheck.state == .on, forKey: "polishSweep")
+        MacPreferences.defaults.set(polishSweepCheck.state == .on, forKey: "polishSweep")
         if polishSweepCheck.state == .on { TextPolishEffect.prewarm() }
         // Changing visual preferences must not discard an in-flight final result.
         if polishSweepCheck.state == .off {
@@ -1449,7 +1353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func toggleBLEFallback() {
-        UserDefaults.standard.set(bleFallbackCheck.state == .on, forKey: "bleFallback")
+        MacPreferences.defaults.set(bleFallbackCheck.state == .on, forKey: "bleFallback")
         IMicLog.write("mac.settings", "bleFallback=\(bleFallbackCheck.state == .on)")
         if bleFallbackCheck.state == .on {
             startBLEBridge()
@@ -1457,65 +1361,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             bleBridge?.stop()
             bleBridge = nil
         }
-    }
-
-    @objc func toggleAdvanced() {
-        let visible = advancedButton.state == .on
-        advanced.isHidden = !visible
-        advancedButton.image = NSImage(
-            systemSymbolName: visible ? "chevron.down" : "chevron.right",
-            accessibilityDescription: nil
-        )
-        advancedButton.title = visible ? "收起高级选项" : "显示高级选项"
-        advancedButton.setAccessibilityLabel(visible ? "收起高级选项" : "显示高级选项")
-    }
-
-    @objc func saveSettings() {
-        let cleanedKey = key.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: endpoint.stringValue),
-              url.scheme == "wss", url.host?.isEmpty == false,
-              url.path == "/api-ws/v1/inference"
-        else {
-            saveFeedback.textColor = .systemRed
-            saveFeedback.stringValue = "请检查 wss:// 服务地址"
-            return
-        }
-        guard validatePolishSettings() else { return }
-        if preview == nil {
-            // Only a changed key is written; a key read from the environment stays external.
-            let resolved = MicCredentials.resolve()
-            if cleanedKey != (resolved?.key ?? ""), !cleanedKey.isEmpty || resolved?.source == .app {
-                guard MicCredentials.save(cleanedKey) else {
-                    saveFeedback.textColor = .systemRed
-                    saveFeedback.stringValue = "百炼 Key 格式无效或无法写入 iMic 配置文件"
-                    return
-                }
-            }
-            key.stringValue = MicCredentials.load()
-            updateKeySource()
-            UserDefaults.standard.set(ASRConfiguration.model, forKey: "asrModel")
-            UserDefaults.standard.set(endpoint.stringValue, forKey: "asrEndpoint")
-        }
-        for (provider, value) in polishDrafts where provider != .bailian && preview == nil {
-            let resolved = PolishCredentials.resolve(for: provider)
-            guard value.key != (resolved?.key ?? ""), !value.key.isEmpty || resolved?.source == .app else { continue }
-            guard PolishCredentials.save(value.key, for: provider) else {
-                saveFeedback.textColor = .systemRed
-                saveFeedback.stringValue = "\(provider.title) Key 无法写入 iMic 配置文件"
-                return
-            }
-        }
-        for (provider, value) in polishDrafts {
-            DeepSeekConfiguration.save(provider: provider, model: value.model, endpoint: value.endpoint)
-        }
-        UserDefaults.standard.set(editingPolishProvider.rawValue, forKey: "polishProvider")
-        deepseekCheck.state = DeepSeekConfiguration.enabled ? .on : .off
-        polishFields?.isHidden = !DeepSeekConfiguration.enabled
-        sendFeatureSettings()
-        loadPolishProviderFields()
-        saveFeedback.textColor = .secondaryLabelColor
-        saveFeedback.stringValue = "已保存"
-        refreshUI()
     }
 
     @objc func permissions() {
@@ -1540,10 +1385,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// New users, or anyone missing the one required key, start in the wizard.
     func shouldShowSetupOnLaunch() -> Bool {
         if key.stringValue.isEmpty { return true }
-        guard UserDefaults.standard.integer(forKey: SetupWizard.completedKey) < SetupWizard.version else { return false }
+        guard MacPreferences.defaults.integer(forKey: SetupWizard.completedKey) < SetupWizard.version else { return false }
         // Existing installs that are already set up are not interrupted.
         guard inputAllowed() else { return true }
-        UserDefaults.standard.set(SetupWizard.version, forKey: SetupWizard.completedKey)
+        MacPreferences.defaults.set(SetupWizard.version, forKey: SetupWizard.completedKey)
         return false
     }
 
@@ -1688,8 +1533,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.overrideCode("482916")
         refreshUI()
         updateStatusBar()
-        if preview == "settings" { showSettings() }
         show()
+        if preview == "settings" || preview.hasPrefix("settings-") {
+            if let pane = SettingsPane(rawValue: String(preview.dropFirst("settings-".count))) { settingsCoordinator?.select(pane) }
+            showSettings()
+        }
         if let setup = previewSetup {
             showSetup(at: SetupStep.first(for: setup))
         }
@@ -1721,6 +1569,11 @@ extension AppDelegate: SetupWizardHost {
 
     func setupSnapshot() -> SetupSnapshot {
         if let fake = previewSetup { return fake }
+        if preview != nil {
+            return SetupSnapshot(key: ResolvedCredential(key: "sk-preview-wizard-credential", source: .app),
+                permission: InputPermissionState(accessibility: true, posting: true), screenCapture: false,
+                location: .applications, applicationURL: PermissionApplication.current, asrEndpoint: ASRConfiguration.defaultEndpoint)
+        }
         var active: ResolvedCredential?
         if !key.stringValue.isEmpty {
             let found = MicCredentials.resolve()
@@ -1736,7 +1589,8 @@ extension AppDelegate: SetupWizardHost {
     }
 
     func setupSaveKey(_ value: String) -> Bool {
-        if previewSetup != nil {
+        if preview != nil {
+            if previewSetup == nil { previewSetup = setupSnapshot() }
             previewSetup?.key = ResolvedCredential(key: value, source: .app)
             return true
         }
@@ -1747,14 +1601,13 @@ extension AppDelegate: SetupWizardHost {
     }
 
     func setupUseKey(_ credential: ResolvedCredential) {
-        guard previewSetup == nil else { return }
+        guard preview == nil else { return }
         key.stringValue = credential.key
         keyChanged()
     }
 
     private func keyChanged() {
         updateKeySource()
-        if editingPolishProvider == .bailian { loadPolishProviderFields() }
         if connectedName == nil { setStatus("等待 iPhone 连接") }
         refreshUI()
     }
@@ -1769,7 +1622,7 @@ extension AppDelegate: SetupWizardHost {
     func setupFinished(polishEnabled: Bool) {
         guard preview == nil else { show(); return }
         applyPolishPreferences(LinkPolishPreferences(enabled: polishEnabled, options: DeepSeekConfiguration.options), confirmingSave: false)
-        UserDefaults.standard.set(SetupWizard.version, forKey: SetupWizard.completedKey)
+        MacPreferences.defaults.set(SetupWizard.version, forKey: SetupWizard.completedKey)
         show()
     }
 
@@ -1777,14 +1630,7 @@ extension AppDelegate: SetupWizardHost {
         PolishCredentials.resolve(for: provider)?.source.isExternal == true ? "已自动读取本机配置的 Key。" : ""
     }
 
-    func updateKeySource() {
-        guard let hint = keyHint else { return }
-        switch MicCredentials.resolve()?.source {
-        case nil: hint.stringValue = "一个百炼 Key 同时用于语音识别和 AI 润色。"
-        case .app?: hint.stringValue = "一个百炼 Key 同时用于语音识别和 AI 润色。"
-        case _?: hint.stringValue = "一个百炼 Key 同时用于语音识别和 AI 润色。已读取本机配置。"
-        }
-    }
+    func updateKeySource() { settingsCoordinator?.refreshCredentials() }
 
     @objc func openBailianConsole() {
         guard preview == nil else { return }

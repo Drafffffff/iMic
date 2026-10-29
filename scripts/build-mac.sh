@@ -53,6 +53,9 @@ build_binary() {
     "$ROOT/mac/SingleInstance.swift" \
     "$ROOT/mac/Permissions.swift" \
     "$ROOT/mac/Onboarding.swift" \
+    "$ROOT/mac/SettingsValidation.swift" \
+    "$ROOT/mac/SettingsField.swift" \
+    "$ROOT/mac/SettingsWindow.swift" \
     "$ROOT/mac/InputTarget.swift" \
     "$ROOT/mac/PolishPresentation.swift" \
     "$ROOT/mac/TextMarkerGeometry.swift" \

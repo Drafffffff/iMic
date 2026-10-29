@@ -145,6 +145,25 @@ final class PolishProviderTests: XCTestCase {
         XCTAssertTrue(DeepSeekConfiguration.enabled(in: defaults, hasBailianKey: { false }))
     }
 
+    func testSettingsVerificationRequestsAndRecognitionHostBoundary() throws {
+        let request = try SettingsValidation.request(provider: .bailian, key: bailianKey,
+            model: "configured-model", endpoint: PolishProvider.bailian.defaultEndpoint)
+        XCTAssertEqual(request.url?.absoluteString, "https://dashscope.aliyuncs.com/compatible-mode/v1/models")
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertNil(request.httpBody)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(bailianKey)")
+        XCTAssertNotNil(SettingsValidation.asrURL(ASRTestEndpoint.value))
+        for endpoint in ["wss://other.example/api-ws/v1/inference", "wss://dashscope.aliyuncs.com/api-ws/v1/inference?key=secret", "wss://user@dashscope.aliyuncs.com/api-ws/v1/inference", "ws://dashscope.aliyuncs.com/api-ws/v1/inference"] {
+            XCTAssertNil(SettingsValidation.asrURL(endpoint))
+        }
+        XCTAssertThrowsError(try SettingsValidation.request(provider: .deepseek, key: officialKey,
+            model: "test", endpoint: "https://other.example/chat/completions"))
+        for status in [401,403] {
+            if case .failure(.rejected) = SettingsValidation.classify(status: status, error: nil) {} else { XCTFail("Must reject invalid credentials") }
+        }
+        if case .failure(.http(302)) = SettingsValidation.classify(status: 302, error: nil) {} else { XCTFail("Redirects are not validation") }
+    }
+
     func testProviderCredentialStoresStaySeparateInAppFile() throws {
         XCTAssertTrue(PolishCredentials.save(officialKey, for: .deepseek, file: file))
         XCTAssertTrue(PolishCredentials.save(bailianKey, for: .bailian, file: file))

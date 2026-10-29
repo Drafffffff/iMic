@@ -14,6 +14,6 @@ xcrun swiftc -swift-version 5 -F "$FRAMEWORKS" -I "$SWIFT_SUPPORT" \
   -Xlinker -rpath -Xlinker "$SWIFT_SUPPORT" \
   "$ROOT/shared/PolishOptions.swift" "$ROOT/shared/DeepSeekPolicy.swift" \
   "$ROOT/shared/IMicLog.swift" "$ROOT/mac/Credentials.swift" \
-  "$ROOT/mac/DeepSeek.swift" "$ROOT/tests/PolishProviders/main.swift" \
+  "$ROOT/mac/DeepSeek.swift" "$ROOT/mac/SettingsValidation.swift" "$ROOT/tests/PolishProviders/main.swift" \
   -o "$WORK/polish-tests"
 "$WORK/polish-tests"

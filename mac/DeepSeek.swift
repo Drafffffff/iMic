@@ -1,7 +1,19 @@
 import Foundation
 
+/// All preview actions use an isolated domain. Credentials remain in the existing store.
+enum MacPreferences {
+    static let defaults: UserDefaults = {
+        guard ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-preview=") }) else { return .standard }
+        let value = UserDefaults(suiteName: "iMic.preview.\(UUID().uuidString)")!
+        value.set(true, forKey: "deepseekEnabled")
+        value.set("bailian", forKey: "polishProvider")
+        return value
+    }()
+}
+
+
 enum PolishProvider: String, CaseIterable {
-    case deepseek, bailian, custom
+    case bailian, deepseek, custom
 
     var title: String {
         switch self {
@@ -33,38 +45,38 @@ enum PolishProvider: String, CaseIterable {
 
 enum DeepSeekConfiguration {
     static let model = "deepseek-flash"
-    static var provider: PolishProvider { provider(in: .standard) }
+    static var provider: PolishProvider { provider(in: MacPreferences.defaults) }
     static func provider(in defaults: UserDefaults) -> PolishProvider {
         defaults.string(forKey: "polishProvider").flatMap(PolishProvider.init(rawValue:)) ?? .bailian
     }
     /// A missing saved choice always adopts Bailian, independent of legacy credentials.
-    static func migrateDefaultProvider(in defaults: UserDefaults = .standard, hasDeepSeekKey _: () -> Bool) {
+    static func migrateDefaultProvider(in defaults: UserDefaults = MacPreferences.defaults, hasDeepSeekKey _: () -> Bool) {
         guard defaults.string(forKey: "polishProvider") == nil else { return }
         defaults.set(PolishProvider.bailian.rawValue, forKey: "polishProvider")
     }
     static var enabled: Bool {
-        enabled(in: .standard, hasBailianKey: { MicCredentials.resolve() != nil })
+        enabled(in: MacPreferences.defaults, hasBailianKey: { MicCredentials.resolve() != nil })
     }
     static func enabled(in defaults: UserDefaults, hasBailianKey: () -> Bool) -> Bool {
         if let saved = defaults.object(forKey: "deepseekEnabled") as? Bool { return saved }
         return hasBailianKey()
     }
     static var modelName: String { modelName(for: provider) }
-    static func modelName(for provider: PolishProvider, defaults: UserDefaults = .standard) -> String {
+    static func modelName(for provider: PolishProvider, defaults: UserDefaults = MacPreferences.defaults) -> String {
         let value = defaults.string(forKey: provider.modelKey) ?? provider.defaultModel
         let cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
         // Preserve the old official-model fallback, never apply it to a custom service.
         return cleaned.isEmpty && provider == .deepseek ? model : cleaned
     }
-    static func endpoint(for provider: PolishProvider, defaults: UserDefaults = .standard) -> String {
+    static func endpoint(for provider: PolishProvider, defaults: UserDefaults = MacPreferences.defaults) -> String {
         (defaults.string(forKey: provider.endpointKey) ?? provider.defaultEndpoint)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    static func save(provider: PolishProvider, model: String, endpoint: String, defaults: UserDefaults = .standard) {
+    static func save(provider: PolishProvider, model: String, endpoint: String, defaults: UserDefaults = MacPreferences.defaults) {
         defaults.set(model.trimmingCharacters(in: .whitespacesAndNewlines), forKey: provider.modelKey)
         defaults.set(endpoint.trimmingCharacters(in: .whitespacesAndNewlines), forKey: provider.endpointKey)
     }
-    static var options: PolishOptions { options(in: .standard) }
+    static var options: PolishOptions { options(in: MacPreferences.defaults) }
     static func options(in defaults: UserDefaults) -> PolishOptions {
         return PolishOptions(
             strength: defaults.string(forKey: "deepseekStrength").flatMap(PolishStrength.init(rawValue:)) ?? PolishOptions.default.strength,

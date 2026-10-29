@@ -1,0 +1,22 @@
+#!/bin/bash
+set -euo pipefail
+ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
+export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
+WORK=$(mktemp -d /tmp/imic-settings-tests.XXXXXX)
+trap 'rm -rf "$WORK"' EXIT
+python3 - "$ROOT" "$WORK" <<'PY'
+import pathlib,re,sys
+root=pathlib.Path(sys.argv[1]);work=pathlib.Path(sys.argv[2])
+source=(root/'mac/main.swift').read_text().split('// MARK: - Entry point')[0]
+(work/'AppDelegate.swift').write_text(source)
+# Use the production build's source list, rather than maintaining a second UI list.
+paths=re.findall(r'"\$ROOT/([^"\n]+\.swift)"', (root/'scripts/build-mac.sh').read_text())
+paths=[str(root/p) if p!='mac/main.swift' else str(work/'AppDelegate.swift') for p in paths if p!='tools/icon.swift']
+(work/'sources.txt').write_text('\n'.join(paths)+'\n')
+PY
+SOURCES=()
+while IFS= read -r source; do SOURCES+=("$source"); done < "$WORK/sources.txt"
+xcrun swiftc -swift-version 5 -framework AppKit -framework Network -framework CryptoKit \
+  -framework ApplicationServices -framework Vision -framework ScreenCaptureKit \
+  "${SOURCES[@]}" "$ROOT/tests/MacSettings/main.swift" -o "$WORK/settings-tests"
+"$WORK/settings-tests" --ui-preview=settings-external-key
