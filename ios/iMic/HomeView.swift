@@ -169,7 +169,7 @@ struct HomeView: View {
             session.prepareHaptics()
             link.start()
             session.activateAudio()
-            warmUpBowSound()
+            warmUpSounds()
             stringMotion.reduceMotion = reduceMotion
             stringMotion.onFireReturn = { [weak session = session, weak link = link, weak receiver = receiver] in
                 guard let session, let link, link.phase.isReady,
@@ -185,7 +185,9 @@ struct HomeView: View {
                 guard let session, let link, link.phase.isReady,
                       session.pullDeleteEnabled,
                       UIApplication.shared.applicationState == .active else { return false }
-                return session.sendInput("delete")
+                guard session.sendInput("delete") else { return false }
+                SoundDesign.shared.play(.delete)
+                return true
             }
             if case .needsCode = link.phase, !showDevices {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
@@ -276,7 +278,7 @@ struct HomeView: View {
             }
             if phase == .active {
                 session.handleForeground()
-                warmUpBowSound()
+                warmUpSounds()
             } else if phase == .background {
                 session.handleBackground()
             }
@@ -719,7 +721,7 @@ struct HomeView: View {
                     if let command {
                         session.sendInput(command)
                         session.showGestureNotice("删除")
-                        Haptics.shared.play(.warning)
+                        Haptics.shared.play(.deleteChar)
                     }
                 }
                 stringHint = nil
@@ -791,15 +793,15 @@ struct HomeView: View {
     }
 
     /// After audio activation settles and outside a gesture, never on the first pull.
-    private func warmUpBowSound(attempt: Int = 0) {
+    private func warmUpSounds(attempt: Int = 0) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             guard scenePhase == .active else { return }
             guard !stringTouchActive, !pressing else {
                 // Busy: try again shortly rather than stall the gesture in progress.
-                if attempt < 5 { warmUpBowSound(attempt: attempt + 1) }
+                if attempt < 5 { warmUpSounds(attempt: attempt + 1) }
                 return
             }
-            BowReleaseSound.shared.warmUp()
+            SoundDesign.shared.warmUp()
         }
     }
 

@@ -42,6 +42,9 @@ struct PairingSheet: View {
                                 DisplayPreferencesSection()
                                     .padding(.vertical, 24)
                                 Hairline()
+                                SoundPreferencesSection()
+                                    .padding(.vertical, 24)
+                                Hairline()
                                 footer
                                     .padding(.top, 12)
                             }

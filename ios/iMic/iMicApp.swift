@@ -8,6 +8,8 @@ struct iMicApp: App {
             #if DEBUG
             if let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--waveform-replay=") }) {
                 WaveformDebugReplayRoot(selection: String(argument.dropFirst("--waveform-replay=".count)))
+            } else if ProcessInfo.processInfo.arguments.contains("--ui-preview=sounds") {
+                SoundPreviewRoot()
             } else {
                 LiveApplicationView()
             }

@@ -962,7 +962,6 @@ final class StringMotionStore: ObservableObject {
         self.clearStretch = clearStretch
         onActivity?()
         cancelPendingReturn()
-        BowReleaseSound.shared.stop()
         self.anchor = TorusGeometry.clampedAnchor(anchor)
         self.height = height
         spring.begin()
@@ -1002,7 +1001,7 @@ final class StringMotionStore: ObservableObject {
         if nextArmed != armed {
             armed = nextArmed
             if nextArmed, pull > 0 {
-                BowReleaseSound.shared.prepare()
+                Haptics.shared.prepareBowArmed()
                 Haptics.shared.play(.bowArmed)
             } else {
                 Haptics.shared.play(nextArmed ? .cancelArmed : .cancelDisarmed)
@@ -1034,7 +1033,7 @@ final class StringMotionStore: ObservableObject {
         if spring.position >= threshold && returnEnabled {
             pendingReturn = true
             releaseStrength = min(1, max(0, spring.position / StringSpring.travelLimit(height: height)))
-            BowReleaseSound.shared.prepare()
+            Haptics.shared.prepareBowArmed()
             // Reduced motion settles once in finite time, without oscillation.
             returnRemaining = reduceMotion ? min(0.10, spring.upwardNeutralTime()) : spring.upwardNeutralTime()
             return nil
@@ -1061,7 +1060,6 @@ final class StringMotionStore: ObservableObject {
         clearZone = 0
         cancelPendingReturn()
         cancelled = true
-        BowReleaseSound.shared.stop()
         dragging = false
         deleteHold.reset()
         spring.reset()
@@ -1074,7 +1072,6 @@ final class StringMotionStore: ObservableObject {
         guard !isClearing else { return }
         onActivity?()
         cancelPendingReturn()
-        BowReleaseSound.shared.stop()
         dragging = false
         cancelled = false
         deleteHold.reset()
@@ -1131,7 +1128,7 @@ final class StringMotionStore: ObservableObject {
                     }
                     pull = 0
                     if onFireReturn?() == true {
-                        BowReleaseSound.shared.play(strength: Float(releaseStrength))
+                        Haptics.shared.playBowRelease(strength: Float(releaseStrength))
                     } else {
                         releaseStrength = 0
                     }
