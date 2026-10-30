@@ -175,22 +175,8 @@ final class SessionModel: ObservableObject {
         // 模拟器联调用合成语音，不需要也不应该弹麦克风授权。
         if debugTTSText != nil || debugBufferText != nil { return }
         #endif
-        if AudioCapture.permissionGranted {
-            micDenied = false
-            if !wantsRecording { speechPreview.prepareAuthorization() }
-            return
-        }
-        guard audioAuthorizationTask == nil else { return }
-        audioAuthorizationTask = Task { [weak self] in
-            let granted = await AudioCapture.requestPermission()
-            guard let self else { return }
-            defer { self.audioAuthorizationTask = nil }
-            guard !Task.isCancelled, UIApplication.shared.applicationState == .active else { return }
-            micDenied = !granted
-            if granted {
-                if !wantsRecording { speechPreview.prepareAuthorization() }
-            }
-        }
+        // Foreground activation never requests permission. Only a real hold may do so.
+        if AudioCapture.permissionGranted { micDenied = false }
     }
 
     func deactivateAudio() {
@@ -327,6 +313,12 @@ final class SessionModel: ObservableObject {
             }
             if preRoll.count % 2 == 1 { preRoll.removeFirst() }
         }
+    }
+
+    /// 两个系统弹窗串行出现；拒绝任一权限也允许完成引导。
+    func prepareFirstUsePermissions() async {
+        micDenied = !(await AudioCapture.requestPermission())
+        await speechPreview.prepareAuthorization()
     }
 
     func beginListening() {
@@ -575,6 +567,14 @@ final class SessionModel: ObservableObject {
     func endListening(cancelled: Bool) {
         wantsRecording = false
         guard phase == .listening else { return }
+        defer {
+            if !isPreview {
+                Task {
+                    guard !wantsRecording else { return }
+                    await speechPreview.prepareAuthorization()
+                }
+            }
+        }
         timer?.invalidate()
         timer = nil
         commitTimer?.invalidate()

@@ -16,6 +16,7 @@ struct PairingSheet: View {
     @State private var code = ""
     @State private var submittedCode = ""
     @State private var showForget = false
+    @State private var guidePresented = false
     @State private var utilitySheet: UtilitySheet?
     @FocusState private var codeFocused: Bool
     var embedded = false
@@ -43,6 +44,9 @@ struct PairingSheet: View {
                                     .padding(.vertical, 24)
                                 Hairline()
                                 SoundPreferencesSection()
+                                    .padding(.vertical, 24)
+                                Hairline()
+                                GuideSettingsSection { guidePresented = $0 }
                                     .padding(.vertical, 24)
                                 Hairline()
                                 footer
@@ -79,7 +83,7 @@ struct PairingSheet: View {
                 Haptics.shared.play(.pairingSuccess)
                 codeFocused = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                    if !embedded, utilitySheet == nil { dismiss() }
+                    if !embedded, utilitySheet == nil, !guidePresented { dismiss() }
                 }
             case .needsCode:
                 code = ""

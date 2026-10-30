@@ -34,19 +34,26 @@ final class SpeechPreview {
     private var finishTask: Task<Void, Never>?
     private var onText: (@MainActor (String) -> Void)?
     private var lastText = ""
-    private var authorizationRequested = false
+    private var authorizationTask: Task<Void, Never>?
     private nonisolated let audioGate = PreviewAudioGate()
 
     var isRunning: Bool { accepting || finishing }
 
-    /// 只在没有按住录音时调用；首次授权绝不插入按住路径或阻塞百炼采集。
-    func prepareAuthorization() {
-        guard !isRunning, !authorizationRequested,
-              SFSpeechRecognizer.authorizationStatus() == .notDetermined else { return }
-        authorizationRequested = true
-        SFSpeechRecognizer.requestAuthorization { status in
-            IMicLog.write("iphone.preview", "speech permission=\(status.rawValue)")
+    /// READY 等待麦克风弹窗结束后调用；旧用户在真实录音松手后兜底。
+    func prepareAuthorization() async {
+        if let authorizationTask { await authorizationTask.value; return }
+        guard !isRunning, SFSpeechRecognizer.authorizationStatus() == .notDetermined else { return }
+        let task = Task { @MainActor in
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                SFSpeechRecognizer.requestAuthorization { status in
+                    IMicLog.write("iphone.preview", "speech permission=\(status.rawValue)")
+                    continuation.resume()
+                }
+            }
         }
+        authorizationTask = task
+        await task.value
+        authorizationTask = nil
     }
 
     func start(onText: @escaping @MainActor (String) -> Void) {

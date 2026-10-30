@@ -78,8 +78,16 @@ let server = LinkServer(store: store, port: serverPort)
 let proxy = try ResumeProxy(port: proxyPort, serverPort: serverPort)
 var serverConnections = 0
 var voiceStarts = 0
+var receivedContent = 0
+var pongs = 0
 server.onState = { state in if case .connected = state { serverConnections += 1 } }
-server.onMessage = { message in if message.t == "audio.start" { voiceStarts += 1 } }
+server.onMessage = { message in
+    if message.t == "audio.start" { voiceStarts += 1 }
+    if message.t == "pong" { pongs += 1 }
+    else { receivedContent += 1 }
+}
+server.onAudio = { _ in receivedContent += 1 }
+server.onPolishPreferences = { _, _ in receivedContent += 1 }
 server.start()
 
 Task { @MainActor in
@@ -102,65 +110,112 @@ Task { @MainActor in
         var losses = 0
         client.onReady = { _ in readyCount += 1 }
         client.onLost = { losses += 1 }
+        // Also prove the initial hello / pair / auth pass through the practice boundary.
+        let practiceCheck = args.contains("--practice")
+        if practiceCheck { client.setPracticeActive(true) }
         client.start()
         try await until("initial encrypted pairing") { client.phase.isReady && readyCount == 1 }
         let initialConnections = serverConnections
-        client.beginSession(700)
-        try await until("pending voice session") { voiceStarts == 1 }
+        if practiceCheck {
+            client.setPracticeActive(false)
+            client.setPracticeActive(true) // Enter practice on an already authenticated link.
+            let logOffset = (try? Data(contentsOf: IMicLog.fileURL).count) ?? 0
+            var endCompleted = false
+            client.beginSession(900)
+            client.sendAudio(Data(repeating: 0, count: 640), session: 900, seq: 0)
+            client.endSession(900, samples: 3200, frames: 10) { success in endCompleted = !success }
+            client.cancelSession(900)
+            try require(!client.sendInput("return"), "Practice accepted an input intent")
+            client.sendPreview("local practice only")
+            try require(!client.updatePolishPreferences(.init(enabled: true, options: .init())), "Practice accepted polish changes")
+            try require(endCompleted, "Blocked endSession did not complete with false")
+            let started = ProcessInfo.processInfo.systemUptime
+            try await Task.sleep(for: .seconds(45))
+            try require(client.phase.isReady && serverConnections == initialConnections && readyCount == 1 && losses == 0,
+                        "Practice lost/replaced the live link across the 40s heartbeat deadline")
+            try require(pongs >= 4, "Practice did not answer the production 10s heartbeat")
+            try require(receivedContent == 0, "Practice leaked user content to the Mac")
+            print("PASS practice \(Int(ProcessInfo.processInfo.systemUptime - started))s; \(pongs) encrypted pongs; same connection; content=0")
+            client.enterBackground()
+            client.activate()
+            try await until("practice foreground ping/pong") { readyCount == 2 && client.phase.isReady }
+            try require(serverConnections == initialConnections, "Practice foreground probe replaced healthy connection")
+            client.enterBackground()
+            proxy.blackhole()
+            client.activate()
+            try await until("practice hello/auth reconnect") { readyCount == 3 && client.phase.isReady }
+            try require(serverConnections == initialConnections + 1, "Practice reconnect did not authenticate")
+            try require(receivedContent == 0 && losses == 0, "Practice reconnect leaked content or lost a voice session")
+            try await Task.sleep(for: .milliseconds(200))
+            let logData = (try? Data(contentsOf: IMicLog.fileURL)) ?? Data()
+            let log = String(decoding: logData.dropFirst(logOffset), as: UTF8.self)
+            try require(!log.contains("timeout"), "Practice produced a timeout disconnect")
+            try require(!log.contains("[iphone.content] send kind="), "Practice content-send audit was not zero")
+            for kind in ["audio.start", "audio", "audio.end", "audio.cancel", "input", "preview", "polish.settings"] {
+                try require(log.contains("[iphone.practice] blocked send kind=\(kind)\n"), "Missing blocked-send audit: \(kind)")
+            }
+            client.setPracticeActive(false)
+            client.beginSession(901)
+            try await until("real content resumes after practice") { voiceStarts == 1 }
+            print("PASS practice initial pair; foreground ping/pong; reconnect hello/auth; timeout=0; seven content guards; content resumes after exit")
+        } else {
+            client.beginSession(700)
+            try await until("pending voice session") { voiceStarts == 1 }
 
-        client.enterBackground()
-        try await Task.sleep(for: .milliseconds(100))
-        var started = ProcessInfo.processInfo.systemUptime
-        client.activate()
-        try await until("healthy connection probe") { readyCount == 2 && client.phase.isReady }
-        let healthy = ProcessInfo.processInfo.systemUptime - started
-        try require(serverConnections == initialConnections && losses == 0, "Healthy resume replaced a live voice link")
-        try require(voiceStarts == 1, "Healthy resume restarted the pending voice session")
-        try require(healthy < 0.5, "Healthy resume is too slow")
-        print("PASS healthy resume \(Int(healthy * 1000))ms; same encrypted connection")
-        client.cancelSession(700)
-        client.beginSession(701)
-        try await until("old session before suspension") { voiceStarts == 2 }
+            client.enterBackground()
+            try await Task.sleep(for: .milliseconds(100))
+            var started = ProcessInfo.processInfo.systemUptime
+            client.activate()
+            try await until("healthy connection probe") { readyCount == 2 && client.phase.isReady }
+            let healthy = ProcessInfo.processInfo.systemUptime - started
+            try require(serverConnections == initialConnections && losses == 0, "Healthy resume replaced a live voice link")
+            try require(voiceStarts == 1, "Healthy resume restarted the pending voice session")
+            try require(healthy < 0.5, "Healthy resume is too slow")
+            print("PASS healthy resume \(Int(healthy * 1000))ms; same encrypted connection")
+            client.cancelSession(700)
+            client.beginSession(701)
+            try await until("old session before suspension") { voiceStarts == 2 }
 
-        client.enterBackground()
-        proxy.blackhole()
-        let backgroundWait = args.contains("--long-background") ? 55.0 : 1.0
-        print("Background blackhole: \(Int(backgroundWait))s; waiting across the Mac heartbeat deadline when long")
-        try await Task.sleep(for: .seconds(backgroundWait))
-        started = ProcessInfo.processInfo.systemUptime
-        client.activate()
-        try await until("silent stale connection replacement", timeout: 3) { readyCount == 3 && client.phase.isReady }
-        let stale = ProcessInfo.processInfo.systemUptime - started
-        try require(stale < 1.8 && losses == 1, "Stale resume delayed or failed to notify the old voice session")
-        try require(serverConnections == initialConnections + 1, "Stale resume didn't complete a fresh encrypted handshake")
-        print("PASS stale resume \(Int(stale * 1000))ms; loss delivered once; authenticated without re-pairing")
+            client.enterBackground()
+            proxy.blackhole()
+            let backgroundWait = args.contains("--long-background") ? 55.0 : 1.0
+            print("Background blackhole: \(Int(backgroundWait))s; waiting across the Mac heartbeat deadline when long")
+            try await Task.sleep(for: .seconds(backgroundWait))
+            started = ProcessInfo.processInfo.systemUptime
+            client.activate()
+            try await until("silent stale connection replacement", timeout: 3) { readyCount == 3 && client.phase.isReady }
+            let stale = ProcessInfo.processInfo.systemUptime - started
+            try require(stale < 1.8 && losses == 1, "Stale resume delayed or failed to notify the old voice session")
+            try require(serverConnections == initialConnections + 1, "Stale resume didn't complete a fresh encrypted handshake")
+            print("PASS stale resume \(Int(stale * 1000))ms; loss delivered once; authenticated without re-pairing")
 
-        // A fresh local recording buffered during the probe never used this socket.
-        // Replacing an idle old connection must not report a loss against it.
-        client.enterBackground()
-        proxy.blackhole()
-        try await Task.sleep(for: .milliseconds(100))
-        client.activate()
-        try await until("idle stale socket replaced") { readyCount == 4 && client.phase.isReady }
-        try require(losses == 1, "Foreground reconnect cancelled a new locally buffered recording")
-        print("PASS idle stale reconnect preserves newly buffered recording")
+            // A fresh local recording buffered during the probe never used this socket.
+            // Replacing an idle old connection must not report a loss against it.
+            client.enterBackground()
+            proxy.blackhole()
+            try await Task.sleep(for: .milliseconds(100))
+            client.activate()
+            try await until("idle stale socket replaced") { readyCount == 4 && client.phase.isReady }
+            try require(losses == 1, "Foreground reconnect cancelled a new locally buffered recording")
+            print("PASS idle stale reconnect preserves newly buffered recording")
 
-        // Accumulate failed attempts, then return before the pending backoff expires.
-        client.enterBackground()
-        server.stop()
-        try await until("lost old connection") { !client.phase.isReady }
-        try await Task.sleep(for: .seconds(5))
-        server.start()
-        started = ProcessInfo.processInfo.systemUptime
-        client.activate()
-        client.activate() // Repeated foreground notifications must coalesce.
-        try await until("foreground overrides retry backoff", timeout: 2) { readyCount == 5 && client.phase.isReady }
-        let retry = ProcessInfo.processInfo.systemUptime - started
-        try require(retry < 1, "Foreground waited for retry backoff")
-        print("PASS backoff bypass \(Int(retry * 1000))ms")
-        try await Task.sleep(for: .seconds(1))
-        try require(readyCount == 5, "Cancelled foreground timeout replaced a good connection later")
-        print("PASS all foreground reconnect checks")
+            // Accumulate failed attempts, then return before the pending backoff expires.
+            client.enterBackground()
+            server.stop()
+            try await until("lost old connection") { !client.phase.isReady }
+            try await Task.sleep(for: .seconds(5))
+            server.start()
+            started = ProcessInfo.processInfo.systemUptime
+            client.activate()
+            client.activate() // Repeated foreground notifications must coalesce.
+            try await until("foreground overrides retry backoff", timeout: 2) { readyCount == 5 && client.phase.isReady }
+            let retry = ProcessInfo.processInfo.systemUptime - started
+            try require(retry < 1, "Foreground waited for retry backoff")
+            print("PASS backoff bypass \(Int(retry * 1000))ms")
+            try await Task.sleep(for: .seconds(1))
+            try require(readyCount == 5, "Cancelled foreground timeout replaced a good connection later")
+            print("PASS all foreground reconnect checks")
+        }
     } catch {
         fputs("FAIL \(error)\n", stderr)
         exitCode = 1

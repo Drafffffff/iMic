@@ -5,10 +5,13 @@
 ## 安装与配对
 
 1. 在 iPhone 安装 Apple 的 TestFlight，打开收到的 iMic 测试邀请链接，接受邀请并安装。邀请链接由发布者在 Beta 审核通过后提供。
-2. 在 Mac 从 [iMic 官网下载区](https://drafffffff.github.io/iMic/?from=ios#download)（备用：[GitHub Releases](https://github.com/Drafffffff/iMic/releases/latest)） 下载 macOS universal DMG，把 iMic 拖到 Applications 并启动。
-3. 按 Mac 设置向导开启辅助功能权限，填写并校验百炼 API Key。屏幕录制权限只用于润色扫光，可以跳过。
-4. 将两台设备连到同一 Wi-Fi。iPhone 打开 iMic，允许麦克风和本地网络权限，选择自己的 Mac，输入 Mac 显示的六位配对码。语音识别权限用于 Apple Speech 临时预览，可选择拒绝。
-5. 在 Mac 打开一份新的文本编辑文档，点击空白输入处。按住 iPhone 底部录音区域说一句话，松手等待结果。首次测试建议关闭文字润色，确认基础输入正常后再尝试。
+2. 打开 iPhone 上的 iMic，阅读 WELCOME 后进入 MAC。尚未安装电脑端时，展开「还没有，发送到我的 Mac」，通过接力、共享或复制打开 [Mac 下载页](https://drafffffff.github.io/iMic/?from=ios#download)（备用：[GitHub Releases](https://github.com/Drafffffff/iMic/releases/latest)）。手机不能安装 Mac 软件。
+3. 在 macOS 13+ 的 Mac 下载并打开 iMic，按设置向导先填写自己的百炼 API Key，再开启辅助功能权限；屏幕录制只用于润色扫光，可跳过。识别会产生服务商费用。
+4. 两台设备连到同一 Wi-Fi。回到 iPhone，选择「已经装好了」，阅读 LINK 说明后点击「开始寻找 Mac」，系统询问本地网络访问时选择允许。选择自己的 Mac，输入 Mac 显示的六位配对码。拒绝权限时可去系统设置打开，返回后重试搜索。
+5. 练习按住松手、上滑取消、回车、删除、移动光标和清空。也可在 MAC 页选「先看看怎么用」，不连接 Mac 即可练习；练习不会录音或发送到电脑。设置 → GUIDE 可随时重新练习。
+6. READY 点「开始使用」后，先处理麦克风权限，再处理用于 Apple Speech 临时预览的语音识别权限（可拒绝）；拒绝任一权限也可完成引导。进入主页后，在 Mac 新文档中点击输入处。松手等待结果，首次测试建议关闭润色。
+
+引导中退出 App 会恢复当前步骤；LINK / PAIR 可选「稍后再连接」，从主页「继续设置」返回。已经配对且没有进行中引导的用户直接进入主页。
 
 ## 使用注意
 
