@@ -88,7 +88,7 @@ TestFlight 发布使用独立的签名归档流程，见 [TestFlight 发布说�
 
 ### 3. 配对
 
-iPhone 首次打开会进入可恢复的 WELCOME → MAC → LINK → PAIR → PRACTICE → READY 引导。需要 macOS 13+ 的 Mac 和自己的百炼 API Key，识别会产生费用。MAC 页通过接力、共享或复制把 [下载页](https://drafffffff.github.io/iMic/?from=ios#download) 送到电脑；也可先离线练习五种手势，不录音、不向电脑发送。点击「开始寻找 Mac」才请求本地网络，首次真实按住才请求麦克风和可拒绝的语音识别权限。设置 → GUIDE 可重新练习或获取 Mac 版。已配对老用户直接进入主页；进行中的引导始终恢复。
+iPhone 首次打开会进入可恢复的 WELCOME → MAC → LINK → PAIR → PRACTICE → READY 引导。需要 macOS 13+ 的 Mac 和自己的百炼 API Key，识别会产生费用。MAC 页通过接力、共享或复制把 [下载页](https://drafffffff.github.io/iMic/?from=ios#download) 送到电脑；也可先离线练习五种手势，不录音、不向电脑发送。点击「开始寻找 Mac」才请求本地网络，READY 点「开始使用」后依次请求麦克风和可拒绝的语音识别权限。设置 → GUIDE 可重新练习或获取 Mac 版。已配对老用户直接进入主页；进行中的引导始终恢复。
 
 Mac 窗口显示六位配对码。iPhone 点击顶部电脑名称进入「连接电脑」二级页面，查看当前目标、附近电脑与已记住的 Mac；首次选择后输入六位码。右上角像素设置图标打开设置页，直接显示连接与 AI 润色配置，并提供波形复看入口。各台令牌分别保存在 iPhone 钥匙串与 Mac 的 `~/Library/Application Support/iMic/paired.json`；切换不会删除旧配对，且只重连明确选定的电脑。录音或识别中切换须先确认取消，旧会话不会交给新 Mac，已识别文字仍可复制。
 

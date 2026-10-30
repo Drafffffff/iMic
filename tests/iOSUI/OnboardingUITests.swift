@@ -111,6 +111,32 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["已经装好了"].waitForExistence(timeout: 5))
         shot(app, "Restored practice returns to Mac setup")
     }
+    func testReadyRequestsPermissionsInOrderAndCompletesWhenDenied() {
+        let app = XCUIApplication()
+        app.resetAuthorizationStatus(for: .microphone)
+        app.launchArguments = ["--ui-preview=onboarding-ready"]
+        app.launch()
+        XCTAssertTrue(app.buttons["开始使用"].waitForExistence(timeout: 20))
+        XCTAssertEqual(XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.count, 0)
+        tap("开始使用", in: app)
+        let alert = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 10))
+        let microphone = alert.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
+        XCTAssertTrue(microphone.localizedCaseInsensitiveContains("microphone") || microphone.contains("麦克风"), microphone)
+        XCTAssertTrue(app.staticTexts["onboarding.title"].exists)
+        shot(app, "READY microphone permission before speech")
+        alert.buttons.firstMatch.tap() // Refuse microphone; onboarding must still finish.
+        XCTAssertTrue(alert.waitForExistence(timeout: 10))
+        let speech = alert.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
+        XCTAssertTrue(speech.localizedCaseInsensitiveContains("speech") || speech.contains("语音"), speech)
+        shot(app, "READY speech permission after microphone dismissal")
+        alert.buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["设置"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["onboarding.title"].exists)
+        XCTAssertEqual(XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.count, 0)
+        XCTAssertTrue(app.buttons["ENABLE MIC"].exists)
+        shot(app, "READY denied permissions still reaches home")
+    }
     func testRestoresMacStepAfterRelaunch() {
         let app = launch(["--debug-reset-onboarding"])
         tap("开始", in: app)

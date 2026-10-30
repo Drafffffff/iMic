@@ -93,6 +93,7 @@ struct OnboardingView: View {
     @State private var openedSettings = false
     @State private var connectedName: String?
     @State private var practiceInteracting = false
+    @State private var requestingPermissions = false
 
     private var label: String { ["WELCOME", "MAC", "LINK", "PAIR", "PRACTICE", "READY"][onboarding.step.rawValue] }
     var body: some View {
@@ -201,13 +202,19 @@ struct OnboardingView: View {
             PracticeView(preview: onboarding.preview, onInteractionChanged: { practiceInteracting = $0 }) { onboarding.finishPractice() }
         case .ready:
             Text("在 Mac 上点一下任意输入框（比如备忘录），然后按住下面的横条说一句话。")
-            Text("第一次按住时，系统会请求麦克风权限（必需）和语音识别权限（用于手机上的实时预览，可以拒绝）。")
+            Text("点「开始使用」后，系统会依次请求麦克风权限（必需）和语音识别权限（用于手机上的实时预览，可以拒绝）。")
                 .font(.footnote).foregroundStyle(Theme.muted)
             GuideButton(title: "开始使用") {
-                onboarding.complete()
-                link.startDeferred = false
-                link.start()
-            }
+                guard !requestingPermissions else { return }
+                requestingPermissions = true
+                Task {
+                    await session.prepareFirstUsePermissions()
+                    onboarding.complete()
+                    link.startDeferred = false
+                    link.start()
+                    requestingPermissions = false
+                }
+            }.disabled(requestingPermissions)
             Button("在 Mac 上使用时遇到问题？") { openURL(OnboardingLinks.home) }.frame(minHeight: 44)
         }
     }

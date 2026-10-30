@@ -315,6 +315,12 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// 两个系统弹窗串行出现；拒绝任一权限也允许完成引导。
+    func prepareFirstUsePermissions() async {
+        micDenied = !(await AudioCapture.requestPermission())
+        await speechPreview.prepareAuthorization()
+    }
+
     func beginListening() {
         guard !link.clearPending, !spectrumStore.stringMotion.isClearing else { return }
         if isPreview {
@@ -335,7 +341,6 @@ final class SessionModel: ObservableObject {
 
         // 触觉确认必须发生在任何异步工作之前：按下即响应。
         Haptics.shared.play(.press)
-        speechPreview.prepareAuthorization()
         wantsRecording = true
         notice = nil
 
@@ -562,6 +567,14 @@ final class SessionModel: ObservableObject {
     func endListening(cancelled: Bool) {
         wantsRecording = false
         guard phase == .listening else { return }
+        defer {
+            if !isPreview {
+                Task {
+                    guard !wantsRecording else { return }
+                    await speechPreview.prepareAuthorization()
+                }
+            }
+        }
         timer?.invalidate()
         timer = nil
         commitTimer?.invalidate()

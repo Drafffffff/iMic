@@ -14,7 +14,7 @@ struct OnboardingAudit: View {
                     let log = (try? String(contentsOf: IMicLog.fileURL, encoding: .utf8)) ?? ""
                     let lines = log.split(separator: "\n")
                     let link = lines.filter { $0.contains("[iphone.link]") }.count
-                    let sends = lines.filter { $0.contains("send ") && !$0.contains("[iphone.practice] blocked send") }.count
+                    let sends = lines.filter { $0.contains("[iphone.content] send kind=") }.count
                     let mic = AVAudioSession.sharedInstance().recordPermission == .undetermined ? "undetermined" : "determined"
                     let speech = SFSpeechRecognizer.authorizationStatus() == .notDetermined ? "undetermined" : "determined"
                     result = "link=\(link) send=\(sends) mic=\(mic) speech=\(speech) tutorial=\(UserDefaults.standard.integer(forKey: OnboardingCoordinator.tutorialKey))"

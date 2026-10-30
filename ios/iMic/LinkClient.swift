@@ -1368,6 +1368,7 @@ final class LinkClient: ObservableObject {
             if seq % 25 == 0 {
                 IMicLog.write("iphone.link", "send audio session=\(session) seq=\(seq) bytes=\(pcm.count)")
             }
+            IMicLog.write("iphone.content", "send kind=audio")
             self.sendFrame(LinkFrame(kind: .sealedAudio, payload: sealed))
         }
     }
@@ -1515,12 +1516,14 @@ final class LinkClient: ObservableObject {
             completion?(false)
             return
         }
+        if ["audio.start", "audio.end", "audio.cancel", "input", "preview", "polish.settings"].contains(message.t) {
+            IMicLog.write("iphone.content", "send kind=\(message.t)")
+        }
         sendFrame(LinkFrame(kind: .sealedJSON, payload: sealed),
                   replacingPreview: message.t == "preview", completion: completion)
     }
 
     private func sendFrame(_ frame: LinkFrame, replacingPreview: Bool = false, completion: ((Bool) -> Void)? = nil) {
-        guard permitsSend("frame") else { completion?(false); return }
         let epoch = currentEpoch()
         let generation = connectionGeneration
         let writeID = completion.map { _ in UUID() }
