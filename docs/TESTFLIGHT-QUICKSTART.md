@@ -5,7 +5,7 @@
 ## 安装与配对
 
 1. 在 iPhone 安装 Apple 的 TestFlight，打开收到的 iMic 测试邀请链接，接受邀请并安装。邀请链接由发布者在 Beta 审核通过后提供。
-2. 在 Mac 从 [iMic Releases](https://github.com/Drafffffff/iMic/releases/latest) 下载 macOS universal DMG，把 iMic 拖到 Applications 并启动。
+2. 在 Mac 从 [iMic 官网下载区](https://drafffffff.github.io/iMic/?from=ios#download)（备用：[GitHub Releases](https://github.com/Drafffffff/iMic/releases/latest)） 下载 macOS universal DMG，把 iMic 拖到 Applications 并启动。
 3. 按 Mac 设置向导开启辅助功能权限，填写并校验百炼 API Key。屏幕录制权限只用于润色扫光，可以跳过。
 4. 将两台设备连到同一 Wi-Fi。iPhone 打开 iMic，允许麦克风和本地网络权限，选择自己的 Mac，输入 Mac 显示的六位配对码。语音识别权限用于 Apple Speech 临时预览，可选择拒绝。
 5. 在 Mac 打开一份新的文本编辑文档，点击空白输入处。按住 iPhone 底部录音区域说一句话，松手等待结果。首次测试建议关闭文字润色，确认基础输入正常后再尝试。
