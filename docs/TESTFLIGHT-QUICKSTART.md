@@ -5,7 +5,7 @@
 ## 安装与配对
 
 1. 在 iPhone 安装 Apple 的 TestFlight，打开收到的 iMic 测试邀请链接，接受邀请并安装。邀请链接由发布者在 Beta 审核通过后提供。
-2. 打开 iPhone 上的 iMic，阅读 WELCOME 后进入 MAC。尚未安装电脑端时，展开「还没有，发送到我的 Mac」，通过接力、共享或复制打开 [Mac 下载页](https://drafffffff.github.io/iMic/?from=ios#download)。手机不能安装 Mac 软件。
+2. 打开 iPhone 上的 iMic，阅读 WELCOME 后进入 MAC。尚未安装电脑端时，展开「还没有，发送到我的 Mac」，通过接力、共享或复制打开 [Mac 下载页](https://drafffffff.github.io/iMic/?from=ios#download)（备用：[GitHub Releases](https://github.com/Drafffffff/iMic/releases/latest)）。手机不能安装 Mac 软件。
 3. 在 macOS 13+ 的 Mac 下载并打开 iMic，按设置向导先填写自己的百炼 API Key，再开启辅助功能权限；屏幕录制只用于润色扫光，可跳过。识别会产生服务商费用。
 4. 两台设备连到同一 Wi-Fi。回到 iPhone，选择「已经装好了」，阅读 LINK 说明后点击「开始寻找 Mac」，系统询问本地网络访问时选择允许。选择自己的 Mac，输入 Mac 显示的六位配对码。拒绝权限时可去系统设置打开，返回后重试搜索。
 5. 练习按住松手、上滑取消、回车、删除、移动光标和清空。也可在 MAC 页选「先看看怎么用」，不连接 Mac 即可练习；练习不会录音或发送到电脑。设置 → GUIDE 可随时重新练习。

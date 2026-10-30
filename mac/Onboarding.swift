@@ -84,6 +84,7 @@ enum SetupLaunchPolicy {
 }
 
 enum SetupLinks {
+    static let website = URL(string: "https://drafffffff.github.io/iMic/")!
     static let bailianKeys = URL(string: "https://bailian.console.aliyun.com/?tab=model#/api-key")!
     static let accessibility = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
     static let screenCapture = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!

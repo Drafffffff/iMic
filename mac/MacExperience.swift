@@ -27,6 +27,7 @@ extension AppDelegate: NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(item("打开 iMic", #selector(show)))
         menu.addItem(item("设置…", #selector(showSettings), key: ","))
+        menu.addItem(item("iMic 官网与帮助…", #selector(openWebsite)))
         menu.addItem(item("配对新 iPhone…", #selector(pairNewPhone)))
         menu.addItem(.separator())
         menu.addItem(item("退出 iMic", #selector(quit), key: "q"))
@@ -61,6 +62,11 @@ extension AppDelegate: NSMenuDelegate {
         for (index, item) in menuModeItems.enumerated() {
             item.state = PolishMode.allCases[index] == DeepSeekConfiguration.options.mode ? .on : .off
         }
+    }
+
+    @objc func openWebsite() {
+        guard preview == nil else { return }
+        NSWorkspace.shared.open(SetupLinks.website)
     }
 
     @objc func toggleMenuPolish() {
