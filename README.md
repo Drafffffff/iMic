@@ -2,9 +2,9 @@
 
 # iMic
 
-**按住说话，松手即输入。**
+**一只手机，接管所有输入。**
 
-iPhone 当 Mac 的麦克风。说完松手，文字直接打进你正在用的任何应用。
+多台 Mac 随时切换，任意输入框按住就说。给 Agent 下指令，说完下拉就发送。
 
 [English](README.en.md) · [官网](https://drafffffff.github.io/iMic/) · [下载 Mac 版](https://github.com/Drafffffff/iMic/releases/latest) · [反馈](https://github.com/Drafffffff/iMic/issues)
 
@@ -14,8 +14,9 @@ iPhone 当 Mac 的麦克风。说完松手，文字直接打进你正在用的�
 
 ## 能做什么
 
-- **按住说话，松手输入**：文字落到 Mac 当前光标处，任何能打字的应用都行。
-- **弦手势**：下拉发送回车，上拨删字，左右移动光标。
+- **一个输入源，多台 Mac**：iPhone 记住你的每台 Mac，随时切换。
+- **任意输入框**：终端、编辑器、浏览器、聊天，按住说话，松手落字。
+- **弦手势**：下拉发送回车，上拨删字，左右移动光标。和 Agent 一来一回，手不用回到键盘。
 - **AI 润色**：口语自动整理成书面文字，也能转成终端命令、文言文等。
 - **隐私**：iPhone 直连你自己的 Mac，没有中转服务器。
 

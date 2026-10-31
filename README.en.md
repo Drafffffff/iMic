@@ -2,9 +2,9 @@
 
 # iMic
 
-**Hold to speak, release to type.**
+**One phone. Every input.**
 
-Your iPhone, your Mac's microphone. Release when done and your words land in any app you're using.
+Switch Macs anytime and speak into any text field. Tell your agent what to do, then pull down to send.
 
 [中文](README.md) · [Website](https://drafffffff.github.io/iMic/en/) · [Get the Mac app](https://github.com/Drafffffff/iMic/releases/latest) · [Feedback](https://github.com/Drafffffff/iMic/issues)
 
@@ -14,8 +14,9 @@ Your iPhone, your Mac's microphone. Release when done and your words land in any
 
 ## What it does
 
-- **Hold to speak, release to type**: text lands at your Mac's cursor, anywhere you can type.
-- **String gestures**: pull down for Return, up to delete, or sideways to move the cursor.
+- **One input source, many Macs**: your iPhone remembers each Mac and switches between them.
+- **Any text field**: terminal, editor, browser, chat. Hold to speak, release to type.
+- **String gestures**: pull down for Return, up to delete, or sideways to move the cursor. Talk back and forth with your agent without touching the keyboard.
 - **AI polish**: tidy spoken words into writing, or convert them into terminal commands, classical prose, and more.
 - **Privacy**: your iPhone connects directly to your own Mac, without a relay server.
 
