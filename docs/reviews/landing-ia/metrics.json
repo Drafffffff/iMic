@@ -1,0 +1,897 @@
+{
+  "measurement": "Headless Chromium; layout screenshots with reduced motion, DPR 1, iPhone 12 emulation at 390px; wait for releaseReady before reading document.body.scrollHeight. Transfer: cold cache, normal motion, 8-second window including video, official online page vs local HTTP server.",
+  "before": {
+    "1440": {
+      "height": 8796,
+      "width": 1440,
+      "overflow": false,
+      "hero": {
+        "x": 160,
+        "y": 717.046875,
+        "width": 1120,
+        "height": 728,
+        "top": 717.046875,
+        "right": 1280,
+        "bottom": 1445.046875,
+        "left": 160
+      },
+      "sections": [
+        {
+          "id": "",
+          "height": 1451.4375
+        },
+        {
+          "id": "feel",
+          "height": 3034.15625
+        },
+        {
+          "id": "polish",
+          "height": 912.046875
+        },
+        {
+          "id": "anywhere",
+          "height": 637.4375
+        },
+        {
+          "id": "private",
+          "height": 641.125
+        },
+        {
+          "id": "start",
+          "height": 548.203125
+        },
+        {
+          "id": "download",
+          "height": 693.15625
+        },
+        {
+          "id": "faq",
+          "height": 678
+        }
+      ]
+    },
+    "1920": {
+      "height": 8819,
+      "width": 1920,
+      "overflow": false,
+      "hero": {
+        "x": 400,
+        "y": 740.046875,
+        "width": 1120,
+        "height": 728,
+        "top": 740.046875,
+        "right": 1520,
+        "bottom": 1468.046875,
+        "left": 400
+      },
+      "sections": [
+        {
+          "id": "",
+          "height": 1474.4375
+        },
+        {
+          "id": "feel",
+          "height": 3034.15625
+        },
+        {
+          "id": "polish",
+          "height": 912.046875
+        },
+        {
+          "id": "anywhere",
+          "height": 637.4375
+        },
+        {
+          "id": "private",
+          "height": 641.125
+        },
+        {
+          "id": "start",
+          "height": 548.203125
+        },
+        {
+          "id": "download",
+          "height": 693.15625
+        },
+        {
+          "id": "faq",
+          "height": 678
+        }
+      ]
+    },
+    "820": {
+      "height": 7899,
+      "width": 820,
+      "overflow": false,
+      "hero": {
+        "x": 32,
+        "y": 613.5625,
+        "width": 756,
+        "height": 500.5,
+        "top": 613.5625,
+        "right": 788,
+        "bottom": 1114.0625,
+        "left": 32
+      },
+      "sections": [
+        {
+          "id": "",
+          "height": 1120.453125
+        },
+        {
+          "id": "feel",
+          "height": 2410.015625
+        },
+        {
+          "id": "polish",
+          "height": 921.953125
+        },
+        {
+          "id": "anywhere",
+          "height": 663.578125
+        },
+        {
+          "id": "private",
+          "height": 647.421875
+        },
+        {
+          "id": "start",
+          "height": 554.5
+        },
+        {
+          "id": "download",
+          "height": 701.859375
+        },
+        {
+          "id": "faq",
+          "height": 678
+        }
+      ]
+    },
+    "390": {
+      "height": 9543,
+      "width": 390,
+      "overflow": false,
+      "hero": {
+        "x": 20,
+        "y": 499.1875,
+        "width": 350,
+        "height": 246.75,
+        "top": 499.1875,
+        "right": 370,
+        "bottom": 745.9375,
+        "left": 20
+      },
+      "sections": [
+        {
+          "id": "",
+          "height": 752.9375
+        },
+        {
+          "id": "feel",
+          "height": 3242.90625
+        },
+        {
+          "id": "polish",
+          "height": 1457.15625
+        },
+        {
+          "id": "anywhere",
+          "height": 765.46875
+        },
+        {
+          "id": "private",
+          "height": 869.328125
+        },
+        {
+          "id": "start",
+          "height": 613.09375
+        },
+        {
+          "id": "download",
+          "height": 947.25
+        },
+        {
+          "id": "faq",
+          "height": 694.5
+        }
+      ]
+    }
+  },
+  "after": {
+    "1440": {
+      "height": 5693,
+      "width": 1440,
+      "overflow": false,
+      "hero": {
+        "x": 638.65625,
+        "y": 138.0625,
+        "width": 737.34375,
+        "height": 589.875,
+        "top": 138.0625,
+        "right": 1376,
+        "bottom": 727.9375,
+        "left": 638.65625
+      },
+      "sections": [
+        {
+          "id": "",
+          "height": 720
+        },
+        {
+          "id": "feel",
+          "height": 2104.109375
+        },
+        {
+          "id": "modes",
+          "height": 546.96875
+        },
+        {
+          "id": "anywhere",
+          "height": 326.640625
+        },
+        {
+          "id": "private",
+          "height": 492.765625
+        },
+        {
+          "id": "download",
+          "height": 715.75
+        },
+        {
+          "id": "faq",
+          "height": 616
+        }
+      ]
+    },
+    "1920": {
+      "height": 6004,
+      "width": 1920,
+      "overflow": false,
+      "hero": {
+        "x": 874.65625,
+        "y": 126.859375,
+        "width": 765.34375,
+        "height": 612.265625,
+        "top": 126.859375,
+        "right": 1640,
+        "bottom": 739.125,
+        "left": 874.65625
+      },
+      "sections": [
+        {
+          "id": "",
+          "height": 720
+        },
+        {
+          "id": "feel",
+          "height": 2210
+        },
+        {
+          "id": "modes",
+          "height": 588.046875
+        },
+        {
+          "id": "anywhere",
+          "height": 368.171875
+        },
+        {
+          "id": "private",
+          "height": 533.84375
+        },
+        {
+          "id": "download",
+          "height": 756.828125
+        },
+        {
+          "id": "faq",
+          "height": 656
+        }
+      ]
+    },
+    "820": {
+      "height": 5176,
+      "width": 820,
+      "overflow": false,
+      "hero": {
+        "x": 423.984375,
+        "y": 244.1875,
+        "width": 359.515625,
+        "height": 287.609375,
+        "top": 244.1875,
+        "right": 783.5,
+        "bottom": 531.796875,
+        "left": 423.984375
+      },
+      "sections": [
+        {
+          "id": "",
+          "height": 630
+        },
+        {
+          "id": "feel",
+          "height": 1380.21875
+        },
+        {
+          "id": "modes",
+          "height": 730.53125
+        },
+        {
+          "id": "anywhere",
+          "height": 360.9375
+        },
+        {
+          "id": "private",
+          "height": 525.328125
+        },
+        {
+          "id": "download",
+          "height": 761.921875
+        },
+        {
+          "id": "faq",
+          "height": 616
+        }
+      ]
+    },
+    "390": {
+      "height": 7307,
+      "width": 390,
+      "overflow": false,
+      "hero": {
+        "x": 20,
+        "y": 488.125,
+        "width": 350,
+        "height": 437.5,
+        "top": 488.125,
+        "right": 370,
+        "bottom": 925.625,
+        "left": 20
+      },
+      "sections": [
+        {
+          "id": "",
+          "height": 905.625
+        },
+        {
+          "id": "feel",
+          "height": 1774.84375
+        },
+        {
+          "id": "modes",
+          "height": 1104.9375
+        },
+        {
+          "id": "anywhere",
+          "height": 569.046875
+        },
+        {
+          "id": "private",
+          "height": 816.328125
+        },
+        {
+          "id": "download",
+          "height": 1224.90625
+        },
+        {
+          "id": "faq",
+          "height": 708.1875
+        }
+      ]
+    }
+  },
+  "transferBefore": [
+    {
+      "url": "https://drafffffff.github.io/iMic/",
+      "width": 1440,
+      "viewportHeight": 900,
+      "windowMS": 8178,
+      "bodyHeight": 8796,
+      "overflow": false,
+      "heroWidth": 1120,
+      "video": [
+        {
+          "src": "assets/video/hero.mp4",
+          "ready": 4,
+          "paused": false
+        }
+      ],
+      "transferBytes": 1325787,
+      "requests": [
+        {
+          "url": "https://drafffffff.github.io/iMic/",
+          "type": "Document",
+          "bytes": 7229
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/css/site.css",
+          "type": "Stylesheet",
+          "bytes": 3768
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/js/site.js",
+          "type": "Script",
+          "bytes": 2793
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/imic.svg",
+          "type": "Image",
+          "bytes": 549
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/img/hero.webp",
+          "type": "Image",
+          "bytes": 22712
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/feel.svg",
+          "type": "Image",
+          "bytes": 570
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/hold.svg",
+          "type": "Image",
+          "bytes": 585
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/img/hold.webp",
+          "type": "Image",
+          "bytes": 26058
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/string.svg",
+          "type": "Image",
+          "bytes": 653
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/img/string.webp",
+          "type": "Image",
+          "bytes": 19197
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/live.svg",
+          "type": "Image",
+          "bytes": 552
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/img/live.webp",
+          "type": "Image",
+          "bytes": 21759
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/polish.svg",
+          "type": "Image",
+          "bytes": 647
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/img/polish.webp",
+          "type": "Image",
+          "bytes": 10349
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/sound.svg",
+          "type": "Image",
+          "bytes": 607
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/img/sound.webp",
+          "type": "Image",
+          "bytes": 20100
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/anywhere.svg",
+          "type": "Image",
+          "bytes": 785
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/private.svg",
+          "type": "Image",
+          "bytes": 724
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/start.svg",
+          "type": "Image",
+          "bytes": 598
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/download.svg",
+          "type": "Image",
+          "bytes": 803
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/faq.svg",
+          "type": "Image",
+          "bytes": 526
+        },
+        {
+          "url": "https://api.github.com/repos/Drafffffff/iMic/releases/latest",
+          "type": "Fetch",
+          "bytes": 4666
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/video/hero.mp4",
+          "type": "Media",
+          "bytes": 1179557
+        }
+      ]
+    },
+    {
+      "url": "https://drafffffff.github.io/iMic/",
+      "width": 390,
+      "viewportHeight": 844,
+      "windowMS": 8179,
+      "bodyHeight": 9543,
+      "overflow": false,
+      "heroWidth": 350,
+      "video": [
+        {
+          "src": "assets/video/hero.mp4",
+          "ready": 4,
+          "paused": false
+        }
+      ],
+      "transferBytes": 1325773,
+      "requests": [
+        {
+          "url": "https://drafffffff.github.io/iMic/",
+          "type": "Document",
+          "bytes": 7302
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/css/site.css",
+          "type": "Stylesheet",
+          "bytes": 3716
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/js/site.js",
+          "type": "Script",
+          "bytes": 2840
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/imic.svg",
+          "type": "Image",
+          "bytes": 535
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/img/hero.webp",
+          "type": "Image",
+          "bytes": 22764
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/feel.svg",
+          "type": "Image",
+          "bytes": 514
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/hold.svg",
+          "type": "Image",
+          "bytes": 550
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/img/hold.webp",
+          "type": "Image",
+          "bytes": 26078
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/string.svg",
+          "type": "Image",
+          "bytes": 704
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/img/string.webp",
+          "type": "Image",
+          "bytes": 19210
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/live.svg",
+          "type": "Image",
+          "bytes": 601
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/img/live.webp",
+          "type": "Image",
+          "bytes": 21741
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/polish.svg",
+          "type": "Image",
+          "bytes": 686
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/img/polish.webp",
+          "type": "Image",
+          "bytes": 10306
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/sound.svg",
+          "type": "Image",
+          "bytes": 655
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/img/sound.webp",
+          "type": "Image",
+          "bytes": 20126
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/anywhere.svg",
+          "type": "Image",
+          "bytes": 837
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/private.svg",
+          "type": "Image",
+          "bytes": 693
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/start.svg",
+          "type": "Image",
+          "bytes": 575
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/download.svg",
+          "type": "Image",
+          "bytes": 717
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/pixel/faq.svg",
+          "type": "Image",
+          "bytes": 498
+        },
+        {
+          "url": "https://api.github.com/repos/Drafffffff/iMic/releases/latest",
+          "type": "Fetch",
+          "bytes": 4665
+        },
+        {
+          "url": "https://drafffffff.github.io/iMic/assets/video/hero.mp4",
+          "type": "Media",
+          "bytes": 1179460
+        }
+      ]
+    }
+  ],
+  "transferAfter": [
+    {
+      "url": "http://127.0.0.1:8000/",
+      "width": 1440,
+      "viewportHeight": 900,
+      "windowMS": 8030,
+      "bodyHeight": 5693,
+      "overflow": false,
+      "heroWidth": 737.34375,
+      "video": [
+        {
+          "src": "assets/video/hero.mp4",
+          "ready": 4,
+          "paused": false
+        }
+      ],
+      "transferBytes": 1089761,
+      "requests": [
+        {
+          "url": "http://127.0.0.1:8000/",
+          "type": "Document",
+          "bytes": 20058
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/css/site.css",
+          "type": "Stylesheet",
+          "bytes": 14262
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/js/site.js",
+          "type": "Script",
+          "bytes": 9135
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/imic.svg",
+          "type": "Image",
+          "bytes": 1746
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/img/hero.webp",
+          "type": "Image",
+          "bytes": 22945
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/feel.svg",
+          "type": "Image",
+          "bytes": 2821
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/string.svg",
+          "type": "Image",
+          "bytes": 4182
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/img/string.webp",
+          "type": "Image",
+          "bytes": 19149
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/polish.svg",
+          "type": "Image",
+          "bytes": 3976
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/img/polish.webp",
+          "type": "Image",
+          "bytes": 10327
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/sound.svg",
+          "type": "Image",
+          "bytes": 3646
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/img/sound.webp",
+          "type": "Image",
+          "bytes": 20055
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/modes.svg",
+          "type": "Image",
+          "bytes": 3807
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/anywhere.svg",
+          "type": "Image",
+          "bytes": 5780
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/private.svg",
+          "type": "Image",
+          "bytes": 4752
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/download.svg",
+          "type": "Image",
+          "bytes": 5697
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/faq.svg",
+          "type": "Image",
+          "bytes": 2332
+        },
+        {
+          "url": "https://api.github.com/repos/Drafffffff/iMic/releases/latest",
+          "type": "Fetch",
+          "bytes": 4664
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/video/hero.mp4",
+          "type": "Media",
+          "bytes": 930427
+        }
+      ]
+    },
+    {
+      "url": "http://127.0.0.1:8000/",
+      "width": 390,
+      "viewportHeight": 844,
+      "windowMS": 8030,
+      "bodyHeight": 7307,
+      "overflow": false,
+      "heroWidth": 350,
+      "video": [
+        {
+          "src": "assets/video/hero-mobile.mp4",
+          "ready": 4,
+          "paused": false
+        }
+      ],
+      "transferBytes": 855087,
+      "requests": [
+        {
+          "url": "http://127.0.0.1:8000/",
+          "type": "Document",
+          "bytes": 20058
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/css/site.css",
+          "type": "Stylesheet",
+          "bytes": 14262
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/js/site.js",
+          "type": "Script",
+          "bytes": 9135
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/imic.svg",
+          "type": "Image",
+          "bytes": 1746
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/img/hero-mobile.webp",
+          "type": "Image",
+          "bytes": 12213
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/img/hero.webp",
+          "type": "Image",
+          "bytes": 22945
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/feel.svg",
+          "type": "Image",
+          "bytes": 2821
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/string.svg",
+          "type": "Image",
+          "bytes": 4182
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/img/string.webp",
+          "type": "Image",
+          "bytes": 19149
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/polish.svg",
+          "type": "Image",
+          "bytes": 3976
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/img/polish.webp",
+          "type": "Image",
+          "bytes": 10327
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/sound.svg",
+          "type": "Image",
+          "bytes": 3646
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/img/sound.webp",
+          "type": "Image",
+          "bytes": 20055
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/modes.svg",
+          "type": "Image",
+          "bytes": 3807
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/anywhere.svg",
+          "type": "Image",
+          "bytes": 5780
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/private.svg",
+          "type": "Image",
+          "bytes": 4752
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/download.svg",
+          "type": "Image",
+          "bytes": 5697
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/pixel/faq.svg",
+          "type": "Image",
+          "bytes": 2332
+        },
+        {
+          "url": "https://api.github.com/repos/Drafffffff/iMic/releases/latest",
+          "type": "Fetch",
+          "bytes": 4663
+        },
+        {
+          "url": "http://127.0.0.1:8000/assets/video/hero-mobile.mp4",
+          "type": "Media",
+          "bytes": 683541
+        }
+      ]
+    }
+  ],
+  "brand": {
+    "pixelMaskDifferences": 0,
+    "rectangles": 24,
+    "sourceSize": [
+      270,
+      73
+    ]
+  },
+  "macTextCSSPixelsAt1440": 14.349961180124224
+}

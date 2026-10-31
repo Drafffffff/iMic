@@ -117,9 +117,24 @@ const SHARE_URL = "https://drafffffff.github.io/iMic/?from=ios#download";
   const videos = [...document.querySelectorAll("video[data-src]")];
   const manuallyPaused = new WeakSet();
   const visible = new WeakSet();
+  const compactVideo = matchMedia("(max-width: 759px)");
+  const sourceFor = (video) => compactVideo.matches && video.dataset.mobileSrc ? video.dataset.mobileSrc : video.dataset.src;
   function load(video) {
-    if (!video.getAttribute("src")) video.src = video.dataset.src;
+    const source = sourceFor(video);
+    if (video.getAttribute("src") !== source) video.src = source;
   }
+  function updateResponsivePosters() {
+    videos.filter((video) => video.dataset.mobilePoster).forEach((video) => {
+      video.dataset.desktopPoster ||= video.getAttribute("poster");
+      video.poster = compactVideo.matches ? video.dataset.mobilePoster : video.dataset.desktopPoster;
+      if (video.getAttribute("src") && video.getAttribute("src") !== sourceFor(video)) {
+        video.pause(); video.removeAttribute("src"); video.load();
+        if (!reducedMotion.matches && visible.has(video) && !manuallyPaused.has(video) && !document.hidden) play(video);
+      }
+    });
+  }
+  updateResponsivePosters();
+  compactVideo.addEventListener("change", updateResponsivePosters);
   function setButton(video) {
     const button = video.parentElement.querySelector(".video-toggle");
     button.textContent = video.paused ? button.dataset.playLabel : button.dataset.pauseLabel;

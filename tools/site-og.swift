@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 // Composite the real first-screen browser screenshot with the canonical pixel wordmark.
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-let shot = root.appendingPathComponent("build/ux-shots/site/desktop-hero.png")
+let shot = root.appendingPathComponent(CommandLine.arguments.dropFirst().first ?? "build/ux-shots/site/desktop-hero.png")
 guard let screenshot = NSImage(contentsOf: shot),
       let mark = NSImage(contentsOf: root.appendingPathComponent("site/assets/pixel/imic.svg")),
       let icon = NSImage(contentsOf: root.appendingPathComponent("site/assets/icons/icon-512.png")),
@@ -13,7 +13,7 @@ NSColor(srgbRed: 0.035, green: 0.035, blue: 0.035, alpha: 1).setFill()
 NSBezierPath(rect: NSRect(x:0,y:0,width:1200,height:630)).fill()
 screenshot.draw(in:NSRect(x:380,y:25,width:800,height:500),from:.zero,operation:.sourceOver,fraction:1)
 icon.draw(in:NSRect(x:44,y:482,width:72,height:72),from:.zero,operation:.sourceOver,fraction:1)
-mark.draw(in:NSRect(x:132,y:503,width:184,height:56),from:.zero,operation:.sourceOver,fraction:1)
+mark.draw(in:NSRect(x:132,y:503,width:184,height:184 * mark.size.height / mark.size.width),from:.zero,operation:.sourceOver,fraction:1)
 let text="按住说话，\n松手即输入。" as NSString
 text.draw(in:NSRect(x:48,y:235,width:390,height:190),withAttributes:[.font:NSFont.systemFont(ofSize:46,weight:.semibold),.foregroundColor:NSColor(srgbRed:0.95,green:0.94,blue:0.90,alpha:1)])
 ("iPhone → Mac" as NSString).draw(at:NSPoint(x:52,y:164),withAttributes:[.font:NSFont.monospacedSystemFont(ofSize:20,weight:.regular),.foregroundColor:NSColor(srgbRed:0.7,green:0.68,blue:0.64,alpha:1)])

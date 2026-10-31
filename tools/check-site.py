@@ -34,7 +34,7 @@ class Page(HTMLParser):
             require(False, f'{self.path.name}: non-hero image must lazy load')
         if tag == 'link' and a.get('rel') in ('canonical',):
             external.add(a.get('href', ''))
-        for key in ('src', 'href', 'poster', 'data-src'):
+        for key in ('src', 'href', 'poster', 'data-src', 'data-mobile-src', 'data-mobile-poster'):
             if a.get(key): refs.append((self.path, a[key], tag, key, a))
         if a.get('srcset'):
             for src in a['srcset'].split(','): refs.append((self.path, src.strip().split()[0], tag, 'src', a))
@@ -83,6 +83,14 @@ index = (root/'index.html').read_text()
 for value in ('canonical', 'og:title', 'og:description', 'og:image', 'og:url', 'twitter:card', 'apple-touch-icon'):
     require(value in index, f'index.html: missing metadata {value}')
 require('id="download"' in index, 'download anchor missing')
+for anchor in ('feel', 'modes', 'anywhere', 'private', 'start', 'faq'):
+    require(anchor in documents[root/'index.html'].ids, f'Missing section/legacy anchor: {anchor}')
+for identifier in ('origin-banner', 'mac-download-link', 'share-link', 'release-meta', 'mobile-download-note', 'share-status', 'share-manual', 'checksum-link', 'testflight-pending', 'testflight-link'):
+    require(identifier in documents[root/'index.html'].ids, f'Download contract missing: {identifier}')
+require('data-hero-version' in index and index.count('data-dmg-link') >= 2, 'Download data attributes missing')
+require('brand-dot' not in index, 'Duplicate brand dot')
+require(index.count('class="feature"') == 3, 'FEEL must contain three features')
+require('实时预览默认关闭' in index and '可能重复或误删' in index and '无法监视用户接管' in index, 'Live preview risk disclosure missing')
 require('href="https://github.com/Drafffffff/iMic/releases/latest"' in index, 'no-JS release fallback missing')
 
 files = [p for p in root.rglob('*') if p.is_file()]
@@ -91,7 +99,7 @@ poster = root/'assets/img/hero.webp'
 poster_size = poster.stat().st_size if poster.is_file() else 0
 # Conservative startup envelope: all HTML/CSS/JS, all pixel labels and all icons
 # (even OG, which normal browsers don't request), plus both hero poster formats.
-startup = code + sum(p.stat().st_size for p in files if '/pixel/' in str(p) or '/icons/' in str(p) or p.name in ('hero.webp','hero.png'))
+startup = code + sum(p.stat().st_size for p in files if '/pixel/' in str(p) or '/icons/' in str(p) or p.name in ('hero.webp','hero.png','hero-mobile.webp','hero-mobile.png'))
 total = sum(p.stat().st_size for p in files)
 budgets = [('HTML + CSS + JS',code,150_000),('Hero poster WebP',poster_size,200_000),('First-screen envelope (no video)',startup,1_000_000),('site total',total,15_000_000)]
 for label,size,limit in budgets:
@@ -142,9 +150,11 @@ def video_fps(data):
     return 0
 
 # Demo videos: hero ≤3 MB, others ≤2.5 MB; ≤13s; 60fps; only sound.mp4 carries audio.
+expected_videos = {'hero', 'hero-mobile', 'string', 'polish', 'sound'}
+require({p.stem for p in root.rglob('*.mp4')} == expected_videos, 'Unexpected/missing demo videos')
 for path in sorted(root.rglob('*.mp4')):
     data=path.read_bytes()
-    limit = 3_000_000 if path.name.startswith('hero') else 2_500_000
+    limit = 1_500_000 if path.stem == 'hero-mobile' else 3_000_000 if path.stem == 'hero' else 2_500_000
     require(len(data)<=limit, f'{path.name}: video exceeds {limit:,} bytes')
     has_audio = b'soun' in data
     require(b'avc1' in data, f'{path.name}: expected H.264')

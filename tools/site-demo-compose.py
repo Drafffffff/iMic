@@ -143,7 +143,8 @@ def first(events, kind, **match):
 
 LAYOUTS = {
     # canvas is rendered at 2x the output, then the camera crops and scales it down
-    "hero": dict(out=(1600, 1000), phone_h=1640, phone_x=300, mac_w=1900, gap=130),
+    "hero": dict(out=(1400, 1120), phone_h=1720, phone_x=60, mac_w=1880, gap=30),
+    "hero-mobile": dict(out=(720, 900), phone_h=1040, phone_x=480, mac_w=1300, gap=0),
     "feature": dict(out=(1280, 960), phone_h=1440, phone_x=140, mac_w=1620, gap=70),
 }
 # The Mac window's upper part is empty chat history: show the latest bubbles and the
@@ -163,6 +164,11 @@ def geometry(kind):
     mh = round(visible * mw / MAC_SOURCE[0] / 2) * 2
     mx = L["phone_x"] + pw + L["gap"]
     my = (H - mh) // 2
+    if kind == "hero-mobile":
+        # Stack the same recordings on a portrait canvas. Mac close-ups can
+        # fill the phone width without cutting the recording or inventing UI.
+        mx, my, py = (W-mw)//2, H-mh-18, 12
+        L = dict(L, phone_x=(W-pw)//2)
     return dict(W=W, H=H, out=L["out"], pw=pw, ph=ph, px=L["phone_x"], py=py, mw=mw, mh=mh, mx=mx, my=my)
 
 
@@ -440,18 +446,19 @@ def encode(master, audio, out_path, budget):
     raise SystemExit(f"{out_path} over budget at crf 31: {size}")
 
 
-def build(scene):
-    kind = "hero" if scene == "hero" else "feature"
+def build(scene, name=None, kind=None):
+    name = name or scene
+    kind = kind or ("hero" if scene == "hero" else "feature")
     g = geometry(kind)
     events, mac_delay = load_scene(scene)
     p = plan(scene, events)
     keys = camera_keys(p["cam"], g)
     parts = []
     for i, seg in enumerate(p["segs"]):
-        part = os.path.join(WORK, f"{scene}-seg{i}.mov")
+        part = os.path.join(WORK, f"{name}-seg{i}.mov")
         render_segment(scene, kind, g, events, mac_delay, seg, keys, p["beats"], p["labels"], part)
         parts.append(part)
-    master = os.path.join(WORK, f"{scene}-master.mov")
+    master = os.path.join(WORK, f"{name}-master.mov")
     durations, length = join_and_loop(parts, master)
     # Output start of each segment in body time (before the loop trim).
     segments_out, cursor = [], 0.0
@@ -483,18 +490,21 @@ def build(scene):
              ";".join(parts_a) + f";{mix}amix=inputs={len(cues)}:normalize=0,apad,atrim=0:{length:.3f},"
              f"loudnorm=I=-16:TP=-1.5:LRA=11[a]", "-map", "[a]", "-ar", "44100", audio])
 
-    budget = 3_000_000 if scene == "hero" else 2_500_000
-    final = os.path.join(SITE, "assets/video", f"{scene}.mp4")
+    # Keep both hero variants under the former first-screen transfer cost.
+    budget = 1_000_000 if scene == "hero" else 2_500_000
+    final = os.path.join(SITE, "assets/video", f"{name}.mp4")
     crf, size = encode(master, audio, final, budget)
     poster_t = map_time(p["poster"], segments_out) or length / 2
-    png = os.path.join(SITE, "assets/img", f"{scene}.png")
+    png = os.path.join(SITE, "assets/img", f"{name}.png")
     run(["ffmpeg", "-v", "error", "-y", "-ss", f"{max(0, poster_t):.3f}", "-i", final, "-frames:v", "1", png])
-    Image.open(png).convert("RGB").save(os.path.join(SITE, "assets/img", f"{scene}.webp"), quality=80, method=6)
-    print(f"{scene}: {length:.2f}s · crf {crf} · {size:,} bytes · poster {poster_t:.2f}s")
+    Image.open(png).convert("RGB").save(os.path.join(SITE, "assets/img", f"{name}.webp"), quality=80, method=6)
+    print(f"{name}: {length:.2f}s · crf {crf} · {size:,} bytes · poster {poster_t:.2f}s")
     json.dump({"segments": segments_out, "length": length, "beats": [map_time(b, segments_out) for b in p["beats"]],
-               "labels": p["labels"]}, open(os.path.join(WORK, f"{scene}-plan.json"), "w"), indent=1)
+               "labels": p["labels"]}, open(os.path.join(WORK, f"{name}-plan.json"), "w"), indent=1)
 
 
-for scene in ["hero", "hold", "string", "live", "polish", "sound"]:
+for scene in ["hero", "string", "polish", "sound"]:
     if not ONLY or scene in ONLY:
         build(scene)
+if not ONLY or "hero" in ONLY or "hero-mobile" in ONLY:
+    build("hero", name="hero-mobile", kind="hero-mobile")
