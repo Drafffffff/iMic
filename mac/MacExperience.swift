@@ -116,11 +116,18 @@ extension AppDelegate: NSMenuDelegate {
             issueLabel.stringValue = polishFallbackIsCommand
                 ? "润色失败，已保留为安全注释。"
                 : lastInsertSucceeded ? "润色失败，已输入原文。" : "润色失败，原文已保留，可复制。"
+            issueLabel.stringValue += " " + cloudFailure.title(service: issueServiceName)
         } else { issueLabel.stringValue = cloudFailure.title(service: issueServiceName) }
-        issueButton.title = cloudFailure == .network ? "重试连接" : "打开设置"
+        let console = issueProvider == .bailian && cloudFailure.needsConsole
+        issueButton.title = console ? "打开百炼控制台" : cloudFailure == .network ? "重试连接" : "打开设置"
+        issueButton.action = console ? #selector(openFailureConsole) : #selector(performIssueAction)
         issueButton.setAccessibilityLabel(issueButton.title)
         issueButton.isEnabled = currentSession == nil && connectionCheck == nil
         issueButton.toolTip = cloudFailure == .network ? "检查服务连接；本次音频不会重发，请在连接恢复后重新录音。" : nil
+    }
+    @objc private func openFailureConsole() {
+        guard preview == nil else { return }
+        NSWorkspace.shared.open(SetupLinks.bailianKeys)
     }
     func markConnectionRecovered() {
         clearCloudFailure(); connectionRecovered = true
@@ -150,8 +157,14 @@ extension AppDelegate: NSMenuDelegate {
             case .success:
                 self.markConnectionRecovered()
             case .failure(let error):
-                self.showCloudFailure(error == .rejected ? .key : error == .network ? .network : .address,
-                                      provider: provider, recognition: recognition)
+                let issue: CloudFailure
+                switch error {
+                case .bailian(let reason): issue = reason == .network ? .network : .bailian(reason)
+                case .rejected: issue = .key
+                case .network: issue = .network
+                case .http: issue = .service
+                }
+                self.showCloudFailure(issue, provider: provider, recognition: recognition)
             }
         }
         issueLabel.stringValue = "正在检查连接…"

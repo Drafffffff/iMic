@@ -17,6 +17,21 @@ struct ShellCredentials {
         self.names=names
         self.allowCustomToken=allowCustomToken
     }
+    /// Parse a pasted literal; never evaluate shell syntax or expand variables.
+    static func clean(_ input: String) -> String {
+        var value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let range = value.range(of: #"^(?:export\s+)?DASHSCOPE_API_KEY\s*=\s*"#, options: .regularExpression) {
+            value.removeSubrange(range)
+            value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        for (left, right) in [("\"", "\""), ("'", "'"), ("“", "”")] {
+            if value.count >= 2, value.hasPrefix(left), value.hasSuffix(right) {
+                value = String(value.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+                break
+            }
+        }
+        return value
+    }
     static func valid(_ key:String)->Bool {
         key.hasPrefix("sk-") && key.count>10 && key.unicodeScalars.allSatisfy {
             CharacterSet(charactersIn:"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_").contains($0)
@@ -198,7 +213,8 @@ enum BailianKeyCheck {
         case unreachable(String)
     }
     static func url(forASREndpoint endpoint:String)->URL? {
-        guard let parts=URLComponents(string:endpoint),parts.scheme=="wss",let host=parts.host,!host.isEmpty else{return nil}
+        guard let url = BailianAddress.url(endpoint, scheme: "wss", path: "/api-ws/v1/inference"),
+              let parts = URLComponents(url: url, resolvingAgainstBaseURL: false), let host = parts.host else { return nil }
         var check=URLComponents()
         check.scheme="https";check.host=host;check.port=parts.port
         check.path="/compatible-mode/v1/models"
@@ -218,7 +234,7 @@ enum BailianKeyCheck {
         }
     }
     @discardableResult
-    static func run(key:String,asrEndpoint:String,session:URLSession = .shared,
+    static func run(key:String,asrEndpoint:String,session:URLSession = SettingsValidation.session,
                     completion:@escaping(Result)->Void)->URLSessionDataTask? {
         guard let request=request(key:key,asrEndpoint:asrEndpoint) else{
             completion(.rejected);return nil
@@ -226,7 +242,7 @@ enum BailianKeyCheck {
         let task=session.dataTask(with:request){_,response,error in
             let result:Result
             if let status=(response as? HTTPURLResponse)?.statusCode {result=classify(status:status)}
-            else {result = .unreachable(error?.localizedDescription ?? "没有响应")}
+            else {result = .unreachable(BailianIssue.network.message)}
             DispatchQueue.main.async{completion(result)}
         }
         task.resume()

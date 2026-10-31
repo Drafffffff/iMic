@@ -33,6 +33,7 @@ protocol SetupWizardHost: AnyObject {
     func setupSaveKey(_ key: String) -> Bool
     /// Uses a key found in the environment or shell files without copying it.
     func setupUseKey(_ credential: ResolvedCredential)
+    func setupApplyService(_ selection: BailianDiscovery.Selection)
     func setupRequestAccessibility()
     func setupRequestScreenCapture()
     func setupFinished(polishEnabled: Bool)
@@ -135,7 +136,14 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     private let keyField = NSSecureTextField()
     private let keyMessage = NSTextField(wrappingLabelWithString: "")
     private var keyState = KeyState.idle
-    private var keyTask: URLSessionDataTask?
+    private var keyTask: BailianDiscovery?
+    private var keyGeneration = UUID()
+    private var debounce: DispatchWorkItem?
+    private var validationMessage = ""
+    private var selection: BailianDiscovery.Selection?
+    private let baseField = NSTextField()
+    private let advanced = NSStackView()
+    private let consoleHelp = NSButton(title: "打开百炼控制台 ↗", target: nil, action: nil)
     private var checkedKey = ""
     private let polishCheck = NSButton(checkboxWithTitle: "同时启用 AI 润色（推荐）", target: nil, action: nil)
 
@@ -250,8 +258,8 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     }
 
     private func show(_ next: SetupStep) {
-        if next != .key { keyTask?.cancel(); keyTask = nil }
-        window?.setContentSize(NSSize(width: 480, height: next == .key ? 480 : 420))
+        if next != .key { keyTask?.cancel(); keyTask = nil; debounce?.cancel(); keyGeneration = UUID() }
+        window?.setContentSize(NSSize(width: next == .key ? 640 : 480, height: next == .key ? 650 : 420))
         step = next
         SetupProgress.save(next)
         current?.removeFromSuperview()
@@ -384,11 +392,13 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
 
     // MARK: - 01 Key
 
-    private var enteredKey: String { keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var enteredKey: String { ShellCredentials.clean(keyField.stringValue) }
     private var keyIsActive: Bool { !enteredKey.isEmpty && snapshot.key?.key == enteredKey }
 
     private func buildKey() -> NSView {
-        let intro = Self.text("一个百炼 Key 同时用于语音识别和 AI 润色。")
+        let intro = Self.text("1. 打开百炼控制台，用阿里云账号登录；没有账号请先注册并完成实名认证。")
+        let step2 = Self.text("2. 右上角选择「华北2（北京）」（新人免费额度仅此地域提供），创建 API Key，权限选「全部」。")
+        let step3 = Self.text("3. 复制 Key，粘贴到下面。")
         let get = NSButton(title: "获取百炼 API Key ↗", target: self, action: #selector(openConsole))
         get.setAccessibilityLabel(get.title)
         get.bezelStyle = .rounded
@@ -409,23 +419,35 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         let field = Self.row([keyField, paste], spacing: 8)
 
         keyMessage.font = .systemFont(ofSize: 12)
-        keyMessage.maximumNumberOfLines = 2
+        keyMessage.maximumNumberOfLines = 0
+        consoleHelp.target = self; consoleHelp.action = #selector(openConsole)
+        consoleHelp.bezelStyle = .rounded; consoleHelp.isHidden = true
+        let toggle = Self.link("高级选项 · 手动填写服务地址", self, #selector(toggleAdvanced))
+        baseField.placeholderString = "https://业务空间.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+        baseField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        baseField.delegate = self; baseField.setAccessibilityLabel("百炼 Base URL")
+        advanced.arrangedSubviews.forEach { advanced.removeArrangedSubview($0); $0.removeFromSuperview() }
+        advanced.orientation = .vertical; advanced.alignment = .leading
+        advanced.addArrangedSubview(Self.text("粘贴控制台提供的按量付费 Base URL；留空自动识别。", size: 11))
+        advanced.addArrangedSubview(baseField)
+        baseField.widthAnchor.constraint(equalTo: advanced.widthAnchor).isActive = true
+        advanced.isHidden = true
 
         polishCheck.setAccessibilityLabel("同时启用 AI 润色（推荐）")
-        let polishHint = Self.text("同一个百炼 Key，识别后自动整理口语、去重复。可随时在设置中关闭。", size: 11)
+        let polishHint = Self.text("识别和润色按百炼用量计费，新用户在北京地域有免费额度。", size: 11)
         let polish = Self.column([polishCheck, polishHint], spacing: 6)
         polishHint.widthAnchor.constraint(equalTo: polish.widthAnchor).isActive = true
-        let view = Self.column([Self.title("填入百炼 API Key"), intro, get, field, keyMessage, polish], spacing: 14)
+        let view = Self.column([Self.title("填入百炼 API Key"), intro, get, step2, step3, field, keyMessage, consoleHelp, toggle, advanced, polish], spacing: 14)
         view.setCustomSpacing(22, after: view.arrangedSubviews[0])
         view.setCustomSpacing(22, after: get)
-        for item in [intro, field, keyMessage, polish] as [NSView] {
+        view.detachesHiddenViews = true
+        for item in [intro, step2, step3, field, keyMessage, advanced, polish] as [NSView] {
             item.widthAnchor.constraint(equalTo: view.widthAnchor).isActive = true
         }
 
         // A key found on this Mac is filled in and checked without asking.
-        if let key = snapshot.key {
-            if VerifiedKeyMemory.isVerified(key.key) { keyState = .valid; checkedKey = key.key }
-            else if keyState != .checking { verifyKey() }
+        if snapshot.key != nil {
+            if keyState != .checking { verifyKey() }
         } else {
             keyState = .idle
         }
@@ -438,15 +460,15 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         var color = NSColor.imicMuted
         switch keyState {
         case .idle: message = ""
-        case .checking: message = "正在验证…"
+        case .checking: message = validationMessage
         case .valid:
-            message = "Key 可用。"
+            message = validationMessage
             color = .imicOrange
         case .rejected:
-            message = "这个 Key 无法使用，请确认复制完整，且已在百炼开通服务。"
+            message = validationMessage
             color = .systemRed
         case .offline:
-            message = "暂时连不上百炼，请检查网络后重试。"
+            message = BailianIssue.network.message
             color = .systemRed
         case .format:
             message = "百炼 API Key 以 sk- 开头，请检查是否复制完整。"
@@ -455,23 +477,34 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         keyMessage.stringValue = message
         keyMessage.textColor = color
         let ready = keyState == .valid && keyIsActive
-        polishCheck.isEnabled = ready
+        polishCheck.isEnabled = ready && selection?.polishListed != false
         footer(primary: ready ? "下一步" : keyState == .checking ? "验证中…" : "验证",
                enabled: ready || (!enteredKey.isEmpty && keyState != .checking), secondary: nil)
     }
 
     func controlTextDidChange(_ notification: Notification) {
         guard step == .key else { return }
-        keyTask?.cancel(); keyTask = nil
-        keyState = enteredKey == checkedKey && !checkedKey.isEmpty && keyIsActive ? .valid : .idle
+        keyTask?.cancel(); keyTask = nil; debounce?.cancel(); keyGeneration = UUID()
+        keyState = .idle
+        consoleHelp.isHidden = true
         updateKey()
+        guard !enteredKey.isEmpty else { return }
+        let work = DispatchWorkItem { [weak self] in self?.verifyKey() }
+        debounce = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
+    }
+
+    @objc private func toggleAdvanced() {
+        advanced.isHidden.toggle()
+        window?.setContentSize(NSSize(width: 640, height: advanced.isHidden ? 650 : 720))
+        controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
     }
 
     @objc private func pasteKey() {
         guard let text = NSPasteboard.general.string(forType: .string) else { return }
-        keyField.stringValue = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        keyField.stringValue = ShellCredentials.clean(text)
         controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
-        if ShellCredentials.valid(enteredKey) { verifyKey() }
+
     }
 
     @objc private func openConsole() {
@@ -482,30 +515,47 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     private func verifyKey() {
         let key = enteredKey
         guard !key.isEmpty else { return }
-        guard ShellCredentials.valid(key) else { keyState = .format; updateKey(); return }
-        keyTask?.cancel()
-        keyState = .checking
+        guard ShellCredentials.valid(key) else {
+            keyState = BailianAddress.isPlan(key) ? .rejected : .format
+            validationMessage = BailianIssue.plan.message
+            consoleHelp.isHidden = !BailianAddress.isPlan(key)
+            updateKey(); return
+        }
+        keyTask?.cancel(); debounce?.cancel()
+        keyField.stringValue = key
+        keyGeneration = UUID(); let generation = keyGeneration
+        keyState = .checking; validationMessage = "正在识别地域…"
+        consoleHelp.isHidden = true
         updateKey()
-        let finish: (BailianKeyCheck.Result) -> Void = { [weak self] result in
-            guard let self, self.enteredKey == key else { return }
+        let finish: (Result<BailianDiscovery.Selection, BailianIssue>) -> Void = { [weak self] result in
+            guard let self, self.keyGeneration == generation, self.enteredKey == key else { return }
             self.keyTask = nil
             switch result {
-            case .valid:
+            case .success(let selection):
                 guard self.adopt(key) else { return }
-                if self.host?.setupPreview == false { VerifiedKeyMemory.remember(key) }
-                self.checkedKey = key
-                self.keyState = .valid
-            case .rejected: self.keyState = .rejected
-            case .unreachable: self.keyState = .offline
+                self.host?.setupApplyService(selection)
+                self.snapshot = self.host?.setupSnapshot() ?? self.snapshot
+                self.selection = selection
+                if !selection.polishListed { self.polishCheck.state = .off }
+                self.validationMessage = selection.message
+                self.checkedKey = key; self.keyState = .valid
+            case .failure(let issue):
+                self.keyState = .rejected; self.validationMessage = issue.message
+                self.consoleHelp.isHidden = !issue.needsConsole
             }
-            self.updateKey()
-            self.updateStepper()
+            self.updateKey(); self.updateStepper()
         }
         if host?.setupPreview == true {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { finish(key.contains("bad") ? .rejected : .valid) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                finish(key.contains("bad") ? .failure(.invalidKey) : .success(.init(host: BailianAddress.hosts[0], asrListed: false, polishListed: true)))
+            }
             return
         }
-        keyTask = BailianKeyCheck.run(key: key, asrEndpoint: snapshot.asrEndpoint, completion: finish)
+        keyTask = BailianDiscovery.start(key: key, baseURL: advanced.isHidden ? "" : baseField.stringValue,
+            progress: { [weak self] message in
+                guard let self, self.keyGeneration == generation else { return }
+                self.validationMessage = message; self.updateKey()
+            }, completion: finish)
     }
 
     /// A key already set on this Mac is used as-is; a pasted key is saved by iMic.
@@ -527,8 +577,34 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     // MARK: - Window
 
     func windowWillClose(_ notification: Notification) {
-        keyTask?.cancel(); keyTask = nil
+        keyTask?.cancel(); keyTask = nil; debounce?.cancel(); keyGeneration = UUID(); keyState = .idle
     }
+
+    #if DEBUG
+    /// Deterministic native-view captures; no network, real credentials or permissions.
+    func previewKeyState(_ name: String) {
+        guard host?.setupPreview == true else { return }
+        keyTask?.cancel(); debounce?.cancel(); keyGeneration = UUID()
+        keyField.stringValue = name == "initial" ? "" : "sk-preview-onboarding-key"
+        consoleHelp.isHidden = true; selection = nil
+        switch name {
+        case "initial": keyState = .idle
+        case "checking": keyState = .checking; validationMessage = "正在识别地域…"
+        case "models": keyState = .checking; validationMessage = "正在确认模型权限…"
+        case "success":
+            let selected = BailianDiscovery.Selection(host: BailianAddress.hosts[1], asrListed: false, polishListed: true)
+            snapshot.key = ResolvedCredential(key: keyField.stringValue, source: .app)
+            selection = selected; keyState = .valid; validationMessage = selected.message
+        default:
+            let issues: [String: BailianIssue] = ["invalid": .invalidKey, "plan": .plan, "permission": .permission,
+                "ip": .ip, "billing": .billing, "network": .network, "unsupported": .unsupported("中国香港")]
+            let issue = issues[name] ?? .workspace
+            keyState = .rejected; validationMessage = issue.message; consoleHelp.isHidden = !issue.needsConsole
+        }
+        polishCheck.state = .on
+        updateKey(); window?.contentView?.layoutSubtreeIfNeeded()
+    }
+    #endif
 
     // MARK: - Style
 

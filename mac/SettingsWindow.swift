@@ -38,6 +38,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     private var profiles: [PolishProvider: NSStackView] = [:]
     private let profileSlot = NSStackView()
     private let providerWarning = NSTextField(wrappingLabelWithString: "")
+    private let detectedService = NSTextField(wrappingLabelWithString: "")
     private let activeProvider = NSTextField(wrappingLabelWithString: "")
     private var accessStatus: NSTextField!
     private var screenStatus: NSTextField!
@@ -182,6 +183,15 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     private func bailian() -> NSStackView {
         let app = app!
         let key = field("bailian.key", "百炼 API Key", resolved(.bailian)?.key ?? "", secure: true)
+        key.onEdit = { [weak self, weak key] in
+            guard let self, let key, !key.value.isEmpty else { return }
+            let work = DispatchWorkItem { [weak self, weak key] in
+                guard let self, let key else { return }
+                self.save(key) { _ in }
+            }
+            key.debounce = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
+        }
         let override = action("改用 iMic 保存的 Key", #selector(overrideBailianKey))
         override.identifier = NSUserInterfaceItemIdentifier("overrideBailianKey")
         override.isHidden = resolved(.bailian)?.source.isExternal != true
@@ -212,9 +222,21 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             heading("LANGUAGE"), app.polishOutputPicker, app.polishOptionsHint], spacing: 7)
         app.polishFields = choices; choices.isHidden = !DeepSeekConfiguration.enabled
         activeProvider.font = .systemFont(ofSize: 11); activeProvider.textColor = .imicMuted
-        return column([note("一个百炼 Key 同时用于语音识别和 AI 润色。"), key, override,
+        let base = field("bailian.base", "手动填写服务地址（Base URL，可选）", "")
+        let advanced = NSStackView(views: [base])
+        advanced.orientation = .vertical; advanced.alignment = .leading; advanced.isHidden = true
+        base.widthAnchor.constraint(equalTo: advanced.widthAnchor).isActive = true
+        let toggle = action("高级选项 · 手动填写服务地址", #selector(toggleBailianAdvanced(_:)))
+        toggle.identifier = NSUserInterfaceItemIdentifier("bailianAdvancedToggle")
+        toggle.target = self
+        bailianAdvanced = advanced
+        return column([note("粘贴 Key 后自动识别地域并验证；一个百炼 Key 用于识别和润色。"), key, override, toggle, advanced,
             app.linkButton("获取百炼 Key ↗", #selector(AppDelegate.openBailianConsole)), app.divider(),
             heading("AI POLISH"), activeProvider, app.deepseekCheck, choices], spacing: 12)
+    }
+    private var bailianAdvanced: NSStackView?
+    @objc private func toggleBailianAdvanced(_ sender: NSButton) {
+        bailianAdvanced?.isHidden.toggle(); resize()
     }
     private func iphone() -> NSStackView {
         let app = app!
@@ -290,7 +312,8 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         }
         let fixed = app.label(ASRConfiguration.model, size: 11, color: .imicIvory, mono: true)
         fixed.isSelectable = true; fixed.setAccessibilityLabel("识别模型（只读）")
-        return column([heading("POLISH SERVICE"), app.polishProviderPicker, providerWarning, profileSlot,
+        detectedService.font = .systemFont(ofSize: 11); detectedService.textColor = .imicMuted
+        return column([detectedService, heading("POLISH SERVICE"), app.polishProviderPicker, providerWarning, profileSlot,
             app.divider(), heading("RECOGNITION"), fixed,
             field("asr.endpoint", "识别服务地址", app.endpoint.stringValue),
             note("只支持百炼推理地址，须与 Key 的地域或业务空间一致。"),
@@ -305,6 +328,13 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         preview ? previewKeys[provider] : PolishCredentials.resolve(for: provider)
     }
     func refreshCredentials() {
+        let region = defaults.string(forKey: "bailian.detectedRegion")
+        detectedService.stringValue = region.map { "已自动识别：\(BailianAddress.title($0)) · \(app?.endpoint.stringValue ?? "")" } ?? "当前服务地址：\(app?.endpoint.stringValue ?? "") · 保存 Key 时会自动识别。"
+        for id in ["asr.endpoint", "bailian.endpoint"] {
+            if let row = fields[id], !row.dirty {
+                row.markSaved(id == "asr.endpoint" ? app!.endpoint.stringValue : DeepSeekConfiguration.endpoint(for: .bailian))
+            }
+        }
         for provider in PolishProvider.allCases {
             guard let row = fields["\(provider.rawValue).key"] else { continue }
             let credential = resolved(provider)
@@ -320,7 +350,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             if defaults.string(forKey: prefix + "digest") == VerifiedKeyMemory.digest(row.value),
                let date = defaults.object(forKey: prefix + "date") as? Date,
                let status = defaults.string(forKey: prefix + "status") {
-                row.message("\(status) · \(date.formatted(date: .abbreviated, time: .shortened))", error: status != "已验证")
+                row.message("\(status) · \(date.formatted(date: .abbreviated, time: .shortened))", error: !status.hasPrefix("已验证"))
             }
         }
         refreshProvider()
@@ -379,6 +409,9 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             } else { row.message("无法写入 iMic 配置文件。", error: true) }
             completion(saved); return
         }
+        if row.id == "bailian.key" || row.id == "bailian.base" {
+            saveBailian(row, completion: completion); return
+        }
         let credentialBefore = resolved(provider)?.key
         let providerEndpointBefore = DeepSeekConfiguration.endpoint(for: provider)
         var bailianCheck: (String, String)?
@@ -415,7 +448,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             }
             switch result {
             case .failure(let error):
-                let message = error == .rejected && provider == .bailian ? "百炼拒绝了这个 Key，请检查 Key 与地域。" : error.message
+                let message = error.message
                 row.message(message, error: true)
                 self.stamp(row, value: value, status: error == .rejected ? "Key 被拒绝" : "验证失败")
                 self.refreshProvider()
@@ -431,8 +464,12 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
                     }
                 } else if row.id == "asr.endpoint" {
                     self.defaults.set(value, forKey: "asrEndpoint")
+                    self.defaults.removeObject(forKey: "bailian.detectedRegion")
                     self.defaults.set(ASRConfiguration.model, forKey: "asrModel")
                     self.app?.endpoint.stringValue = value
+                    if let host = URL(string: value)?.host {
+                        self.defaults.set(BailianAddress.polish(host), forKey: PolishProvider.bailian.endpointKey)
+                    }
                 } else {
                     self.defaults.set(value, forKey: kind == "model" ? provider.modelKey : provider.endpointKey)
                 }
@@ -452,6 +489,55 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             if let (key, address) = bailianCheck {
                 row.task = SettingsValidation.runBailian(key: key, endpoint: address, completion: finish)
             } else { row.task = SettingsValidation.run(request, completion: finish) }
+        }
+    }
+    private func saveBailian(_ row: SettingsField, completion: @escaping (Bool) -> Void) {
+        let value = row.value, generation = row.generation
+        let credential = resolved(.bailian)
+        let originalEndpoint = app!.endpoint.stringValue
+        let key = row.id == "bailian.key" ? value : fields["bailian.key"]?.value ?? credential?.key ?? ""
+        let base = bailianAdvanced?.isHidden == false ? fields["bailian.base"]?.value ?? "" : ""
+        let keyDraft = fields["bailian.key"]?.value
+        let baseDraft = fields["bailian.base"]?.value
+        let wasAdvanced = bailianAdvanced?.isHidden
+        row.saveButton.isEnabled = false; row.message("正在识别地域…"); resize()
+        let finish: (Result<BailianDiscovery.Selection, BailianIssue>) -> Void = { [weak self, weak row] result in
+            guard let self, let row, row.generation == generation, row.value == value else { completion(false); return }
+            row.discovery = nil; row.saveButton.isEnabled = true
+            guard self.resolved(.bailian) == credential, self.app?.endpoint.stringValue == originalEndpoint,
+                  self.fields["bailian.key"]?.value == keyDraft, self.fields["bailian.base"]?.value == baseDraft,
+                  self.bailianAdvanced?.isHidden == wasAdvanced else {
+                row.message("验证期间连接配置已更改，请重新验证。", error: true); completion(false); return
+            }
+            switch result {
+            case .failure(let issue):
+                row.message(issue.message, error: true)
+                self.stamp(row, value: value, status: "验证失败")
+                self.resize(); completion(false)
+            case .success(let selection):
+                if key != credential?.key {
+                    if self.preview { self.previewKeys[.bailian] = ResolvedCredential(key: key, source: .app) }
+                    else if !PolishCredentials.save(key, for: .bailian) {
+                        row.message("无法写入 iMic 配置文件。", error: true); completion(false); return
+                    }
+                }
+                selection.apply(self.defaults)
+                self.app?.endpoint.stringValue = BailianAddress.asr(selection.host)
+                row.markSaved(value); row.hideKey(); row.message(selection.message)
+                if row.id == "bailian.base" { self.fields["bailian.key"]?.markSaved(key) }
+                self.stamp(row, value: value, status: "已验证 · \(selection.region)")
+                self.configurationChanged(); completion(true)
+            }
+        }
+        if preview {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                finish(key.contains("bad") ? .failure(.invalidKey) : .success(.init(host: BailianAddress.hosts[0], asrListed: false, polishListed: true)))
+            }
+        } else {
+            row.discovery = BailianDiscovery.start(key: key, baseURL: base, progress: { [weak self, weak row] text in
+                guard let row, row.generation == generation else { return }
+                row.message(text); self?.resize()
+            }, completion: finish)
         }
     }
     private func stamp(_ row: SettingsField, value: String, status: String) {
