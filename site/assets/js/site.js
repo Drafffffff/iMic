@@ -263,3 +263,97 @@ const SHARE_URL = document.querySelector("#share-manual").href;
     });
   });
 })();
+
+/* HTML-in-Canvas CRT headline. Only runs where the browser can draw DOM into a canvas
+   (Chrome origin trial or chrome://flags/#canvas-draw-element); everywhere else the
+   CSS glow is the whole effect. The <h1> stays a real, selectable, accessible element. */
+(() => {
+  "use strict";
+  const title = document.querySelector("#hero-title");
+  const ctx2d = window.CanvasRenderingContext2D && CanvasRenderingContext2D.prototype;
+  if (!title || !ctx2d || !("drawElementImage" in ctx2d)) return;
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  const canvas = document.createElement("canvas");
+  canvas.className = "crt-title";
+  if ("content" in HTMLCanvasElement.prototype) canvas.setAttribute("content", "drawable");
+  else canvas.setAttribute("layoutsubtree", "");
+  title.before(canvas);
+  canvas.append(title);
+  const ctx = canvas.getContext("2d");
+  const glow = document.createElement("canvas");
+  const glowCtx = glow.getContext("2d");
+  const pad = parseFloat(getComputedStyle(canvas).getPropertyValue("--crt-pad")) || 24;
+  let dpr = 1, width = 0, height = 0, visible = true, frame = 0, band = 0;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    width = canvas.clientWidth;
+    height = title.offsetHeight + pad * 2;
+    canvas.style.height = height + "px";
+    canvas.width = glow.width = Math.round(width * dpr);
+    canvas.height = glow.height = Math.round(height * dpr);
+    paint();
+  }
+
+  function drawTitle(target) {
+    const result = target.drawElementImage(title, pad, pad);
+    // Before Chrome 155 the call returned a DOMMatrix that had to be applied by hand.
+    if (result && typeof result.toString === "function") title.style.transform = result.toString();
+  }
+
+  function paint() {
+    if (!width) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawTitle(ctx);
+    // Bloom: blur a copy of the drawn text and add it back as light.
+    glowCtx.setTransform(1, 0, 0, 1, 0, 0);
+    glowCtx.clearRect(0, 0, glow.width, glow.height);
+    glowCtx.drawImage(canvas, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.filter = `blur(${10 * dpr}px)`;
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(glow, 0, 0);
+    ctx.filter = `blur(${28 * dpr}px)`;
+    ctx.globalAlpha = 0.35;
+    ctx.drawImage(glow, 0, 0);
+    ctx.restore();
+    // Scanlines and a rolling bright band, applied only where text was drawn.
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.34)";
+    const step = Math.max(2, Math.round(3 * dpr));
+    for (let y = 0; y < canvas.height; y += step) ctx.fillRect(0, y, canvas.width, Math.max(1, Math.round(dpr)));
+    if (!reducedMotion.matches) {
+      const y = (band % 1) * (canvas.height + 120 * dpr) - 60 * dpr;
+      const gradient = ctx.createLinearGradient(0, y - 40 * dpr, 0, y + 40 * dpr);
+      gradient.addColorStop(0, "rgba(255, 120, 60, 0)");
+      gradient.addColorStop(0.5, "rgba(255, 150, 90, 0.28)");
+      gradient.addColorStop(1, "rgba(255, 120, 60, 0)");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, y - 40 * dpr, canvas.width, 80 * dpr);
+    }
+    ctx.restore();
+  }
+
+  function tick(time) {
+    frame = 0;
+    if (!visible || document.hidden || reducedMotion.matches) return;
+    band = time / 5200;
+    if (canvas.requestPaint) canvas.requestPaint(); else paint();
+    frame = requestAnimationFrame(tick);
+  }
+  function start() { if (!frame && !reducedMotion.matches) frame = requestAnimationFrame(tick); }
+
+  canvas.addEventListener("paint", paint);
+  new ResizeObserver(resize).observe(canvas);
+  new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; if (visible) start(); }).observe(canvas);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) start(); });
+  reducedMotion.addEventListener("change", () => { paint(); start(); });
+  document.documentElement.dataset.crt = "canvas";
+  resize();
+  start();
+})();

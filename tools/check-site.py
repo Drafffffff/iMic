@@ -107,11 +107,19 @@ if anywhere:
     fields = re.findall(r'class="field-text" data-text="([^"]+)">([^<]+)</span>', scene)
     require(len(fields) == 6 and all(text == fallback for text, fallback in fields),
             'Six fields need complete static fallback text')
-    require('辅助功能权限' in scene and '前台变化' in scene and '不自动输入' in scene,
-            'Permission and app-switch limitations missing')
-    require('实时预览、润色扫光与清空效果因应用而异' in scene and 'href="#faq"' in scene,
-            'Enhanced feature limitations must link to FAQ')
-require('Mac 上任意输入框' in index, 'Any-field metadata missing')
+faq = re.search(r'<section id="faq".*?</section>', index, re.S)
+require(faq is not None, 'FAQ missing')
+if faq:
+    # Caveats live in the FAQ so the page itself stays short; they must not disappear.
+    answers = faq[0]
+    require('辅助功能权限' in answers and '前台应用变化' in answers and '不自动输入' in answers,
+            'Permission and app-switch limitations missing from FAQ')
+    require('实时预览、润色扫光与清空效果因应用而异' in answers and '拒绝清空' in answers,
+            'Enhanced feature limitations missing from FAQ')
+    require('换行会替换为空格' in answers and '按回车' in answers, 'Terminal behaviour missing from FAQ')
+    require('macOS 14+' in answers and '屏幕录制' in answers, 'Polish highlight requirements missing from FAQ')
+    require('手写' in answers and '不会自动执行' in answers, 'Polish example and terminal-mode notes missing from FAQ')
+require('Mac 上任意输入框' in index and '一只手机，接管所有输入' in index, 'Slogan or any-field metadata missing')
 for identifier in ('origin-banner', 'mac-download-link', 'share-link', 'release-meta', 'mobile-download-note', 'share-status', 'share-manual', 'checksum-link', 'testflight-pending', 'testflight-link'):
     require(identifier in documents[root/'index.html'].ids, f'Download contract missing: {identifier}')
 require('data-hero-version' in index and index.count('data-dmg-link') >= 2, 'Download data attributes missing')

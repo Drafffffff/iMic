@@ -47,8 +47,6 @@ p + p { margin-top: 14px; }
 .status-dot { width: 5px; height: 5px; background: var(--orange); display: inline-block; }
 .accent { color: var(--orange); }
 .intro { max-width: 32em; font-size: 18px; line-height: 1.85; color: #c7c4bb; margin-top: 24px; }
-.hero-reach { font-size: clamp(17px, 1.5vw, 21px); line-height: 1.6; margin-top: 22px; }
-.hero-reach + .intro { margin-top: 12px; font-size: 16px; }
 .hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 18px 22px; margin-top: 28px; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; border: 1px solid transparent; padding: 11px 19px; text-decoration: none; font-size: 14px; font-weight: 600; line-height: 1.5; border-radius: 2px; }
 .primary { background: var(--orange); color: #160b05; }
@@ -83,7 +81,6 @@ p + p { margin-top: 14px; }
 #modes .section-heading { display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; align-items: end; }
 #modes .section-heading .pixel { grid-column: 1/-1; }
 #modes .section-heading p { max-width: 36em; margin: 0; }
-.section-note { color: var(--muted); font-size: 12px; margin: -14px 0 24px; }
 .examples { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 26px; margin-bottom: 24px; }
 .example { border-top: 1px solid var(--line); padding-top: 20px; }
 .example h3 { font-size: 18px; }
@@ -118,10 +115,6 @@ p + p { margin-top: 14px; }
 .field-terminal .field-entry { font-family: var(--mono); }
 .demo-caption { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-top: 12px; }
 .demo-toggle { flex-shrink: 0; background: none; color: var(--ivory); border: 0; border-bottom: 1px solid var(--muted); padding: 0; font-size: 12px; }
-.two-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; color: var(--muted); font-size: 13px; margin-top: 24px; }
-.two-notes strong { color: var(--ivory); font-size: 15px; font-weight: 500; margin-right: 8px; }
-.two-notes p + p { margin-top: 0; }
-.tested-apps { margin-top: 16px; }
 .privacy-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 44px; margin-bottom: 24px; }
 .privacy-list .index { margin-bottom: 14px; }
 .privacy-list h3 { font-size: 20px; margin-bottom: 12px; }
@@ -216,8 +209,7 @@ details p { max-width: 36em; font-size: 14px; color: var(--muted); padding-top: 
   #modes .section-heading { display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; align-items: end; }
 #modes .section-heading .pixel { grid-column: 1/-1; }
 #modes .section-heading p { max-width: 36em; margin: 0; }
-.section-note { margin-top: -10px; }
-  #anywhere .section-heading { grid-template-columns: 1fr; gap: 16px; }
+#anywhere .section-heading { grid-template-columns: 1fr; gap: 16px; }
   .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 14px; }
   .field-window { height: 144px; padding: 12px; }
   .field-entry { font-size: 14px; }
@@ -226,10 +218,8 @@ details p { max-width: 36em; font-size: 14px; color: var(--muted); padding-top: 
   .code-gutter { left: 6px; top: 12px; }
   .field-chrome { font-size: 10px; }
   .demo-caption { align-items: flex-start; }
-  .two-notes { grid-template-columns: 1fr; }
-  #anywhere h2 { font-size: 29px; }
-  .two-notes { gap: 14px; }
-  .privacy-list, .steps, .downloads, .faq { grid-template-columns: 1fr; gap: 28px; }
+#anywhere h2 { font-size: 29px; }
+.privacy-list, .steps, .downloads, .faq { grid-template-columns: 1fr; gap: 28px; }
   .privacy-list .index { margin-bottom: 8px; }
   .steps { margin-bottom: 30px; }
   .steps li { padding-left: 38px; }
@@ -259,3 +249,55 @@ details p { max-width: 36em; font-size: 14px; color: var(--muted); padding-top: 
 
 .language-choice{white-space:nowrap}.masthead .brand{flex-shrink:0}
 @media(max-width:600px){.masthead{height:auto;min-height:88px;flex-direction:column;align-items:flex-start;justify-content:center;gap:16px;padding-block:20px}.masthead nav{gap:12px;font-size:12px;line-height:1.5;justify-content:space-between;width:100%;white-space:nowrap}.masthead nav a{white-space:nowrap}.language-choice{font-size:12px}}
+
+/* Phosphor display: the page borrows the app's CRT language. A fixed scanline layer and a
+   slow rolling band sit above everything (no pointer events); glow is reserved for the
+   headline, orange accents and interactive state. */
+:root { --section-space: clamp(72px, 6vw, 104px); --glow: 255, 74, 0; }
+body::before, body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 30; }
+body::before { background: repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0, 0, 0, .22) 2px 3px); mix-blend-mode: multiply; }
+body::after { background: linear-gradient(to bottom, transparent, rgba(242, 240, 230, .035) 48%, rgba(var(--glow), .05) 50%, transparent 52%); background-size: 100% 240vh; animation: crt-roll 9s linear infinite; }
+@keyframes crt-roll { from { background-position: 0 -120vh; } to { background-position: 0 120vh; } }
+h1 { text-shadow: 0 0 1px rgba(242, 240, 230, .55), 0 0 18px rgba(242, 240, 230, .16), 0 0 46px rgba(var(--glow), .14); }
+.accent, .example-arrow, summary span { text-shadow: 0 0 10px rgba(var(--glow), .75), 0 0 28px rgba(var(--glow), .35); }
+h2 { text-shadow: 0 0 14px rgba(242, 240, 230, .1); }
+.pixel, .wordmark, .field-label { filter: drop-shadow(0 0 5px rgba(242, 240, 230, .28)); }
+.status-dot { box-shadow: 0 0 8px rgba(var(--glow), .9); }
+.primary { box-shadow: 0 0 0 1px rgba(var(--glow), .4), 0 0 26px rgba(var(--glow), .32); }
+.primary:hover { box-shadow: 0 0 0 1px rgba(var(--glow), .6), 0 0 36px rgba(var(--glow), .5); }
+.field-scene.is-active .field-window { box-shadow: 0 0 18px rgba(var(--glow), .22), inset 0 0 14px rgba(var(--glow), .08); }
+.field-text::after { box-shadow: 0 0 8px rgba(var(--glow), .9); }
+.nav-download { text-shadow: 0 0 10px rgba(var(--glow), .45); }
+
+/* Grouping: items that belong together sit close; groups and sections breathe. */
+.section { border-top-color: #1f1f1d; }
+.section-heading { margin-bottom: clamp(36px, 3.4vw, 52px); }
+.pixel { margin-bottom: 12px; }
+.hero .intro { margin-top: 28px; font-size: clamp(17px, 1.35vw, 19px); color: #c7c4bb; }
+.hero-actions { margin-top: 36px; }
+.requirements { margin-top: 14px; }
+.feature + .feature { margin-top: clamp(40px, 3.6vw, 60px); }
+.feature-copy .index { margin-bottom: 14px; }
+.feature-copy .pixel { margin-bottom: 10px; }
+.feature-copy p { margin-top: 12px; }
+.gestures { margin-top: 18px; }
+.demo-caption { margin-top: 10px; }
+.examples { margin-bottom: 0; }
+.privacy-list { margin-bottom: 28px; }
+.privacy-list .index { margin-bottom: 10px; }
+.privacy-list h3 { margin-bottom: 6px; }
+.steps { margin-bottom: 40px; }
+.steps h3 { margin-bottom: 6px; }
+.steps a { margin-top: 6px; }
+.download-meta { margin-top: 10px; }
+.download-card .fine { margin-top: 6px; }
+
+/* HTML-in-Canvas (Chrome origin trial / flag): the real headline element is drawn into a
+   canvas and re-lit with bloom and scanlines. Text stays in the DOM for selection and
+   assistive technology; every other browser keeps the CSS glow above. */
+.crt-title { display: block; width: calc(100% + 2 * var(--crt-pad, 24px)); margin: calc(-1 * var(--crt-pad, 24px)); }
+.crt-title > h1 { margin: var(--crt-pad, 24px); text-shadow: none; }
+
+@media (prefers-reduced-motion: reduce) { body::after { display: none; } }
+@media print { body::before, body::after { display: none; } }
+html[lang="en"] h1 { letter-spacing: -.025em; }
