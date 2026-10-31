@@ -52,7 +52,7 @@ final class ASRStreamingTests: XCTestCase {
         recognizer.onPreview = { [weak self] in self?.previews.append($0) }
         recognizer.onFinal = { [weak self] text, _ in self?.finals.append(text) }
         recognizer.onError = { [weak self] in self?.failures.append($0) }
-        recognizer.start(key: "sk-isolated-test", endpoint: "wss://unused.example/api-ws/v1/inference", model: ASRConfiguration.model)
+        recognizer.start(key: "sk-isolated-test", endpoint: "wss://dashscope.aliyuncs.com/api-ws/v1/inference", model: ASRConfiguration.model)
         try transport.event("task-started")
         guard failures.isEmpty else {
             throw NSError(domain: "ASRStreamingFixture", code: 1, userInfo: [NSLocalizedDescriptionKey: failures.joined(separator: "; ")])
@@ -69,7 +69,7 @@ final class ASRStreamingTests: XCTestCase {
         recognizer.onFailure = { issue = $0 }
         transport.fail(NSError(domain: "iMic.ASR.HTTP", code: 401))
         XCTAssertEqual(issue, .key)
-        XCTAssertEqual(failures, ["百炼拒绝了 Key"])
+        XCTAssertEqual(failures, [BailianIssue.invalidKey.message])
         XCTAssertTrue(finals.isEmpty)
     }
     func testNetworkFailureIsRetryableWithoutRetainingAudio() throws {
@@ -77,15 +77,35 @@ final class ASRStreamingTests: XCTestCase {
         recognizer.onFailure = { issue = $0 }
         transport.fail(URLError(.notConnectedToInternet))
         XCTAssertEqual(issue, .network)
-        XCTAssertEqual(failures, ["无法连接百炼，检查网络"])
+        XCTAssertEqual(failures, [BailianIssue.network.message])
         XCTAssertTrue(finals.isEmpty)
     }
     func testRegionOrModelFailureOffersAddressCheckAndRedactsBody() throws {
         var issue: CloudFailure?
         recognizer.onFailure = { issue = $0 }
         try transport.serviceFailure("ModelNotFound")
-        XCTAssertEqual(issue, .address)
+        XCTAssertEqual(issue, .bailian(.permission))
         XCTAssertFalse(failures.joined().contains("sensitive"))
+    }
+    func testRuntimeCodesShareOnboardingMessages() throws {
+        // Each test fixture owns an injected transport; these never open a socket.
+        for (code, expected) in [("Arrearage", BailianIssue.billing), ("AccessDenied.IPRestriction", .ip),
+                                 ("Model.AccessDenied", .permission), ("AllocationQuota.FreeTierOnly", .billing),
+                                 ("Workspace.AccessDenied", .workspace)] {
+            let fake = RecognitionTransport()
+            let asr = BailianASR(transportFactory: { _ in fake })
+            var reason = ""
+            asr.onError = { reason = $0 }
+            asr.start(key: "sk-isolated-test", endpoint: ASRConfiguration.defaultEndpoint, model: ASRConfiguration.model)
+            try fake.serviceFailure(code)
+            XCTAssertEqual(reason, expected.message)
+        }
+    }
+    func testUnsafeRecognitionEndpointsNeverCreateTransport() {
+        for endpoint in ["wss://evil.example/api-ws/v1/inference", "wss://token-plan.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference", "wss://dashscope.aliyuncs.com:444/api-ws/v1/inference", "wss://user@dashscope.aliyuncs.com/api-ws/v1/inference"] {
+            let asr = BailianASR(transportFactory: { _ in XCTFail("Must not send Key to unsafe host"); return RecognitionTransport() })
+            asr.start(key: "sk-isolated-test", endpoint: endpoint, model: ASRConfiguration.model)
+        }
     }
     func testInterimCorrectionsStayDisplayOnlyUntilSentenceEnds() throws {
         try transport.sentence(1, "明天上午", ended: false)

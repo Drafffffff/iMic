@@ -62,7 +62,7 @@ private final class ASRWebSocketTransport:ASRMessageTransport {
         // WebSocket 可能长时间只上传音频；不能把单次 HTTP 的 15/90 秒用于整段任务。
         config.timeoutIntervalForRequest=ASRConfiguration.resourceTimeout
         config.timeoutIntervalForResource=ASRConfiguration.resourceTimeout
-        session=URLSession(configuration:config)
+        session=URLSession(configuration:config, delegate:BailianRedirectPolicy(), delegateQueue:nil)
         socket=session.webSocketTask(with:request)
     }
     func resume(){socket.resume()}
@@ -141,10 +141,8 @@ final class BailianASR {
         guard !key.isEmpty else{fail("请先配置百炼 API Key");return}
         guard model==ASRConfiguration.model else{fail("识别模型请设置为 \(ASRConfiguration.model)");return}
         IMicLog.write("mac.asr", "start model=\(model)")
-        guard let components=URLComponents(string:ASRConfiguration.inferenceEndpoint(endpoint)),
-              components.scheme=="wss",components.host?.isEmpty==false,
-              components.path=="/api-ws/v1/inference",let url=components.url else{
-            fail("识别地址应为 wss:// 服务域名/api-ws/v1/inference");return
+        guard let url = BailianAddress.url(ASRConfiguration.inferenceEndpoint(endpoint), scheme: "wss", path: "/api-ws/v1/inference") else {
+            onFailure?(.address); fail(BailianIssue.address.message); return
         }
         var request=URLRequest(url:url);request.timeoutInterval=ASRConfiguration.resourceTimeout
         request.setValue("Bearer \(key)",forHTTPHeaderField:"Authorization")
@@ -309,10 +307,12 @@ final class BailianASR {
             // Display bounded code identifiers only; never echo error_message
             // or request payloads, which can contain credential/audio data.
             let raw=header["error_code"] as? String ?? "unknown"
-            let code=String(raw.prefix(64).filter{$0.isASCII && ($0.isLetter || $0.isNumber || $0=="_" || $0=="-" || $0==".")})
+            let safeRaw = raw.hasPrefix("sk-") ? "redacted" : raw
+            let code=String(safeRaw.prefix(64).filter{$0.isASCII && ($0.isLetter || $0.isNumber || $0=="_" || $0=="-" || $0==".")})
             IMicLog.write("mac.asr", "task failed code=\(code) queued=\(queuedBytes)")
-            onFailure?(CloudFailure.classify(code: code))
-            fail("百炼识别失败（\(code.isEmpty ? "unknown":code)）")
+            let issue = CloudFailure.classify(code: code, message: header["error_message"] as? String ?? "")
+            onFailure?(issue)
+            fail(issue.title(service: "百炼"))
         default:break
         }
     }

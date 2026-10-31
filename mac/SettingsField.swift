@@ -14,12 +14,17 @@ final class SettingsField: NSStackView, NSTextFieldDelegate {
     private var showing = false
     private(set) var baseline: String
     var task: URLSessionDataTask?
+    var discovery: BailianDiscovery?
+    var debounce: DispatchWorkItem?
     var generation = UUID()
     var onSave: ((SettingsField, @escaping (Bool) -> Void) -> Void)?
     var onEdit: (() -> Void)?
     var dirty: Bool { value != baseline }
     var value: String {
-        get { (showing ? revealed : concealed).stringValue.trimmingCharacters(in: .whitespacesAndNewlines) }
+        get {
+            let text = (showing ? revealed : concealed).stringValue
+            return id == "bailian.key" ? ShellCredentials.clean(text) : text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         set { concealed.stringValue = newValue; revealed.stringValue = newValue }
     }
 
@@ -53,7 +58,7 @@ final class SettingsField: NSStackView, NSTextFieldDelegate {
         controls.orientation = .horizontal; controls.spacing = 8; controls.alignment = .centerY
         for label in [feedback, source] {
             label.font = .systemFont(ofSize: 10); label.textColor = .imicMuted
-            label.maximumNumberOfLines = 2; label.preferredMaxLayoutWidth = 512
+            label.maximumNumberOfLines = 0; label.preferredMaxLayoutWidth = 512
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
         for view in [heading, controls, source, feedback] { addArrangedSubview(view) }
@@ -69,7 +74,7 @@ final class SettingsField: NSStackView, NSTextFieldDelegate {
     func markSaved(_ value: String) {
         baseline = value; self.value = value; updateButton()
     }
-    func cancel() { task?.cancel(); task = nil; generation = UUID(); saveButton.isEnabled = true }
+    func cancel() { discovery?.cancel(); discovery = nil; debounce?.cancel(); debounce = nil; task?.cancel(); task = nil; generation = UUID(); saveButton.isEnabled = true }
     func reset() { cancel(); value = baseline; hideKey(); feedback.stringValue = ""; updateButton() }
     func hideKey() {
         guard showing else { return }

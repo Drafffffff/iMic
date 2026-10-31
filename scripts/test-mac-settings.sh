@@ -16,7 +16,7 @@ paths=[str(root/p) if p!='mac/main.swift' else str(work/'AppDelegate.swift') for
 PY
 SOURCES=()
 while IFS= read -r source; do SOURCES+=("$source"); done < "$WORK/sources.txt"
-xcrun swiftc -swift-version 5 -framework AppKit -framework Network -framework CryptoKit \
+xcrun swiftc -D DEBUG -swift-version 5 -framework AppKit -framework Network -framework CryptoKit \
   -framework ApplicationServices -framework Vision -framework ScreenCaptureKit -framework ServiceManagement \
   "${SOURCES[@]}" "$ROOT/tests/MacSettings/main.swift" -o "$WORK/settings-tests"
-"$WORK/settings-tests" --ui-preview=settings-external-key
+"$WORK/settings-tests" --ui-preview=settings-external-key "$@"

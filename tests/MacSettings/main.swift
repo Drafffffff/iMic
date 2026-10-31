@@ -89,14 +89,14 @@ key.value = "sk-valid-preview-new-key"
 check(key.dirty && app.key.stringValue == initialBackend, "A draft must not alter running credentials")
 var done = false
 key.save { check($0, "Valid preview key saves"); done = true }
-check(!key.saveButton.isEnabled && key.feedback.stringValue == "验证中…", "Validation is visibly pending")
+check(!key.saveButton.isEnabled && key.feedback.stringValue == "正在识别地域…", "Validation is visibly pending")
 wait(until: { done })
 check(!key.dirty && app.key.stringValue == "sk-valid-preview-new-key", "Only a verified save adopts the draft")
 key.value = "sk-bad-preview-key"
 done = false
 key.save { check(!$0, "Rejected key must not save"); done = true }
 wait(until: { done })
-check(key.feedback.stringValue.contains("百炼拒绝"), "Rejection is actionable inline")
+check(key.feedback.stringValue.contains("Key 无效"), "Rejection is actionable inline")
 check(app.key.stringValue == "sk-valid-preview-new-key", "Rejected draft leaves running credential intact")
 settings.window.performClose(nil)
 check(settings.window.attachedSheet != nil, "Dirty drafts require a close sheet")
@@ -135,7 +135,7 @@ check(SetupLinks.website.absoluteString == "https://drafffffff.github.io/iMic/",
 app.openWebsite() // Preview must return before opening the browser.
 check(!app.statusMenu.items.contains { $0.title == "复制配对码" || $0.title == "设置向导…" }, "Low frequency operations leave the top-level menu")
 app.showCloudFailure(.key, provider: .bailian, recognition: true)
-check(app.issueLabel.stringValue.contains("百炼拒绝了 Key") && app.menuStatusItem.title.contains("百炼拒绝了 Key"), "ASR failures show reason in main and menu")
+check(app.issueLabel.stringValue.contains("Key 无效") && app.menuStatusItem.title.contains("Key 无效"), "ASR failures show reason in main and menu")
 app.polishFallback = true
 app.lastInsertSucceeded = false
 app.refreshCloudFailure()
@@ -157,6 +157,38 @@ let keyEvent = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: 
 check(settings.window.performKeyEquivalent(with: keyEvent) && tabs.selectedTabViewItemIndex == 2, "Command-3 selects iPhone using the real window keyboard handler")
 let second = SettingsWindowCoordinator(app: app)
 check((second.window.contentViewController as! NSTabViewController).selectedTabViewItemIndex == 2, "Last selected tab persists")
+// Both a normal paste/edit and its delayed validation exercise the native wizard.
+let wizard = SetupWizard(host: app)
+wizard.reopen(at: .key)
+let wizardContent = wizard.window!.contentView!
+let wizardKey = allViews(wizardContent).compactMap { $0 as? NSSecureTextField }.first!
+wizardKey.stringValue = "export DASHSCOPE_API_KEY='sk-auto-paste-preview-key'\r\n"
+wizard.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: wizardKey))
+wait(until: { allViews(wizardContent).compactMap { $0 as? NSTextField }.contains { $0.stringValue.contains("已识别：华北2（北京）") } })
+check(app.setupSnapshot().key?.key == "sk-auto-paste-preview-key", "Native paste is cleaned, verified and adopted without pressing Validate")
+check(app.endpoint.stringValue == BailianAddress.asr(BailianAddress.hosts[0]), "Wizard synchronizes running recognition endpoint")
+let next = allViews(wizardContent).compactMap { $0 as? NSButton }.first { $0.title == "下一步" }
+check(next?.isEnabled == true, "Successful automatic verification enables next step")
+wizard.close()
+
+#if DEBUG
+if let output = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--capture-onboarding=") }) {
+    let directory = URL(fileURLWithPath: String(output.dropFirst("--capture-onboarding=".count)))
+    try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let capture = SetupWizard(host: app); capture.reopen(at: .key)
+    for state in ["initial", "checking", "models", "success", "invalid", "plan", "permission", "ip", "billing", "network", "unsupported"] {
+        capture.previewKeyState(state)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        let content = capture.window!.contentView!
+        content.layoutSubtreeIfNeeded()
+        let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds)!
+        content.cacheDisplay(in: content.bounds, to: bitmap)
+        try! bitmap.representation(using: .png, properties: [:])!.write(to: directory.appendingPathComponent("setup-key-\(state).png"))
+    }
+    capture.close()
+    print("Captured 11 native onboarding states (DEBUG, synthetic credentials only)")
+}
+#endif
 check(fileFingerprint() == before, "Previews and unchanged external credentials must not touch credentials.json")
 check(UserDefaults.standard.object(forKey: "polishProvider") as? String == standardBefore, "Preview actions must not change real preferences")
 print("Mac settings: five toolbar panes, external key override, verified save, rejected draft, close sheet, immediate provider, phone/menu sync, silent launch/reopen, waiting/pairing, failure actions and preview isolation passed")
