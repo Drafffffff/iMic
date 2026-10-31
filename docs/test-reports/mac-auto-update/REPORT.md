@@ -1,6 +1,6 @@
 # Mac 自动更新测试报告
 
-日期：2026-10-31；环境：Apple Silicon、macOS 26.6.2、Xcode `/Applications/Xcode.app/Contents/Developer`。开发分支 `codex/mac-auto-update`，目标 `codex/ui-phosphor-wireframe`，已同步到含百炼任务的 `8f3bf4a`。百炼实现文件相对目标分支没有修改，设置改动仅增加通用页更新区域及刷新逻辑。
+日期：2026-10-31；环境：Apple Silicon、macOS 26.6.2、Xcode `/Applications/Xcode.app/Contents/Developer`。开发分支 `codex/mac-auto-update`，目标 `codex/ui-phosphor-wireframe`，已同步到 `c550838`（含百炼与官网任意输入框任务；Mac 源码与已测的 `8f3bf4a` 相同）。百炼实现文件相对目标分支没有修改，设置改动仅增加通用页更新区域及刷新逻辑。
 
 **路径差异**：任务书的根目录 `BUILD` 与现有 `build/` 在本机不区分大小写的文件系统上是同一个路径（`os.path.samefile('build', 'BUILD') == True`）。使用根目录 `MAC_BUILD`，初始值为 `1`；每次发布严格递增、原地覆盖也递增，其他语义一致。`VERSION` 和 iOS 构建号未修改。
 
@@ -17,8 +17,8 @@
 | `./scripts/test-mac-settings.sh` | PASS | 16.66s | 原设置测试与新增两个开关、版本、菜单、录音/输入/清除/未完成向导的更新门全部通过 |
 | `./scripts/test-polish.sh` | PASS | 3.34s | `Executed 28 tests, with 0 failures`，含最新百炼回归 |
 | `./scripts/test-input.sh` | PASS | 1.22s | `Executed 21 tests, with 0 failures` |
-| `python3 tools/check-site.py` | PASS | 0.13s | 2 HTML pages、40 files；合法空 appcast；链接、预算与资源检查通过 |
-| `node tools/test-site-browser.mjs` | PASS | 20.99s | `28/28 browser checks passed`，含 FAQ、响应式、键盘操作与下载回退 |
+| `python3 tools/check-site.py` | PASS | 0.07s | 2 HTML pages、40 files；合法空 appcast；链接、预算与资源检查通过 |
+| `node tools/test-site-browser.mjs` | PASS | 32.58s | `32/32 browser checks passed`，含 FAQ、响应式、键盘操作与下载回退 |
 | `./scripts/build-ios.sh` | PASS | 20.91s | `** BUILD SUCCEEDED **`；构建生成的图标副作用已恢复，没有提交 iOS 资源变化 |
 
 附加验证：
@@ -217,3 +217,17 @@ build/mac.noindex/iMic.app/Contents/MacOS/iMic:
 5. 完成正式签名、公证、staple、最终 DMG 的 EdDSA 签名；**先上传 Release DMG，再提交并推送 appcast**。本 PR 保留占位公钥和空 appcast，没有发布。
 
 [设置页新增项截图](settings.png)
+
+<details><summary>关键截图</summary>
+
+![通用设置](settings.png)
+
+![发现新版本](discovered.png)
+
+![更新后的版本号](updated.png)
+
+![篡改后的拒绝提示](rejected.png)
+
+![Developer ID 更新后](developer-updated.png)
+
+</details>
