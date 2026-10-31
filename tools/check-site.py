@@ -90,7 +90,7 @@ for identifier in ('origin-banner', 'mac-download-link', 'share-link', 'release-
 require('data-hero-version' in index and index.count('data-dmg-link') >= 2, 'Download data attributes missing')
 require('brand-dot' not in index, 'Duplicate brand dot')
 require(index.count('class="feature"') == 3, 'FEEL must contain three features')
-require('实时预览默认关闭' in index and '可能重复或误删' in index and '无法监视用户接管' in index, 'Live preview risk disclosure missing')
+require('新安装默认开启实时预览' in index and '可能重复或误删' in index and '无法监视用户接管' in index, 'Live preview risk disclosure missing')
 require('href="https://github.com/Drafffffff/iMic/releases/latest"' in index, 'no-JS release fallback missing')
 
 files = [p for p in root.rglob('*') if p.is_file()]
