@@ -1,6 +1,6 @@
 import Foundation
 
 enum OnboardingLinks {
-    static let home = URL(string: "https://drafffffff.github.io/iMic/")!
-    static let download = URL(string: "https://drafffffff.github.io/iMic/?from=ios#download")!
+    static var home: URL { URL(string: "https://drafffffff.github.io/iMic/" + (L10n.isChinese ? "" : "en/"))! }
+    static var download: URL { URL(string: "?from=ios#download", relativeTo: home)!.absoluteURL }
 }

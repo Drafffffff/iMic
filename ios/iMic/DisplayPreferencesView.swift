@@ -10,7 +10,7 @@ struct DisplayPreferencesSection: View {
         return VStack(alignment:.leading,spacing:16){
             VStack(alignment:.leading,spacing:8){
                 PixelText(text:"DISPLAY",cell:2.1,color:Theme.ivory,tracking:1.5)
-                Text("显示效果").font(.system(size:13,weight:.medium)).foregroundStyle(Theme.ivory)
+                Text(L10n.text("Display effects")).font(.system(size:13,weight:.medium)).foregroundStyle(Theme.ivory)
             }
             HStack(spacing:8){
                 ForEach(PhosphorEffect.allCases,id:\.self){effect in
@@ -25,13 +25,13 @@ struct DisplayPreferencesSection: View {
                         }.frame(maxWidth:.infinity,minHeight:58).contentShape(Rectangle())
                             .overlay(Rectangle().stroke(selected==effect.rawValue ? Theme.orange.opacity(0.8):Theme.line,lineWidth:1))
                     }.buttonStyle(.plain).accessibilityLabel(effect.title)
-                        .accessibilityValue(selected==effect.rawValue ? "已选择":"未选择")
+                        .accessibilityValue(selected==effect.rawValue ? L10n.text("Selected"):L10n.text("Not selected"))
                         .accessibilityAddTraits(selected==effect.rawValue ? .isSelected:[])
                 }
             }
-            Text("清晰模式保留原始线条；荧光模式增加发光；CRT 加入复古屏幕纹理。")
+            Text(L10n.text("Clear keeps the original lines. Phosphor adds glow. CRT adds a retro screen texture."))
                 .font(.system(size:11)).foregroundStyle(Theme.muted).fixedSize(horizontal:false,vertical:true)
-            Text("文字附着").font(.system(size:13,weight:.medium)).foregroundStyle(Theme.ivory).padding(.top,6)
+            Text(L10n.text("Text attachment")).font(.system(size:13,weight:.medium)).foregroundStyle(Theme.ivory).padding(.top,6)
             HStack(spacing:8){
                 ForEach(PhosphorAttachStyle.allCases,id:\.self){style in
                     Button{
@@ -44,12 +44,12 @@ struct DisplayPreferencesSection: View {
                             Text(style.title).font(.system(size:11)).foregroundStyle(attached==style.rawValue ? Theme.ivory:Theme.muted)
                         }.frame(maxWidth:.infinity,minHeight:58).contentShape(Rectangle())
                             .overlay(Rectangle().stroke(attached==style.rawValue ? Theme.orange.opacity(0.8):Theme.line,lineWidth:1))
-                    }.buttonStyle(.plain).accessibilityLabel("文字附着：\(style.title)")
-                        .accessibilityValue(attached==style.rawValue ? "已选择":"未选择")
+                    }.buttonStyle(.plain).accessibilityLabel(L10n.text("Text attachment: %@", L10n.argument(style.title)))
+                        .accessibilityValue(attached==style.rawValue ? L10n.text("Selected"):L10n.text("Not selected"))
                         .accessibilityAddTraits(attached==style.rawValue ? .isSelected:[])
                 }
             }
-            Text("整环充能让文字落点处的圆环整体变暖；流动光弧让文字沿圆环缓慢流转；静止光弧停在落点。")
+            Text(L10n.text("Full ring warms the whole ring where text lands. Flowing arc moves text slowly around the ring. Fixed arc stays at the landing point."))
                 .font(.system(size:11)).foregroundStyle(Theme.muted).fixedSize(horizontal:false,vertical:true)
         }.frame(maxWidth:.infinity,alignment:.leading)
     }

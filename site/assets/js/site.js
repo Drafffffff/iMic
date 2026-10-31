@@ -2,7 +2,7 @@
 const IOS_TESTFLIGHT_URL = "";
 const RELEASE_API = "https://api.github.com/repos/Drafffffff/iMic/releases/latest";
 const RELEASE_FALLBACK = "https://github.com/Drafffffff/iMic/releases/latest";
-const SHARE_URL = "https://drafffffff.github.io/iMic/?from=ios#download";
+const SHARE_URL = document.querySelector("#share-manual").href;
 
 (() => {
   "use strict";
@@ -68,13 +68,19 @@ const SHARE_URL = "https://drafffffff.github.io/iMic/?from=ios#download";
     toggle.addEventListener("click", () => {
       paused = !paused;
       toggle.setAttribute("aria-pressed", String(paused));
-      toggle.textContent = paused ? "播放示意" : "暂停示意";
+      toggle.textContent = paused ? toggle.dataset.playLabel : toggle.dataset.pauseLabel;
       sync();
     });
     reducedMotion.addEventListener("change", sync);
     document.addEventListener("visibilitychange", sync);
     if (!reducedMotion.matches) reset();
     sync();
+  }
+  // Storage-free suggestion: dismiss for this page only, with no automatic redirect.
+  const languageBanner = document.querySelector("#language-banner");
+  if (languageBanner && !(navigator.language || "en").toLowerCase().startsWith("zh")) {
+    languageBanner.hidden = false;
+    languageBanner.querySelector("button").addEventListener("click", () => { languageBanner.hidden = true; });
   }
   const card = document.querySelector("#mac-download");
   const meta = document.querySelector("#release-meta");
@@ -165,7 +171,8 @@ const SHARE_URL = "https://drafffffff.github.io/iMic/?from=ios#download";
     document.querySelector("#origin-banner").hidden = false;
     // Wait for first layout, then honor the device's motion setting.
     requestAnimationFrame(() => {
-      document.querySelector("#download").scrollIntoView({ behavior: reducedMotion.matches ? "instant" : "smooth" });
+      const target = mobile && document.documentElement.lang === "en" ? card : document.querySelector("#download");
+      target.scrollIntoView({ behavior: reducedMotion.matches ? "instant" : "smooth" });
       // Highlight after smooth scrolling has brought the card into view.
       if (reducedMotion.matches) highlightDownload();
       else {

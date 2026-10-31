@@ -6,7 +6,7 @@
 
 iPhone 当 Mac 的麦克风。说完松手，文字直接打进你正在用的任何应用。
 
-[官网](https://drafffffff.github.io/iMic/) · [下载 Mac 版](https://github.com/Drafffffff/iMic/releases/latest) · [反馈](https://github.com/Drafffffff/iMic/issues)
+[English](README.en.md) · [官网](https://drafffffff.github.io/iMic/) · [下载 Mac 版](https://github.com/Drafffffff/iMic/releases/latest) · [反馈](https://github.com/Drafffffff/iMic/issues)
 
 <img src="docs/media/demo.gif" alt="按住 iPhone 说话，文字同步出现在 Mac 输入框，润色后下拉弦发送" width="720">
 

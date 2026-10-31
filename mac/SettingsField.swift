@@ -7,7 +7,7 @@ final class SettingsField: NSStackView, NSTextFieldDelegate {
     let secure: Bool
     private let concealed: NSTextField
     private let revealed = NSTextField()
-    let saveButton = NSButton(title: "验证并保存", target: nil, action: nil)
+    let saveButton = NSButton(title: L10n.text("Verify and save"), target: nil, action: nil)
     private let eye = NSButton()
     let feedback = NSTextField(wrappingLabelWithString: "")
     let source = NSTextField(wrappingLabelWithString: "")
@@ -47,13 +47,13 @@ final class SettingsField: NSStackView, NSTextFieldDelegate {
             field.setContentHuggingPriority(.init(1), for: .horizontal)
         }
         self.value = value
-        eye.image = NSImage(systemSymbolName: "eye", accessibilityDescription: "显示 Key")
+        eye.image = NSImage(systemSymbolName: "eye", accessibilityDescription: L10n.text("Show Key"))
         eye.bezelStyle = .inline; eye.target = self; eye.action = #selector(toggleReveal)
-        eye.setAccessibilityLabel("显示 \(title)"); eye.isHidden = !secure
+        eye.setAccessibilityLabel(L10n.text("Show %@", L10n.argument(title))); eye.isHidden = !secure
         eye.widthAnchor.constraint(equalToConstant: 26).isActive = true
         saveButton.bezelStyle = .rounded; saveButton.controlSize = .small
         saveButton.target = self; saveButton.action = #selector(saveAction)
-        saveButton.setAccessibilityLabel("验证并保存\(title)")
+        saveButton.setAccessibilityLabel(L10n.text("Verify and save %@", L10n.argument(title)))
         let controls = NSStackView(views: [fields, eye, saveButton])
         controls.orientation = .horizontal; controls.spacing = 8; controls.alignment = .centerY
         for label in [feedback, source] {
@@ -80,20 +80,20 @@ final class SettingsField: NSStackView, NSTextFieldDelegate {
         guard showing else { return }
         value = revealed.stringValue; showing = false
         revealed.isHidden = true; concealed.isHidden = false
-        eye.image = NSImage(systemSymbolName: "eye", accessibilityDescription: "显示 Key")
-        eye.setAccessibilityLabel("显示 \(title)")
+        eye.image = NSImage(systemSymbolName: "eye", accessibilityDescription: L10n.text("Show Key"))
+        eye.setAccessibilityLabel(L10n.text("Show %@", L10n.argument(title)))
     }
     func message(_ text: String, error: Bool = false) {
         feedback.stringValue = text; feedback.textColor = error ? .systemRed : .imicMuted
         updateButton()
     }
     func updateButton() {
-        saveButton.title = dirty ? "验证并保存" : "验证"
+        saveButton.title = dirty ? L10n.text("Verify and save") : L10n.text("Verify")
         saveButton.bezelColor = dirty ? .imicOrange : nil
     }
     func controlTextDidChange(_ notification: Notification) {
         let text = (notification.object as? NSTextField)?.stringValue ?? value
-        cancel(); value = text; message(dirty ? "尚未保存" : ""); onEdit?()
+        cancel(); value = text; message(dirty ? L10n.text("Not saved") : ""); onEdit?()
     }
     @objc func saveAction() { save { _ in } }
     func save(_ completion: @escaping (Bool) -> Void) { onSave?(self, completion) }
@@ -102,7 +102,7 @@ final class SettingsField: NSStackView, NSTextFieldDelegate {
         value = current; showing.toggle()
         concealed.isHidden = showing; revealed.isHidden = !showing
         eye.image = NSImage(systemSymbolName: showing ? "eye.slash" : "eye", accessibilityDescription: nil)
-        eye.setAccessibilityLabel("\(showing ? "隐藏" : "显示")\(title)")
+        eye.setAccessibilityLabel(L10n.text("%@ %@", L10n.argument(showing ? L10n.text("Hide") : L10n.text("Show")), L10n.argument(title)))
         window?.makeFirstResponder(showing ? revealed : concealed)
     }
 }

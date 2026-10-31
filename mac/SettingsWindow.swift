@@ -7,7 +7,7 @@ import CryptoKit
 // The tab bar is owned by AppKit, with keyboard shortcuts handled by the window.
 enum SettingsPane: String, CaseIterable {
     case general, bailian, iphone, permissions, advanced
-    var title: String { ["通用", "百炼", "iPhone", "权限", "高级"][Self.allCases.firstIndex(of: self)!] }
+    var title: String { [L10n.text("General"), L10n.text("Model Studio"), "iPhone", L10n.text("Permissions"), L10n.text("Advanced")][Self.allCases.firstIndex(of: self)!] }
     var symbol: String { ["gearshape", "key", "iphone", "lock.shield", "slider.horizontal.3"][Self.allCases.firstIndex(of: self)!] }
 }
 
@@ -60,7 +60,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         if app.preview == "settings-external-key" {
             previewKeys[.bailian] = ResolvedCredential(key: "sk-preview-external-credential", source: .environment("DASHSCOPE_API_KEY"))
         } else if app.preview == "settings-empty" { previewKeys.removeAll() }
-        window.title = "iMic 设置"; window.isReleasedWhenClosed = false
+        window.title = L10n.text("iMic Settings"); window.isReleasedWhenClosed = false
         window.appearance = NSAppearance(named: .darkAqua); window.backgroundColor = .imicInk
         window.delegate = self
         tabs.tabStyle = .toolbar
@@ -164,36 +164,36 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     }
     private func general() -> NSStackView {
         let app = app!
-        app.automatic.title = "识别后自动输入到当前应用"
+        app.automatic.title = L10n.text("Type into the active app after recognition")
         app.automatic.target = app; app.automatic.action = #selector(AppDelegate.toggleAutoInput)
         app.automatic.contentTintColor = nil; app.automatic.setAccessibilityLabel(app.automatic.title)
-        app.livePreviewCheck = app.checkbox("实时预览与逐字输入", #selector(AppDelegate.toggleLivePreview), key: "livePreview", defaultValue: true)
+        app.livePreviewCheck = app.checkbox(L10n.text("Live preview and incremental typing"), #selector(AppDelegate.toggleLivePreview), key: "livePreview", defaultValue: true)
         let input = column([app.automatic, app.livePreviewCheck,
-            note("部分编辑器使用键盘兼容模式，可能重复或误删。按键、点击或切换应用后停止本轮自动修订。")], spacing: 9)
-        loginCheck = NSButton(checkboxWithTitle: "登录时启动", target: self, action: #selector(toggleLogin))
+            note(L10n.text("Some editors use keyboard compatibility mode, which may duplicate or delete text by mistake. Keypresses, clicks, or app switches stop automatic revisions for this session."))], spacing: 9)
+        loginCheck = NSButton(checkboxWithTitle: L10n.text("Launch at login"), target: self, action: #selector(toggleLogin))
         loginCheck.setAccessibilityLabel(loginCheck.title)
         loginHint = note("")
-        loginSettingsButton = action("打开登录项设置…", #selector(openLoginSettings))
+        loginSettingsButton = action(L10n.text("Open Login Items Settings…"), #selector(openLoginSettings))
         loginSettingsButton.isHidden = true
-        let show = NSButton(checkboxWithTitle: "启动时显示主窗口", target: self, action: #selector(toggleShowMain(_:)))
+        let show = NSButton(checkboxWithTitle: L10n.text("Show main window at launch"), target: self, action: #selector(toggleShowMain(_:)))
         show.state = defaults.bool(forKey: "showMainWindowOnLaunch") ? .on : .off
         show.setAccessibilityLabel(show.title)
-        let checks = NSButton(checkboxWithTitle: "自动检查更新", target: self, action: #selector(toggleUpdateChecks(_:)))
+        let checks = NSButton(checkboxWithTitle: L10n.text("Check for updates automatically"), target: self, action: #selector(toggleUpdateChecks(_:)))
         updateChecks = checks
         checks.state = app.macUpdater.automaticallyChecks ? .on : .off
         checks.isEnabled = MacUpdater.configured || preview
         checks.setAccessibilityLabel(checks.title)
-        let installs = NSButton(checkboxWithTitle: "自动下载并安装更新", target: self, action: #selector(toggleUpdateInstalls(_:)))
+        let installs = NSButton(checkboxWithTitle: L10n.text("Download and install updates automatically"), target: self, action: #selector(toggleUpdateInstalls(_:)))
         updateInstalls = installs
         installs.state = app.macUpdater.automaticallyInstalls ? .on : .off
         installs.isEnabled = MacUpdater.configured || preview
         installs.setAccessibilityLabel(installs.title)
         let updates = column([heading("UPDATES"), note(MacUpdater.version), checks, installs,
-            note(MacUpdater.configured ? "每天检查一次；录音、输入和设置向导期间推迟提示与重启。" : "此开发构建尚未配置更新公钥，自动检查已关闭。"),
-            app.linkButton("检查更新…", #selector(AppDelegate.checkForUpdates))], spacing: 9)
+            note(MacUpdater.configured ? L10n.text("Checks daily. Prompts and restarts wait until recording, typing, and setup finish.") : L10n.text("This development build has no update public key. Automatic checks are off.")),
+            app.linkButton(L10n.text("Check for updates…"), #selector(AppDelegate.checkForUpdates))], spacing: 9)
         app.saveFeedback.font = .systemFont(ofSize: 11); app.saveFeedback.textColor = .imicMuted
         return column([heading("INPUT"), input, app.divider(), heading("STARTUP"),
-            loginCheck, loginHint, loginSettingsButton, show, app.divider(), updates, app.divider(), app.linkButton("测试输入", #selector(AppDelegate.testInput)), app.saveFeedback])
+            loginCheck, loginHint, loginSettingsButton, show, app.divider(), updates, app.divider(), app.linkButton(L10n.text("Test typing"), #selector(AppDelegate.testInput)), app.saveFeedback])
     }
     private func refreshUpdates() {
         updateChecks?.state = app?.macUpdater.automaticallyChecks == true ? .on : .off
@@ -209,7 +209,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     }
     private func bailian() -> NSStackView {
         let app = app!
-        let key = field("bailian.key", "百炼 API Key", resolved(.bailian)?.key ?? "", secure: true)
+        let key = field("bailian.key", L10n.text("Model Studio API Key"), resolved(.bailian)?.key ?? "", secure: true)
         key.onEdit = { [weak self, weak key] in
             guard let self, let key, !key.value.isEmpty else { return }
             let work = DispatchWorkItem { [weak self, weak key] in
@@ -219,10 +219,10 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             key.debounce = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
         }
-        let override = action("改用 iMic 保存的 Key", #selector(overrideBailianKey))
+        let override = action(L10n.text("Use the Key saved in iMic"), #selector(overrideBailianKey))
         override.identifier = NSUserInterfaceItemIdentifier("overrideBailianKey")
         override.isHidden = resolved(.bailian)?.source.isExternal != true
-        app.deepseekCheck = app.checkbox("启用 AI 润色与转换", #selector(AppDelegate.toggleDeepSeek), key: "deepseekEnabled", defaultValue: DeepSeekConfiguration.enabled)
+        app.deepseekCheck = app.checkbox(L10n.text("Enable AI polish and conversion"), #selector(AppDelegate.toggleDeepSeek), key: "deepseekEnabled", defaultValue: DeepSeekConfiguration.enabled)
         let options = DeepSeekConfiguration.options
         app.polishModeButtons = NSSegmentedControl(labels: PolishMode.allCases.map(\.title), trackingMode: .selectOne,
             target: app, action: #selector(AppDelegate.changePolishOptions(_:)))
@@ -233,15 +233,15 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             control.selectedSegmentBezelColor = .imicOrange; control.font = .systemFont(ofSize: 11)
             control.heightAnchor.constraint(equalToConstant: 28).isActive = true
         }
-        app.polishModeButtons.setAccessibilityLabel("转换模式")
-        app.polishToneButtons.setAccessibilityLabel("表达语气")
+        app.polishModeButtons.setAccessibilityLabel(L10n.text("Conversion mode"))
+        app.polishToneButtons.setAccessibilityLabel(L10n.text("Tone"))
         app.polishModeButtons.selectedSegment = PolishMode.allCases.firstIndex(of: options.mode) ?? 0
         app.polishToneButtons.selectedSegment = PolishTone.allCases.firstIndex(of: options.tone) ?? 0
         app.polishOutputPicker = NSPopUpButton(frame: .zero, pullsDown: false)
         app.polishOutputPicker.addItems(withTitles: PolishOutput.languages.map(\.title))
         app.polishOutputPicker.selectItem(at: PolishOutput.languages.firstIndex(of: options.output) ?? 0)
         app.polishOutputPicker.target = app; app.polishOutputPicker.action = #selector(AppDelegate.changePolishOutput(_:))
-        app.polishOutputPicker.setAccessibilityLabel("输出语言")
+        app.polishOutputPicker.setAccessibilityLabel(L10n.text("Output language"))
         app.polishModeHint = note(""); app.polishToneHint = note(""); app.polishOptionsHint = note("")
         app.updatePolishOptionControls(options)
         let choices = column([heading("MODE"), app.polishModeButtons, app.polishModeHint,
@@ -249,16 +249,16 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             heading("LANGUAGE"), app.polishOutputPicker, app.polishOptionsHint], spacing: 7)
         app.polishFields = choices; choices.isHidden = !DeepSeekConfiguration.enabled
         activeProvider.font = .systemFont(ofSize: 11); activeProvider.textColor = .imicMuted
-        let base = field("bailian.base", "手动填写服务地址（Base URL，可选）", "")
+        let base = field("bailian.base", L10n.text("Set service address manually (Base URL, optional)"), "")
         let advanced = NSStackView(views: [base])
         advanced.orientation = .vertical; advanced.alignment = .leading; advanced.isHidden = true
         base.widthAnchor.constraint(equalTo: advanced.widthAnchor).isActive = true
-        let toggle = action("高级选项 · 手动填写服务地址", #selector(toggleBailianAdvanced(_:)))
+        let toggle = action(L10n.text("Advanced options · Set service address manually"), #selector(toggleBailianAdvanced(_:)))
         toggle.identifier = NSUserInterfaceItemIdentifier("bailianAdvancedToggle")
         toggle.target = self
         bailianAdvanced = advanced
-        return column([note("粘贴 Key 后自动识别地域并验证；一个百炼 Key 用于识别和润色。"), key, override, toggle, advanced,
-            app.linkButton("获取百炼 Key ↗", #selector(AppDelegate.openBailianConsole)), app.divider(),
+        return column([note(L10n.text("Paste your Key to detect its region and verify it. One Model Studio Key handles recognition and polish.")), note(L10n.text("For overseas accounts, use Alibaba Cloud’s international site and create a Key in Singapore.")), key, override, toggle, advanced,
+            app.linkButton(L10n.text("Get a Model Studio Key ↗"), #selector(AppDelegate.openBailianConsole)), app.divider(),
             heading("AI POLISH"), activeProvider, app.deepseekCheck, choices], spacing: 12)
     }
     private var bailianAdvanced: NSStackView?
@@ -277,23 +277,23 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             devices.heightAnchor.constraint(equalToConstant: max(26, min(150, CGFloat(app.store.devices.count) * 45))), document.widthAnchor.constraint(equalTo: devices.contentView.widthAnchor),
             app.pairedList.leadingAnchor.constraint(equalTo: document.leadingAnchor), app.pairedList.trailingAnchor.constraint(equalTo: document.trailingAnchor),
             app.pairedList.topAnchor.constraint(equalTo: document.topAnchor), app.pairedList.bottomAnchor.constraint(equalTo: document.bottomAnchor)])
-        let code = note("配对码：\(app.store.currentCode())")
+        let code = note(L10n.text("Pairing code: %@", L10n.argument(app.store.currentCode())))
         code.identifier = NSUserInterfaceItemIdentifier("settingsPairCode"); code.isHidden = true
-        let pair = action("配对新 iPhone", #selector(showPairCode))
-        let actions = app.row([app.linkButton("复制配对码", #selector(AppDelegate.copyPairCode)),
-            app.linkButton("重新生成", #selector(AppDelegate.rotatePairCode)), app.linkButton("解除全部配对", #selector(AppDelegate.forgetAllDevices))], spacing: 14)
-        app.snapReturnCheck = app.checkbox("下拉回弹发送回车", #selector(AppDelegate.toggleSnapReturn), key: "snapReturn", defaultValue: true)
-        app.pullDeleteCheck = app.checkbox("上拉删除", #selector(AppDelegate.togglePullDelete), key: "pullDelete", defaultValue: true)
-        app.swipeCursorCheck = app.checkbox("左右滑动移动光标", #selector(AppDelegate.toggleSwipeCursor), key: "swipeCursor", defaultValue: true)
-        app.bleFallbackCheck = app.checkbox("局域网不可用时启用蓝牙兜底", #selector(AppDelegate.toggleBLEFallback), key: "bleFallback", defaultValue: true)
+        let pair = action(L10n.text("Pair a new iPhone"), #selector(showPairCode))
+        let actions = app.row([app.linkButton(L10n.text("Copy pairing code"), #selector(AppDelegate.copyPairCode)),
+            app.linkButton(L10n.text("Regenerate"), #selector(AppDelegate.rotatePairCode)), app.linkButton(L10n.text("Forget all pairings"), #selector(AppDelegate.forgetAllDevices))], spacing: 14)
+        app.snapReturnCheck = app.checkbox(L10n.text("Pull down and release for Return"), #selector(AppDelegate.toggleSnapReturn), key: "snapReturn", defaultValue: true)
+        app.pullDeleteCheck = app.checkbox(L10n.text("Pull up to delete"), #selector(AppDelegate.togglePullDelete), key: "pullDelete", defaultValue: true)
+        app.swipeCursorCheck = app.checkbox(L10n.text("Slide left or right to move the cursor##3a8df390"), #selector(AppDelegate.toggleSwipeCursor), key: "swipeCursor", defaultValue: true)
+        app.bleFallbackCheck = app.checkbox(L10n.text("Use Bluetooth when the local network is unavailable"), #selector(AppDelegate.toggleBLEFallback), key: "bleFallback", defaultValue: true)
         return column([heading("PAIRED DEVICES"), devices, pair, code, actions, app.divider(), heading("STRING GESTURES"),
             app.snapReturnCheck, app.pullDeleteCheck, app.swipeCursorCheck, app.divider(), heading("CONNECTION"),
-            app.bleFallbackCheck, note("蓝牙带宽较低，长录音可能需要补传。"), app.linkButton("打开蓝牙设置…", #selector(AppDelegate.openBluetoothSettings))], spacing: 10)
+            app.bleFallbackCheck, note(L10n.text("Bluetooth has lower bandwidth. Long recordings may keep uploading.")), app.linkButton(L10n.text("Open Bluetooth Settings…"), #selector(AppDelegate.openBluetoothSettings))], spacing: 10)
     }
     private func permissionRow(_ title: String, _ detail: String, _ selector: Selector) -> (NSView, NSTextField) {
         let status = note("○"); status.widthAnchor.constraint(equalToConstant: 18).isActive = true
         let text = column([app!.label(title, size: 12, color: .imicIvory), note(detail)], spacing: 4)
-        let button = action("打开设置…", selector); button.setAccessibilityLabel("打开\(title)设置")
+        let button = action(L10n.text("Open Settings…"), selector); button.setAccessibilityLabel(L10n.text("Open %@ Settings", L10n.argument(title)))
         let row = app!.row([status, text, button], spacing: 10)
         button.setContentHuggingPriority(.required, for: .horizontal)
         button.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -304,12 +304,12 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     }
     private func permissions() -> NSStackView {
         let app = app!
-        let access = permissionRow("辅助功能", "必需 · 把识别文字输入到当前应用。", #selector(openAccessibility))
-        let screen = permissionRow("屏幕录制", "可选 · 扫光定位，仅在本机处理。", #selector(openScreenRecording))
-        let bluetooth = permissionRow("蓝牙", "可选 · 局域网不可用时兜底连接。", #selector(openBluetoothPrivacy))
+        let access = permissionRow(L10n.text("Accessibility"), L10n.text("Required · Type recognized text into the active app."), #selector(openAccessibility))
+        let screen = permissionRow(L10n.text("Screen Recording"), L10n.text("Optional · Locate the polish highlight. Processed only on this Mac."), #selector(openScreenRecording))
+        let bluetooth = permissionRow(L10n.text("Bluetooth"), L10n.text("Optional · Connect when the local network is unavailable."), #selector(openBluetoothPrivacy))
         accessStatus = access.1; screenStatus = screen.1; bluetoothStatus = bluetooth.1
-        app.polishSweepCheck = app.checkbox("润色完成时扫光", #selector(AppDelegate.togglePolishSweep), key: "polishSweep", defaultValue: true)
-        app.polishSweepHint = note("需要 macOS 14+ 与屏幕录制权限。仅本机定位文字，不保存截图；定位失败仍正常输入。")
+        app.polishSweepCheck = app.checkbox(L10n.text("Highlight text after polish"), #selector(AppDelegate.togglePolishSweep), key: "polishSweep", defaultValue: true)
+        app.polishSweepHint = note(L10n.text("Requires macOS 14+ and Screen Recording permission. Locates text on this Mac without saving screenshots. Typing still works if location fails."))
         return column([heading("PERMISSIONS"), access.0, screen.0, bluetooth.0, app.divider(), heading("POLISH SWEEP"), app.polishSweepCheck, app.polishSweepHint], spacing: 18)
     }
     private func advanced() -> NSStackView {
@@ -318,7 +318,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         app.polishProviderPicker.addItems(withTitles: PolishProvider.allCases.map(\.title))
         app.polishProviderPicker.selectItem(at: PolishProvider.allCases.firstIndex(of: DeepSeekConfiguration.provider) ?? 0)
         app.polishProviderPicker.target = self; app.polishProviderPicker.action = #selector(changeProvider)
-        app.polishProviderPicker.setAccessibilityLabel("润色服务来源")
+        app.polishProviderPicker.setAccessibilityLabel(L10n.text("Polish service provider"))
         providerWarning.font = .systemFont(ofSize: 11); providerWarning.textColor = .systemOrange
         providerWarning.preferredMaxLayoutWidth = 512
         profileSlot.orientation = .vertical; profileSlot.alignment = .leading; profileSlot.detachesHiddenViews = true
@@ -326,26 +326,26 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             var views: [NSView] = []
             if provider != .bailian {
                 views.append(field("\(provider.rawValue).key", "\(provider.title) Key", resolved(provider)?.key ?? "", secure: true))
-                let override = action("改用 iMic 保存的 Key", #selector(overrideServiceKey(_:)))
+                let override = action(L10n.text("Use the Key saved in iMic"), #selector(overrideServiceKey(_:)))
                 override.identifier = NSUserInterfaceItemIdentifier(provider.rawValue)
                 override.isHidden = resolved(provider)?.source.isExternal != true
                 views.append(override)
             }
-            views.append(field("\(provider.rawValue).model", "模型", DeepSeekConfiguration.modelName(for: provider)))
-            views.append(field("\(provider.rawValue).endpoint", "Chat Completions 地址", DeepSeekConfiguration.endpoint(for: provider)))
-            if provider == .bailian { views.append(note("模型在百炼上运行；地址与 Key 的地域或业务空间须匹配。")) }
+            views.append(field("\(provider.rawValue).model", L10n.text("Model"), DeepSeekConfiguration.modelName(for: provider)))
+            views.append(field("\(provider.rawValue).endpoint", L10n.text("Chat Completions address"), DeepSeekConfiguration.endpoint(for: provider)))
+            if provider == .bailian { views.append(note(L10n.text("The model runs on Model Studio. The address must match the Key's region or workspace."))) }
             let group = column(views, spacing: 10); profiles[provider] = group
             profileSlot.addArrangedSubview(group); app.fullWidth(group, in: profileSlot)
         }
         let fixed = app.label(ASRConfiguration.model, size: 11, color: .imicIvory, mono: true)
-        fixed.isSelectable = true; fixed.setAccessibilityLabel("识别模型（只读）")
+        fixed.isSelectable = true; fixed.setAccessibilityLabel(L10n.text("Recognition model (read-only)"))
         detectedService.font = .systemFont(ofSize: 11); detectedService.textColor = .imicMuted
         return column([detectedService, heading("POLISH SERVICE"), app.polishProviderPicker, providerWarning, profileSlot,
             app.divider(), heading("RECOGNITION"), fixed,
-            field("asr.endpoint", "识别服务地址", app.endpoint.stringValue),
-            note("只支持百炼推理地址，须与 Key 的地域或业务空间一致。"),
-            app.divider(), app.linkButton("重新打开设置向导…", #selector(AppDelegate.showSetupAction)),
-            app.linkButton("iMic 官网 ↗", #selector(AppDelegate.openWebsite))], spacing: 10)
+            field("asr.endpoint", L10n.text("Recognition service address"), app.endpoint.stringValue),
+            note(L10n.text("Only Model Studio inference addresses are supported. Must match the Key's region or workspace.")),
+            app.divider(), app.linkButton(L10n.text("Reopen setup…"), #selector(AppDelegate.showSetupAction)),
+            app.linkButton(L10n.text("iMic website ↗"), #selector(AppDelegate.openWebsite))], spacing: 10)
     }
 
     private var previewKeys: [PolishProvider: ResolvedCredential] = [
@@ -356,7 +356,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     }
     func refreshCredentials() {
         let region = defaults.string(forKey: "bailian.detectedRegion")
-        detectedService.stringValue = region.map { "已自动识别：\(BailianAddress.title($0)) · \(app?.endpoint.stringValue ?? "")" } ?? "当前服务地址：\(app?.endpoint.stringValue ?? "") · 保存 Key 时会自动识别。"
+        detectedService.stringValue = region.map { L10n.text("Detected: %@ · %@", L10n.argument(BailianAddress.title($0)), L10n.argument(app?.endpoint.stringValue ?? "")) } ?? L10n.text("Current service address: %@ · Region is detected when saving a Key.", L10n.argument(app?.endpoint.stringValue ?? ""))
         for id in ["asr.endpoint", "bailian.endpoint"] {
             if let row = fields[id], !row.dirty {
                 row.markSaved(id == "asr.endpoint" ? app!.endpoint.stringValue : DeepSeekConfiguration.endpoint(for: .bailian))
@@ -370,14 +370,21 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
                 row.setEditable(credential?.source.isExternal != true)
             }
             row.source.isHidden = false
-            row.source.stringValue = credential.map { "来源：\($0.source.tag) · iMic 配置优先于环境变量和 shell 文件。" } ?? "尚未配置 Key。"
+            row.source.stringValue = credential.map { L10n.text("Source: %@ · iMic configuration takes priority over environment variables and shell files.", L10n.argument($0.source.tag)) } ?? L10n.text("No Key configured yet.")
         }
         for row in fields.values where !row.dirty && row.feedback.stringValue.isEmpty {
             let prefix = "settings.validation.\(row.id)."
             if defaults.string(forKey: prefix + "digest") == VerifiedKeyMemory.digest(row.value),
                let date = defaults.object(forKey: prefix + "date") as? Date,
                let status = defaults.string(forKey: prefix + "status") {
-                row.message("\(status) · \(date.formatted(date: .abbreviated, time: .shortened))", error: !status.hasPrefix("已验证"))
+                let verified = status == "verified" || ["en", "zh-Hans"].contains { language in
+                    status.hasPrefix(L10n.localized("Verified", bundle: .main, language: language))
+                }
+                let rejected = status == "rejected" || ["en", "zh-Hans"].contains { language in
+                    status == L10n.localized("Key rejected", bundle: .main, language: language)
+                }
+                let title = verified ? L10n.text("Verified") : (rejected ? L10n.text("Key rejected") : L10n.text("Verification failed"))
+                row.message("\(title) · \(date.formatted(.dateTime.locale(L10n.locale).year().month(.abbreviated).day().hour().minute()))", error: !verified)
             }
         }
         refreshProvider()
@@ -385,15 +392,15 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     private func refreshProvider() {
         let provider = DeepSeekConfiguration.provider
         for (source, group) in profiles { group.isHidden = source != provider }
-        activeProvider.stringValue = provider == .bailian ? "" : "当前润色使用：\(provider.title) · 在「高级」中更改"
+        activeProvider.stringValue = provider == .bailian ? "" : L10n.text("Polish provider: %@ · Change in Advanced", L10n.argument(provider.title))
         activeProvider.isHidden = provider == .bailian
         let credential = resolved(provider)
         let prefix = "settings.validation.\(provider.rawValue).key."
         let rejected = credential.map {
             defaults.string(forKey: prefix + "digest") == VerifiedKeyMemory.digest($0.key)
-                && defaults.string(forKey: prefix + "status") == "Key 被拒绝"
+                && defaults.string(forKey: prefix + "status") == L10n.text("Key rejected")
         } ?? false
-        providerWarning.stringValue = credential == nil || rejected ? "此来源缺少有效 Key，润色将保留原文。" : ""
+        providerWarning.stringValue = credential == nil || rejected ? L10n.text("This provider has no valid Key. Polish will keep the original text.") : ""
         providerWarning.isHidden = providerWarning.stringValue.isEmpty
         app?.polishProviderPicker.selectItem(at: PolishProvider.allCases.firstIndex(of: provider) ?? 0)
     }
@@ -406,12 +413,12 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     @objc private func overrideServiceKey(_ sender: NSButton) {
         guard let id = sender.identifier?.rawValue else { return }
         fields["\(id).key"]?.setEditable(true)
-        fields["\(id).key"]?.message("保存后将优先使用 iMic 中的 Key。")
+        fields["\(id).key"]?.message(L10n.text("After saving, the Key in iMic takes priority."))
         sender.isHidden = true
     }
     @objc private func overrideBailianKey(_ sender: NSButton) {
         fields["bailian.key"]?.setEditable(true)
-        fields["bailian.key"]?.message("保存后将优先使用 iMic 中的 Key。")
+        fields["bailian.key"]?.message(L10n.text("After saving, the Key in iMic takes priority."))
         sender.isHidden = true
     }
 
@@ -425,15 +432,15 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         // Explicit deletion preserves the previous app-file → environment → shell fallback.
         if kind == "key", value.isEmpty {
             guard row.dirty, resolved(provider)?.source == .app else {
-                row.message("请填写有效的 API Key。", error: true); completion(false); return
+                row.message(L10n.text("Enter a valid API Key."), error: true); completion(false); return
             }
             let saved = preview || PolishCredentials.save("", for: provider)
             if saved {
                 if preview { previewKeys.removeValue(forKey: provider) }
                 row.markSaved(resolved(provider)?.key ?? "")
-                row.message("已移除 iMic 中保存的 Key。")
+                row.message(L10n.text("Removed the Key saved in iMic."))
                 configurationChanged()
-            } else { row.message("无法写入 iMic 配置文件。", error: true) }
+            } else { row.message(L10n.text("Cannot write to the iMic configuration file."), error: true) }
             completion(saved); return
         }
         if row.id == "bailian.key" || row.id == "bailian.base" {
@@ -458,11 +465,11 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
                 request = try SettingsValidation.request(provider: provider, key: key, model: model, endpoint: endpoint)
             }
         } catch {
-            row.message((error as? PolishConfigurationError)?.rawValue ?? "请检查配置。", error: true)
+            row.message((error as? PolishConfigurationError)?.rawValue ?? L10n.text("Check your configuration."), error: true)
             completion(false); return
         }
         row.saveButton.isEnabled = false
-        row.message("验证中…")
+        row.message(L10n.text("Verifying…"))
         let finish: (Result<Void, SettingsValidation.Failure>) -> Void = { [weak self, weak row] result in
             guard let self, let row else { completion(false); return }
             guard row.generation == generation, row.value == value else { completion(false); return }
@@ -470,14 +477,14 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             guard self.resolved(provider)?.key == credentialBefore,
                   self.app?.endpoint.stringValue == originalASR,
                   DeepSeekConfiguration.endpoint(for: provider) == providerEndpointBefore else {
-                row.message("验证期间连接配置已更改，请重新验证。", error: true)
+                row.message(L10n.text("Connection settings changed during verification. Please verify again."), error: true)
                 completion(false); return
             }
             switch result {
             case .failure(let error):
                 let message = error.message
                 row.message(message, error: true)
-                self.stamp(row, value: value, status: error == .rejected ? "Key 被拒绝" : "验证失败")
+                self.stamp(row, value: value, status: error == .rejected ? L10n.text("Key rejected") : L10n.text("Verification failed"))
                 self.refreshProvider()
                 completion(false)
             case .success:
@@ -500,10 +507,10 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
                 } else {
                     self.defaults.set(value, forKey: kind == "model" ? provider.modelKey : provider.endpointKey)
                 }
-                guard saved else { row.message("无法写入 iMic 配置文件。", error: true); completion(false); return }
+                guard saved else { row.message(L10n.text("Cannot write to the iMic configuration file."), error: true); completion(false); return }
                 row.markSaved(value); row.hideKey()
-                row.message("✓ 已保存 · \(Date().formatted(date: .omitted, time: .shortened))")
-                self.stamp(row, value: value, status: "已验证")
+                row.message(L10n.text("✓ Saved · %@", L10n.argument(L10n.time(Date()))))
+                self.stamp(row, value: value, status: L10n.text("Verified"))
                 if row.id == "bailian.key", !self.preview { VerifiedKeyMemory.remember(value) }
                 self.configurationChanged(); completion(true)
             }
@@ -527,32 +534,32 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         let keyDraft = fields["bailian.key"]?.value
         let baseDraft = fields["bailian.base"]?.value
         let wasAdvanced = bailianAdvanced?.isHidden
-        row.saveButton.isEnabled = false; row.message("正在识别地域…"); resize()
+        row.saveButton.isEnabled = false; row.message(L10n.text("Detecting region…")); resize()
         let finish: (Result<BailianDiscovery.Selection, BailianIssue>) -> Void = { [weak self, weak row] result in
             guard let self, let row, row.generation == generation, row.value == value else { completion(false); return }
             row.discovery = nil; row.saveButton.isEnabled = true
             guard self.resolved(.bailian) == credential, self.app?.endpoint.stringValue == originalEndpoint,
                   self.fields["bailian.key"]?.value == keyDraft, self.fields["bailian.base"]?.value == baseDraft,
                   self.bailianAdvanced?.isHidden == wasAdvanced else {
-                row.message("验证期间连接配置已更改，请重新验证。", error: true); completion(false); return
+                row.message(L10n.text("Connection settings changed during verification. Please verify again."), error: true); completion(false); return
             }
             switch result {
             case .failure(let issue):
                 row.message(issue.message, error: true)
-                self.stamp(row, value: value, status: "验证失败")
+                self.stamp(row, value: value, status: L10n.text("Verification failed"))
                 self.resize(); completion(false)
             case .success(let selection):
                 if key != credential?.key {
                     if self.preview { self.previewKeys[.bailian] = ResolvedCredential(key: key, source: .app) }
                     else if !PolishCredentials.save(key, for: .bailian) {
-                        row.message("无法写入 iMic 配置文件。", error: true); completion(false); return
+                        row.message(L10n.text("Cannot write to the iMic configuration file."), error: true); completion(false); return
                     }
                 }
                 selection.apply(self.defaults)
                 self.app?.endpoint.stringValue = BailianAddress.asr(selection.host)
                 row.markSaved(value); row.hideKey(); row.message(selection.message)
                 if row.id == "bailian.base" { self.fields["bailian.key"]?.markSaved(key) }
-                self.stamp(row, value: value, status: "已验证 · \(selection.region)")
+                self.stamp(row, value: value, status: L10n.text("Verified · %@", L10n.argument(selection.region)))
                 self.configurationChanged(); completion(true)
             }
         }
@@ -571,7 +578,8 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         let prefix = "settings.validation.\(row.id)."
         defaults.set(VerifiedKeyMemory.digest(value), forKey: prefix + "digest")
         defaults.set(Date(), forKey: prefix + "date")
-        defaults.set(status, forKey: prefix + "status")
+        let code = status.hasPrefix(L10n.text("Verified")) ? "verified" : (status == L10n.text("Key rejected") ? "rejected" : "failed")
+        defaults.set(code, forKey: prefix + "status")
     }
     private func configurationChanged() {
         guard let app else { return }
@@ -596,7 +604,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         for (field, allowed) in [(accessStatus, access), (screenStatus, capture), (bluetoothStatus, ble)] {
             field?.stringValue = allowed ? "●" : "○"
             field?.textColor = allowed ? .imicOrange : .imicMuted
-            field?.setAccessibilityLabel(allowed ? "已允许" : "尚未允许")
+            field?.setAccessibilityLabel(allowed ? L10n.text("Allowed") : L10n.text("Not allowed yet"))
         }
     }
     @objc private func openAccessibility() { open(SetupLinks.accessibility) }
@@ -607,10 +615,10 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     private func open(_ url: URL) { if !preview { NSWorkspace.shared.open(url) } }
     @objc private func showPairCode() {
         guard let stack = stacks[.iphone], let label = stack.arrangedSubviews.first(where: { $0.identifier?.rawValue == "settingsPairCode" }) as? NSTextField else { return }
-        label.stringValue = "配对码：\(PairingCode.formatted(app!.store.currentCode()))"; label.isHidden = false; resize()
+        label.stringValue = L10n.text("Pairing code: %@", PairingCode.formatted(app!.store.currentCode())); label.isHidden = false; resize()
     }
     func refreshPairCode() {
-        (stacks[.iphone]?.arrangedSubviews.first(where: { $0.identifier?.rawValue == "settingsPairCode" }) as? NSTextField)?.stringValue = "配对码：\(PairingCode.formatted(app!.store.currentCode()))"
+        (stacks[.iphone]?.arrangedSubviews.first(where: { $0.identifier?.rawValue == "settingsPairCode" }) as? NSTextField)?.stringValue = L10n.text("Pairing code: %@", PairingCode.formatted(app!.store.currentCode()))
     }
     @objc private func toggleShowMain(_ sender: NSButton) { defaults.set(sender.state == .on, forKey: "showMainWindowOnLaunch") }
     func refreshLoginState() {
@@ -618,25 +626,25 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         loginSettingsButton.isHidden = true
         guard !preview, SetupLocation.classify(PermissionApplication.current) == .applications else {
             loginCheck.isEnabled = false; loginCheck.state = .off
-            loginHint.stringValue = "请从「应用程序」里的 iMic 设置登录时启动。"
+            loginHint.stringValue = L10n.text("Set up launch at login from the iMic app in Applications.")
             return
         }
         loginCheck.isEnabled = true
         switch SMAppService.mainApp.status {
         case .enabled:
-            loginCheck.state = .on; loginHint.stringValue = "登录 Mac 后在菜单栏启动。"
+            loginCheck.state = .on; loginHint.stringValue = L10n.text("Starts in the menu bar when you log in to your Mac.")
         case .requiresApproval:
             loginCheck.state = .on
-            loginHint.stringValue = "需要在「系统设置 → 通用 → 登录项」中允许。"
+            loginHint.stringValue = L10n.text("Allow iMic in System Settings → General → Login Items.")
             loginSettingsButton.isHidden = false
         case .notRegistered:
-            loginCheck.state = .off; loginHint.stringValue = "关闭时不会在登录 Mac 后自动启动。"
+            loginCheck.state = .off; loginHint.stringValue = L10n.text("Will not start automatically when you log in to your Mac.")
         case .notFound:
             loginCheck.state = .off; loginCheck.isEnabled = false
-            loginHint.stringValue = "系统未找到此应用的登录项，请从「应用程序」重新打开 iMic。"
+            loginHint.stringValue = L10n.text("macOS could not find this app's login item. Reopen iMic from Applications.")
         @unknown default:
             loginCheck.state = .off; loginCheck.isEnabled = false
-            loginHint.stringValue = "无法读取系统登录项状态。"
+            loginHint.stringValue = L10n.text("Cannot read the login item status.")
         }
     }
     @objc private func toggleLogin() {
@@ -648,7 +656,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             refreshLoginState()
         } catch {
             refreshLoginState()
-            loginHint.stringValue = "登录项设置失败，请检查系统登录项与应用签名。"
+            loginHint.stringValue = L10n.text("Could not change the login item. Check System Settings and the app signature.")
             loginSettingsButton.isHidden = false
             IMicLog.write("mac.settings", "login_item_failed code=\((error as NSError).code)")
         }
@@ -666,9 +674,9 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         }
         guard !dirty.isEmpty else { return true }
         let alert = NSAlert()
-        alert.messageText = dirty.count == 1 ? (dirty[0].id == "bailian.key" ? "百炼 Key 尚未保存。" : "\(dirty[0].title)尚未保存。") : "还有 \(dirty.count) 项配置尚未保存。"
-        alert.informativeText = "保存前会先验证；验证失败时保留草稿。"
-        for title in ["保存", "放弃", "取消"] { alert.addButton(withTitle: title) }
+        alert.messageText = dirty.count == 1 ? (dirty[0].id == "bailian.key" ? L10n.text("Your Model Studio Key has not been saved.") : L10n.text("%@ has not been saved.", L10n.argument(dirty[0].title))) : L10n.text("%@ settings have not been saved.", L10n.argument(dirty.count))
+        alert.informativeText = L10n.text("Settings are verified before saving. Drafts are kept if verification fails.")
+        for title in [L10n.text("Save"), L10n.text("Discard"), L10n.text("Cancel")] { alert.addButton(withTitle: title) }
         alert.beginSheetModal(for: window) { [weak self] response in
             guard let self else { return }
             switch response {
@@ -730,20 +738,21 @@ extension AppDelegate {
         }
         let devices = store.devices
         if devices.isEmpty {
-            let empty = label("尚未配对 iPhone", size: 12, color: .imicMuted)
+            let empty = label(L10n.text("No iPhone paired yet"), size: 12, color: .imicMuted)
             pairedList.addArrangedSubview(empty)
             fullWidth(empty, in: pairedList)
             return
         }
         let formatter = DateFormatter()
-        formatter.dateFormat = "M 月 d 日"
+        formatter.locale = L10n.locale
+        formatter.setLocalizedDateFormatFromTemplate("MMMd")
         for device in devices {
             let name = label(device.name, size: 13, color: .imicIvory)
-            let date = label("配对于 \(formatter.string(from: device.pairedAt))", size: 10, color: .imicMuted, mono: true)
+            let date = label(L10n.text("Paired on %@", L10n.argument(formatter.string(from: device.pairedAt))), size: 10, color: .imicMuted, mono: true)
             let text = column([name, date], spacing: 2)
             let spacer = NSView()
             spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-            let remove = linkButton("解除", #selector(forgetDevice(_:)))
+            let remove = linkButton(L10n.text("Forget##ccdebb93"), #selector(forgetDevice(_:)))
             remove.identifier = NSUserInterfaceItemIdentifier(device.id)
             let row = row([text, spacer, remove], spacing: 10)
             pairedList.addArrangedSubview(row)

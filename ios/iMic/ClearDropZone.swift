@@ -13,7 +13,7 @@ struct ClearDropZone: View {
                 Image(systemName: "trash").font(.system(size: 15, weight: .semibold))
                 PixelText(text: "CLEAR", cell: 1.5, color: Theme.orange, tracking: 1)
                 Spacer()
-                Text("拉入清空输入框").font(.system(size: 11, weight: .medium))
+                Text(L10n.text("Drag here to clear the text field")).font(.system(size: 11, weight: .medium))
             }
             .foregroundStyle(Theme.orange)
             .padding(.horizontal, 24)

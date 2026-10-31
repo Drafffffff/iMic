@@ -8,7 +8,7 @@ APP="$ROOT/build/site-demo/mac/iMic.app"
 mkdir -p "$APP/Contents/MacOS"
 xcrun swiftc -swift-version 5 -O -target "$(uname -m)-apple-macosx14.0" \
   -framework AppKit -framework ApplicationServices -framework Vision -framework ScreenCaptureKit -framework CoreImage \
-  "$ROOT/shared/IMicLog.swift" "$ROOT/shared/TextRevision.swift" \
+  "$ROOT/shared/Localization.swift" "$ROOT/shared/LinkStatusText.swift" "${ROOT}/shared/IMicLog.swift" "$ROOT/shared/TextRevision.swift" \
   "$ROOT/mac/InputTarget.swift" "$ROOT/mac/PolishPresentation.swift" "$ROOT/mac/TextMarkerGeometry.swift" \
   "$ROOT/mac/TextPolishEffect.swift" "$ROOT/tools/site-demo-mac/main.swift" -o "$APP/Contents/MacOS/iMic"
 cat > "$APP/Contents/Info.plist" <<PLIST

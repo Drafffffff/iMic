@@ -1,0 +1,68 @@
+import Foundation
+
+/// A receiving device always translates known codes locally. Unknown/legacy messages survive.
+public enum LinkStatusText {
+    public static let keys: [String: String] = [
+        "handshake_timeout": "Connection timed out. Please retry.",
+        "protocol_data": "Invalid connection data",
+        "protocol_plaintext": "Plaintext frames are not accepted after connection",
+        "protocol_key_missing": "Connection key missing",
+        "audio_end_invalid": "Invalid audio end frame or sample count",
+        "protocol_settings_direction": "An iPhone cannot send Mac settings state",
+        "handshake_frame": "Invalid handshake frame",
+        "pair_invalid": "Invalid pairing information",
+        "pair_save_failed": "Could not save pairing information",
+        "handshake_required": "Handshake required",
+        "handshake_invalid": "Invalid handshake information",
+        "connection_timeout": "Connection expired",
+        "protocol_send": "Connection send failed",
+        "timeout": "Connection timed out. Please retry.",
+        "protocol": "Invalid connection data",
+        "audio": "Invalid audio end frame or sample count",
+        "auth": "Incorrect pairing code or expired connection",
+        "pair": "Invalid pairing information",
+        "crypto": "Could not negotiate a session key",
+        "pair_code": "Incorrect pairing code. Please retry.",
+        "pair_locked": "Too many pairing attempts. Wait before entering the new code shown on your Mac.",
+        "busy": "Your Mac is still processing. Please retry shortly.",
+        "clear_in_progress": "Clearing the text field. Please retry shortly.",
+        "input_in_progress": "Previous text is still being typed. Please retry shortly.",
+        "key": "Configure your Model Studio API Key first",
+        "clear_busy": "Mac is busy or the text field is unavailable",
+        "clear_unsafe": "This text field cannot be safely cleared. Clear it on your computer.",
+        "recording_limit": "Recording exceeded the session limit. This input has stopped.",
+        "audio_incomplete": "Audio data incomplete. This input was canceled.",
+        "audio_resend_timeout": "Audio resend timed out. This input was canceled.",
+        "audio_transfer_timeout": "Audio transfer timed out. This input was canceled.",
+        "recognition_timeout": "Timed out waiting for recognition",
+        "asr": "Recognition failed. Please retry.",
+        "asr_model": "Set the recognition model to qwen-audio-3.1-asr-flash-message",
+        "asr_encoding": "Could not encode the recognition request",
+        "asr_audio": "Invalid recording data format",
+        "asr_upload_timeout": "Model Studio audio upload timed out",
+        "asr_upload": "Model Studio audio upload failed",
+        "asr_end": "Could not finish recognition",
+        "asr_final_timeout": "Timed out waiting for the final recognition result",
+        "asr_event": "Model Studio returned an invalid recognition event",
+        "asr_long": "Recognition result too long. Please make a shorter recording.",
+        "asr_early": "Recognition ended early. Please retry.",
+        "cloud_invalidKey": "The Key is invalid, deleted, or incomplete. Copy it again. For a sub-workspace, paste the console's Base URL under Advanced options.",
+        "cloud_plan": "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. iMic needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page.",
+        "cloud_permission": "This Key or workspace lacks model access. Set Key permissions to All in Model Studio, or select qwen-audio-3.1-asr-flash-message and deepseek-v4.1-flash, and activate the speech model.",
+        "cloud_ip": "The Key's IP allowlist blocked this network. Disable IP restrictions in Model Studio or add your network's public IP address.",
+        "cloud_billing": "Your account has overdue charges or no free quota remaining. International new-user quota is offered for eligible Singapore models. Complete your account information, add funds, and check Free Quota Only and budget settings before retrying.",
+        "cloud_activation": "Model Studio is not activated. Complete your account information, accept the service agreement, and activate the required speech model in the console, then retry.",
+        "cloud_quota": "Model Studio rate limit reached. Retry later or check concurrency and usage limits in the console.",
+        "cloud_inspection": "Model Studio's content check rejected this input. Adjust the content and record again.",
+        "cloud_workspace": "The Key does not match this workspace address or lacks access. Paste the console's Base URL under Advanced options and use that workspace's own Key.",
+        "cloud_network": "Cannot connect to Model Studio. Check your network. Office networks may block Alibaba Cloud domains. Retry once connected.",
+        "cloud_ambiguous": "Multiple regions accepted this Key, so its region could not be uniquely identified. Paste the console's Base URL under Advanced options.",
+        "cloud_address": "Unsupported service address. Paste the official Model Studio pay-as-you-go Base URL (HTTPS, port 443, /compatible-mode/v1). Plan endpoints and other hosts are not supported.",
+        "cloud_service": "Model Studio could not complete the request. Please retry later.",
+        "cloud_unsupported": "This region does not support iMic’s speech model. Create a Key in Singapore (international) or Beijing (China)."
+]
+    public static func text(code: String?, message: String?, fallback: String) -> String {
+        guard let code, let key = keys[code] else { return message ?? fallback }
+        return L10n.text(key)
+    }
+}

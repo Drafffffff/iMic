@@ -256,8 +256,8 @@ extension AppDelegate {
         headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         let header = row([
             logo, wordmark, stateLabel, headerSpacer,
-            symbolButton("gearshape", "设置", #selector(showSettings)),
-            symbolButton("ellipsis", "更多操作", #selector(statusMenuButton))
+            symbolButton("gearshape", L10n.text("Settings"), #selector(showSettings)),
+            symbolButton("ellipsis", L10n.text("More actions"), #selector(statusMenuButton))
         ], spacing: 9)
         stateLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 90).isActive = true
 
@@ -290,23 +290,23 @@ extension AppDelegate {
             pairPanel.addArrangedSubview(view)
         }
 
-        let pairActions = row([linkButton("复制配对码", #selector(copyPairCode)),
-            linkButton("重新生成", #selector(rotatePairCode))], spacing: 16)
-        pairCollapseButton = linkButton("收起", #selector(hidePairCode))
+        let pairActions = row([linkButton(L10n.text("Copy pairing code"), #selector(copyPairCode)),
+            linkButton(L10n.text("Regenerate"), #selector(rotatePairCode))], spacing: 16)
+        pairCollapseButton = linkButton(L10n.text("Collapse"), #selector(hidePairCode))
         pairActions.addArrangedSubview(pairCollapseButton)
         pairPanel.addArrangedSubview(pairActions)
-        firstPairSteps.stringValue = "01   在 iPhone 上安装并打开 iMic\n\n02   让 iPhone 与 Mac 连接同一 Wi-Fi\n\n03   点 iPhone 顶部的电脑名称，输入配对码"
+        firstPairSteps.stringValue = L10n.text("01   Install and open iMic on your iPhone\n\n02   Connect your iPhone and Mac to the same Wi-Fi\n\n03   Tap the computer name at the top of your iPhone and enter the pairing code")
         firstPairSteps.font = .systemFont(ofSize: 13)
         firstPairSteps.textColor = .imicMuted
         firstPairSteps.preferredMaxLayoutWidth = 388
         waitingPanel.orientation = .vertical; waitingPanel.alignment = .leading; waitingPanel.spacing = 18
-        let waitingTitle = label("等待 iPhone 连接", size: 22, color: .imicIvory, weight: .semibold)
+        let waitingTitle = label(L10n.text("Waiting for your iPhone"), size: 22, color: .imicIvory, weight: .semibold)
         pairedNames.font = .systemFont(ofSize: 14, weight: .medium)
         pairedNames.textColor = .imicIvory; pairedNames.preferredMaxLayoutWidth = 388
         pairedNames.maximumNumberOfLines = 3; pairedNames.lineBreakMode = .byTruncatingTail
-        let waitingHint = label("打开 iPhone 上的 iMic 即可自动连接。\n请保持两台设备在同一网络。", size: 12)
+        let waitingHint = label(L10n.text("Open iMic on your iPhone to connect automatically.\nKeep both devices on the same network."), size: 12)
         for view in [waitingTitle, pairedNames, waitingHint,
-                     linkButton("配对新 iPhone…", #selector(pairNewPhone))] {
+                     linkButton(L10n.text("Pair a new iPhone…"), #selector(pairNewPhone))] {
             waitingPanel.addArrangedSubview(view)
         }
         waitingPanel.edgeInsets = NSEdgeInsets(top: 24, left: 0, bottom: 18, right: 0)
@@ -338,7 +338,7 @@ extension AppDelegate {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = 7
         transcript.defaultParagraphStyle = paragraph
-        transcript.setAccessibilityLabel("识别文字")
+        transcript.setAccessibilityLabel(L10n.text("Recognized text"))
         resultScroll.documentView = transcript
         resultScroll.hasVerticalScroller = true
         resultScroll.autohidesScrollers = true
@@ -350,9 +350,9 @@ extension AppDelegate {
         meter.translatesAutoresizingMaskIntoConstraints = false
         meter.setContentHuggingPriority(.init(1), for: .horizontal)
         meter.heightAnchor.constraint(equalToConstant: 36).isActive = true
-        meter.setAccessibilityLabel("接收音量")
-        meter.setAccessibilityHelp("从左到右显示最近 1.92 秒的真实音量；不是频率分布。")
-        meter.toolTip = "接收音量 · 最近 1.92 秒"
+        meter.setAccessibilityLabel(L10n.text("Received volume"))
+        meter.setAccessibilityHelp(L10n.text("Shows actual volume over the last 1.92 seconds from left to right, rather than a frequency distribution."))
+        meter.toolTip = L10n.text("Received volume · Last 1.92 seconds")
         elapsedLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         elapsedLabel.textColor = .imicMuted
         spinner.style = .spinning
@@ -378,7 +378,7 @@ extension AppDelegate {
         issueLabel.font = .systemFont(ofSize: 11); issueLabel.textColor = .imicMuted
         issueLabel.preferredMaxLayoutWidth = 275
         issueLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        issueButton = linkButton("打开设置", #selector(performIssueAction))
+        issueButton = linkButton(L10n.text("Open Settings"), #selector(performIssueAction))
         issueButton.setContentHuggingPriority(.required, for: .horizontal)
         issueRow = row([issueLabel, issueButton], spacing: 12)
         issueRow.isHidden = true
@@ -388,8 +388,8 @@ extension AppDelegate {
         automatic.action = #selector(toggleAutoInput)
         automatic.font = .systemFont(ofSize: 12)
         automatic.contentTintColor = .imicOrange
-        automatic.title = "识别后自动输入到当前应用"
-        copyButton = button("复制文字", #selector(copyText))
+        automatic.title = L10n.text("Type into the active app after recognition")
+        copyButton = button(L10n.text("Copy text"), #selector(copyText))
         copyButton.isEnabled = false
         let controlsSpacer = NSView()
         controlsSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -398,7 +398,7 @@ extension AppDelegate {
         permissionState.font = .systemFont(ofSize: 11)
         permissionState.textColor = .imicMuted
         permissionState.maximumNumberOfLines = 2
-        permissionButton = linkButton("继续设置…", #selector(showSetupAction))
+        permissionButton = linkButton(L10n.text("Continue setup…"), #selector(showSetupAction))
         let permissionSpacer = NSView()
         permissionSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         permissionRow = row([permissionState, permissionSpacer, permissionButton], spacing: 10)
@@ -434,7 +434,7 @@ extension AppDelegate {
         let pairedWaiting = store.isPaired && !connected && transcriptText.isEmpty && currentSession == nil
         waitingPanel.isHidden = !pairedWaiting
         pairedNames.stringValue = store.devices.prefix(3).map(\.name).joined(separator: " · ")
-            + (store.devices.count > 3 ? " · 另 \(store.devices.count - 3) 台（见 iPhone 设置页）" : "")
+            + (store.devices.count > 3 ? L10n.text(" · %@ more (see iPhone settings)", L10n.argument(store.devices.count - 3)) : "")
         pairCollapseButton.isHidden = !store.isPaired && !connected && transcriptText.isEmpty
         pairPanel.isHidden = showStage || (pairedWaiting && !pairPanelVisible && !pairingRequested)
         firstPairSteps.isHidden = showStage || store.isPaired || connected
@@ -450,12 +450,12 @@ extension AppDelegate {
             ]
         )
         pairHint.stringValue = pairingRequested
-            ? "在 iPhone 输入这个配对码，即可建立加密连接。"
+            ? L10n.text("Enter this pairing code on your iPhone to establish an encrypted connection.")
             : store.isPaired
-                ? "打开 iPhone 上的 iMic 会自动连接。新设备输入上方配对码。"
-                : "在 iPhone 上打开 iMic，点顶部的电脑名称，输入这个配对码。"
+                ? L10n.text("Open iMic on your iPhone to connect automatically. New devices use the pairing code above.")
+                : L10n.text("Open iMic on your iPhone, tap the computer name at the top, and enter this pairing code.")
 
-        copyButton.title = "复制文字"
+        copyButton.title = L10n.text("Copy text")
         copyButton.isEnabled = !transcriptText.isEmpty
         controlsRow?.isHidden = transcriptText.isEmpty
         transcript.string = transcriptText
@@ -475,31 +475,31 @@ extension AppDelegate {
         elapsedLabel.isHidden = !listening
 
         if listening {
-            stageTitle.stringValue = "正在听…"
-            stageHint.stringValue = "在 iPhone 上松开会自动识别。上滑即可取消。"
-            activityHint.stringValue = "接收音量 · 16 kHz"
+            stageTitle.stringValue = L10n.text("Listening…")
+            stageHint.stringValue = L10n.text("Release on your iPhone to recognize. Slide up to cancel.")
+            activityHint.stringValue = L10n.text("Received volume · 16 kHz")
         } else if processing {
-            stageTitle.stringValue = "正在整理文字…"
-            stageHint.stringValue = "语音正在识别与整理，请稍候；已有文字会保留。"
-            activityHint.stringValue = "识别中"
+            stageTitle.stringValue = L10n.text("Preparing text…")
+            stageHint.stringValue = L10n.text("Recognizing and polishing your voice. Please wait. Existing text will be kept.")
+            activityHint.stringValue = L10n.text("Recognizing")
             spinner.startAnimation(nil)
         } else if hasText {
             stageTitle.font = .systemFont(ofSize: 17, weight: .semibold)
-            stageTitle.stringValue = lastInsertSucceeded ? "已输入" : "识别完成"
+            stageTitle.stringValue = lastInsertSucceeded ? L10n.text("Typed") : L10n.text("Recognition complete")
             if lastInsertSucceeded {
-                stageHint.stringValue = "文字已填入 \(targetAppName ?? "当前应用")。也可以复制到剪贴板。"
+                stageHint.stringValue = L10n.text("Text typed into %@. You can also copy it to the clipboard.", L10n.argument(targetAppName ?? L10n.text("the active app")))
             } else {
-                stageHint.stringValue = "文字保留在这里，点击复制即可使用。"
+                stageHint.stringValue = L10n.text("Your text is kept here. Click Copy to use it.")
             }
             stageTitle.font = .systemFont(ofSize: 17, weight: .semibold)
         } else {
             stageTitle.font = .systemFont(ofSize: 20, weight: .semibold)
             if key.stringValue.isEmpty {
-                stageTitle.stringValue = "先配置百炼 API Key"
-                stageHint.stringValue = "打开设置向导，粘贴百炼 Key 后就能开始。"
+                stageTitle.stringValue = L10n.text("Configure your Model Studio API Key first##b5e24567")
+                stageHint.stringValue = L10n.text("Open setup and paste your Model Studio Key to get started.")
             } else {
-                stageTitle.stringValue = "按住 iPhone 说话"
-                stageHint.stringValue = "松开后，文字会自动填入当前应用。"
+                stageTitle.stringValue = L10n.text("Hold to speak on your iPhone")
+                stageHint.stringValue = L10n.text("Release to type into the active app automatically.")
             }
         }
         if !processing { spinner.stopAnimation(nil) }
@@ -514,8 +514,8 @@ extension AppDelegate {
     func refreshInputPermission() {
         let state = inputPermissionState()
         let keyMissing = key.stringValue.isEmpty
-        permissionState.stringValue = keyMissing ? "还没有百炼 API Key"
-            : state.allowed ? "" : (state.accessibility ? "输入授权尚未生效" : "需要辅助功能权限")
+        permissionState.stringValue = keyMissing ? L10n.text("No Model Studio API Key yet")
+            : state.allowed ? "" : (state.accessibility ? L10n.text("Typing permission has not taken effect") : L10n.text("Accessibility permission required"))
         permissionState.textColor = .imicOrange
         let showRow = keyMissing || (automatic.state == .on && !state.allowed)
         permissionRow?.isHidden = !showRow

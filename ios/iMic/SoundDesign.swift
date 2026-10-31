@@ -155,11 +155,11 @@ enum SoundFamily: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .transport: return "录音"
-        case .string: return "弦手势"
-        case .signal: return "文字"
-        case .link: return "连接"
-        case .alert: return "提醒"
+        case .transport: return L10n.text("Recording")
+        case .string: return L10n.text("String gestures")
+        case .signal: return L10n.text("Text")
+        case .link: return L10n.text("Connection")
+        case .alert: return L10n.text("Alerts")
         }
     }
 }
@@ -208,23 +208,23 @@ enum SoundCue: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .release: return "松开提交"
-        case .cancelled: return "上滑取消"
-        case .tooShort: return "录音太短"
-        case .bowArmed: return "弦拉满"
-        case .snapReturn: return "下拉回车"
-        case .delete: return "上拉删除一字"
-        case .clear: return "清空输入框"
-        case .result: return "识别结果到达"
-        case .polishReady: return "润色完成"
-        case .copy: return "复制"
-        case .connected: return "连接成功"
-        case .connectionLost: return "连接断开"
-        case .pairingRequired: return "需要配对"
-        case .pairingSuccess: return "配对成功"
-        case .pairingFailed: return "配对失败"
-        case .warning: return "提示"
-        case .error: return "出错"
+        case .release: return L10n.text("Release to submit")
+        case .cancelled: return L10n.text("Slide up to cancel")
+        case .tooShort: return L10n.text("Recording too short")
+        case .bowArmed: return L10n.text("String fully stretched")
+        case .snapReturn: return L10n.text("Pull down for Return")
+        case .delete: return L10n.text("Pull up to delete a character")
+        case .clear: return L10n.text("Clear text field")
+        case .result: return L10n.text("Recognition result received")
+        case .polishReady: return L10n.text("Polish complete")
+        case .copy: return L10n.text("Copy")
+        case .connected: return L10n.text("Connected")
+        case .connectionLost: return L10n.text("Disconnected##40c61a41")
+        case .pairingRequired: return L10n.text("Pairing required")
+        case .pairingSuccess: return L10n.text("Paired##b1e2f7f1")
+        case .pairingFailed: return L10n.text("Pairing failed")
+        case .warning: return L10n.text("Notice")
+        case .error: return L10n.text("Error")
         }
     }
 

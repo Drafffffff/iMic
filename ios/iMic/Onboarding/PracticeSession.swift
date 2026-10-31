@@ -17,10 +17,10 @@ final class PracticeSession: ObservableObject {
     private var horizontal: Bool?
     private var cursorStep = 0
     private var cleared = false
-    let phrase = "今天下午三点开会"
+    let phrase = L10n.text("Meeting today at three")
     var motion: StringMotionStore { spectrum.stringMotion }
     static let titles = ["HOLD", "CANCEL", "RETURN", "EDIT", "CLEAR"]
-    static let instructions = ["按住下方横条，至少说半秒，松手发送", "按住横条向上滑，松手取消，不会发送", "向下拉弦再松手，弹射时发送回车", "向上拉弦删除；左右滑动移动光标", "把弦一直拉到屏幕顶部，清空当前输入"]
+    static let instructions = [L10n.text("Hold the bar below, speak for at least half a second, then release to send"), L10n.text("Hold the bar, slide up, then release to cancel without sending"), L10n.text("Pull the string down and release. It sends Return as it springs back."), L10n.text("Pull up to delete. Slide left or right to move the cursor."), L10n.text("Pull the string all the way to the top to clear the current text")]
 
     init() {
         motion.onFireReturn = { [weak self] in self?.apply("return") ?? false }
@@ -153,9 +153,9 @@ struct PracticeView: View {
         VStack(alignment: .leading, spacing: 16) {
             if practice.completed {
                 GuideTitle(text: "PRACTICE COMPLETE", cell: 1.7, color: Theme.orange)
-                    .accessibilityLabel("练习完成")
-                Text("✓ 你已经了解核心手势。练习没有录音，也没有向 Mac 发送内容。")
-                GuideButton(title: "完成练习", action: onComplete)
+                    .accessibilityLabel(L10n.text("Practice complete"))
+                Text(L10n.text("✓ You know the core gestures. Practice did not record audio or send anything to your Mac."))
+                GuideButton(title: L10n.text("Finish practice"), action: onComplete)
             } else {
                 HStack {
                     GuideTitle(text: PracticeSession.titles[practice.card], cell: 3, color: Theme.ivory)
@@ -163,18 +163,18 @@ struct PracticeView: View {
                     Text("\(practice.card + 1) / 5").foregroundStyle(Theme.muted)
                 }
                 Text(PracticeSession.instructions[practice.card])
-                if disabled { Text("部分手势已在设置中关闭，可以直接跳过。恢复开关需在 Mac 设置中操作。") .foregroundStyle(Theme.muted) }
+                if disabled { Text(L10n.text("Some gestures are disabled in Settings. You can skip them. Re-enable them in iMic on your Mac.")) .foregroundStyle(Theme.muted) }
                 GestureDemonstration(card: practice.card)
                 VStack(alignment: .leading, spacing: 8) {
                     MetaLabel(text: "MAC / PRACTICE ONLY")
-                    Text(practice.text.isEmpty ? "等待你的操作…" : practice.text)
+                    Text(practice.text.isEmpty ? L10n.text("Waiting for your gesture…") : practice.text)
                         .foregroundStyle(practice.text.isEmpty ? Theme.muted : Theme.ivory)
                         .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
                         .accessibilityIdentifier("practice.text")
-                    Text("光标位置 \(practice.cursor)").font(.caption).foregroundStyle(Theme.muted)
+                    Text(L10n.text("Cursor position %@", L10n.argument(practice.cursor))).font(.caption).foregroundStyle(Theme.muted)
                 }.padding(14).background(Theme.panel).overlay(Rectangle().stroke(Theme.line))
                 if practice.card == 3 {
-                    Text("\(practice.deleted ? "✓" : "○") 删除    \(practice.moved ? "✓" : "○") 移动光标")
+                    Text(L10n.text("%@ Delete    %@ Move cursor", L10n.argument(practice.deleted ? "✓" : "○"), L10n.argument(practice.moved ? "✓" : "○")))
                         .foregroundStyle(Theme.orange).accessibilityIdentifier("practice.edit-checks")
                 }
                 GeometryReader { geometry in
@@ -187,7 +187,7 @@ struct PracticeView: View {
                                                           deleteEnabled: session.pullDeleteEnabled, cursorEnabled: session.swipeCursorEnabled) }
                                 .onEnded { practice.endDrag($0, returnEnabled: session.snapReturnEnabled, deleteEnabled: session.pullDeleteEnabled); onInteractionChanged(false) })
                     }
-                    .accessibilityElement(children: .ignore).accessibilityLabel("练习弦控制")
+                    .accessibilityElement(children: .ignore).accessibilityLabel(L10n.text("Practice string controls"))
                     .accessibilityIdentifier("practice.string")
                 }.frame(height: 170)
                 ZStack {
@@ -198,16 +198,16 @@ struct PracticeView: View {
                                 onEnded: { practice.endHold(cancelled: $0); onInteractionChanged(false) })
                 }
                 .frame(height: HoldBarLayout.height)
-                .accessibilityElement(children: .ignore).accessibilityLabel("练习录音横条")
+                .accessibilityElement(children: .ignore).accessibilityLabel(L10n.text("Practice recording bar"))
                 .accessibilityIdentifier("practice.hold")
                 if practice.passed {
-                    Text("✓ 已完成").foregroundStyle(Theme.orange).accessibilityIdentifier("practice.passed")
-                    GuideButton(title: "下一张") { practice.next() }
+                    Text(L10n.text("✓ Complete")).foregroundStyle(Theme.orange).accessibilityIdentifier("practice.passed")
+                    GuideButton(title: L10n.text("Next card")) { practice.next() }
                 }
                 if voiceOver {
-                    Button("标记为已了解") { practice.succeed() }
+                    Button(L10n.text("Mark as understood")) { practice.succeed() }
                 }
-                Button("跳过") { practice.next() }.frame(minHeight: 44)
+                Button(L10n.text("Skip")) { practice.next() }.frame(minHeight: 44)
             }
         }
         .font(.body).foregroundStyle(Theme.ivory)

@@ -10,7 +10,7 @@ struct OnboardingAudit: View {
     var body: some View {
         if ProcessInfo.processInfo.arguments.contains("--debug-onboarding-audit") {
             VStack(alignment: .leading) {
-                Button("检查练习隔离") {
+                Button(L10n.text("Check practice isolation")) {
                     let log = (try? String(contentsOf: IMicLog.fileURL, encoding: .utf8)) ?? ""
                     let lines = log.split(separator: "\n")
                     let link = lines.filter { $0.contains("[iphone.link]") }.count

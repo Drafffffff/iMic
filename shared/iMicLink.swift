@@ -70,16 +70,16 @@ public enum LinkError: Error, Equatable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .invalidFrameLength: return "链路帧长度无效"
-        case .unknownFrameKind: return "链路帧类型未知"
-        case .truncatedAudio: return "音频帧不完整"
-        case .invalidAudio: return "音频帧格式错误"
-        case .invalidPublicKey: return "链路公钥无效"
-        case .invalidToken: return "设备令牌无效"
-        case .invalidPairingCode: return "配对码无效"
-        case .decryptionFailed: return "链路校验失败"
-        case .encodingFailed: return "链路编码失败"
-        case .decodingFailed: return "链路消息无效"
+        case .invalidFrameLength: return L10n.text("Invalid link frame length")
+        case .unknownFrameKind: return L10n.text("Unknown link frame type")
+        case .truncatedAudio: return L10n.text("Incomplete audio frame")
+        case .invalidAudio: return L10n.text("Invalid audio frame format")
+        case .invalidPublicKey: return L10n.text("Invalid link public key")
+        case .invalidToken: return L10n.text("Invalid device token")
+        case .invalidPairingCode: return L10n.text("Invalid pairing code")
+        case .decryptionFailed: return L10n.text("Link verification failed")
+        case .encodingFailed: return L10n.text("Link encoding failed")
+        case .decodingFailed: return L10n.text("Invalid link message")
         }
     }
 }
@@ -387,11 +387,12 @@ public struct LinkMessage: Codable, Equatable {
         return m
     }
 
-    public static func inputResult(revision: Int, applied: Bool, message: String? = nil) -> LinkMessage {
+    public static func inputResult(revision: Int, applied: Bool, code: String? = nil, message: String? = nil) -> LinkMessage {
         var m = LinkMessage(t: "input.result")
         m.action = "clear"
         m.seq = revision
         m.status = applied ? "applied" : "rejected"
+        m.code = code
         m.message = message
         return m
     }

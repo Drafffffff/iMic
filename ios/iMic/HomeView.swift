@@ -80,7 +80,7 @@ struct HomeView: View {
                     }
                     .frame(width: width, height: instrumentHeight)
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("弦控制")
+                    .accessibilityLabel(L10n.text("String controls"))
                     .accessibilityHint("\(stringControlHint)。\(secondaryGestureHint)")
                     .accessibilityValue(stringHint ?? "")
                     .anchorPreference(key: ReceiverAnchorsKey.self, value: .bounds) {
@@ -88,7 +88,7 @@ struct HomeView: View {
                     }
                     .position(x: geometry.size.width / 2, y: instrumentCenter)
                     VStack(spacing: 0) {
-                        HoldBarRail(notice: cancelArmed ? "松开取消" : session.notice,
+                        HoldBarRail(notice: cancelArmed ? L10n.text("Release to cancel") : session.notice,
                                     noticeColor: cancelArmed ? Theme.ivory : Theme.muted)
                             .animation(.easeOut(duration: 0.18), value: session.notice)
                         holdBar(width: width)
@@ -164,7 +164,7 @@ struct HomeView: View {
         }
         .overlay(alignment: .top) {
             if !onboarding.presented && onboarding.unfinished && !link.phase.isReady {
-                Button("还没有连接 Mac · 继续设置") { onboarding.resume() }
+                Button(L10n.text("No Mac connected · Continue setup")) { onboarding.resume() }
                     .font(.callout).foregroundStyle(Theme.orange)
                     .padding(12).background(Theme.ink).padding(.top, 84)
             }
@@ -183,7 +183,7 @@ struct HomeView: View {
                       session.snapReturnEnabled, !showPairing, !showResult, !showDevices,
                       UIApplication.shared.applicationState == .active,
                       session.sendInput("return") else { return false }
-                session.showGestureNotice("发射文字")
+                session.showGestureNotice(L10n.text("Launch text"))
                 receiver?.fire()
                 loadSpent = true
                 return true
@@ -210,7 +210,7 @@ struct HomeView: View {
             }
             let arguments = ProcessInfo.processInfo.arguments
             if arguments.contains("--ui-preview=settings") {
-                showPairing = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showPairing = true }
             }
             if arguments.contains("--debug-buffer-tone") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
@@ -225,7 +225,7 @@ struct HomeView: View {
             #if DEBUG
             DemoTouchOverlay.installIfNeeded()
             if ProcessInfo.processInfo.arguments.contains("--ui-preview=devices") {
-                showDevices = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showDevices = true }
             }
             #endif
         }
@@ -253,7 +253,7 @@ struct HomeView: View {
                 let requested = arguments.first { $0.hasPrefix("--debug-flight-count=") }
                     .flatMap { Int($0.replacingOccurrences(of: "--debug-flight-count=", with: "")) } ?? 120
                 let count = min(5000, max(1, requested))
-                let phrase = "把今天讨论的交互细节整理成一页说明重点保留按住说话松开即输入的节奏"
+                let phrase = L10n.text("Turn today's discussion about interaction details into a one-page brief. Keep the rhythm of hold to speak, release to type.")
                 let delay = arguments.first { $0.hasPrefix("--debug-flight-delay=") }
                     .flatMap { Double($0.replacingOccurrences(of: "--debug-flight-delay=", with: "")) } ?? 0.4
                 try? await Task.sleep(for: .seconds(min(10, max(0, delay))))
@@ -400,8 +400,8 @@ struct HomeView: View {
             status:statusWord,statusLine:statusLine,statusCell:statusCell(width:width),statusColor:statusColor,
             barLabel:barLabel,barCell:barCell(width:width),barFill:barFill,barText:barTextColor,
             canRecord:canRecordNow,listening:session.phase == .listening,
-            elapsed:String(format:"%.1f s",session.elapsed),hasResult:hasResultText,
-            notice:cancelArmed ? "松开取消":session.notice,
+            elapsed:String(format: "%.1f s", locale: L10n.locale,session.elapsed),hasResult:hasResultText,
+            notice:cancelArmed ? L10n.text("Release to cancel"):session.notice,
             noticeColor:cancelArmed ? Theme.ivory:Theme.muted)
     }
 
@@ -441,7 +441,7 @@ struct HomeView: View {
                     .contentShape(Rectangle())
                 }
                 .frame(maxWidth: 150, alignment: .trailing)
-                .accessibilityLabel("连接电脑，\(connectionLabel)，点击切换 Mac")
+                .accessibilityLabel(L10n.text("Connect to a computer, %@, tap to switch Macs", L10n.argument(connectionLabel)))
                 Button {
                     Haptics.shared.play(.tap)
                     showPairing = true
@@ -451,7 +451,7 @@ struct HomeView: View {
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
-                .accessibilityLabel("设置")
+                .accessibilityLabel(L10n.text("Settings"))
             }
             .buttonStyle(.plain)
             // Align the visible glyph, rather than its 44pt touch target, to the content edge.
@@ -472,7 +472,7 @@ struct HomeView: View {
                 .frame(height: 30, alignment: .center)
             Text(statusLine)
                 .modifier(InstrumentHint())
-                .lineLimit(2)
+                .lineLimit(session.phase == .error ? nil : 2)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
                 .frame(minHeight: 34, alignment: .top)
@@ -512,7 +512,7 @@ struct HomeView: View {
                             .frame(width: 28, height: 28)
                             .contentShape(Rectangle())
                     }
-                    .accessibilityLabel("关闭结果")
+                    .accessibilityLabel(L10n.text("Close result"))
                 }
 
                 ScrollView {
@@ -536,7 +536,7 @@ struct HomeView: View {
                         HStack(spacing: 5) {
                             Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
                                 .font(.system(size: 10, weight: .semibold))
-                            Text(showCopied ? "已复制" : "复制")
+                            Text(showCopied ? L10n.text("Copied") : L10n.text("Copy"))
                                 .font(.system(size: 11, weight: .medium))
                         }
                         .foregroundStyle(Theme.ivory)
@@ -589,7 +589,7 @@ struct HomeView: View {
                 Spacer(minLength: HoldBarLayout.labelGap)
                 ZStack {
                     if session.phase == .listening {
-                        Text(String(format: "%.1f s", session.elapsed))
+                        Text(String(format: "%.1f s", locale: L10n.locale, session.elapsed))
                             .font(.system(size: 12, weight: .medium, design: .monospaced))
                             .foregroundStyle(barTextColor.opacity(0.8))
                             .minimumScaleFactor(0.8)
@@ -662,7 +662,7 @@ struct HomeView: View {
                 guard canUseString else {
                     stringGestureBlocked = true
                     stringMotion.cancel()
-                    stringHint = link.gestureSupported ? "等待电脑完成处理后再拉弦" : "请更新 Mac 端启用弦控制"
+                    stringHint = link.gestureSupported ? L10n.text("Wait for your Mac to finish before pulling the string") : L10n.text("Update iMic on your Mac to enable string controls")
                     return
                 }
                 guard !clearTriggeredThisGesture else { return }
@@ -702,9 +702,9 @@ struct HomeView: View {
                                 session.sendInput(direction)
                             }
                             Haptics.shared.play(.selection)
-                            stringHint = direction == "right" ? "光标 →" : "光标 ←"
+                            stringHint = direction == "right" ? L10n.text("Cursor →") : L10n.text("Cursor ←")
                         } else {
-                            stringHint = "光标已在 Mac 关闭"
+                            stringHint = L10n.text("Cursor movement is disabled on your Mac")
                         }
                         cursorStep = step
                     }
@@ -728,7 +728,7 @@ struct HomeView: View {
                     )
                     if let command {
                         session.sendInput(command)
-                        session.showGestureNotice("删除")
+                        session.showGestureNotice(L10n.text("Delete"))
                         Haptics.shared.play(.deleteChar)
                     }
                 }
@@ -744,7 +744,7 @@ struct HomeView: View {
         clearTriggeredThisGesture = true
         stringMotion.completeClearContact()
         if session.sendInput("clear") {
-            session.showGestureNotice("正在清空输入框…")
+            session.showGestureNotice(L10n.text("Clearing the text field…"))
             Haptics.shared.play(.cancelArmed)
         }
     }
@@ -783,7 +783,7 @@ struct HomeView: View {
                     Haptics.shared.play(.overlayOpen)
                     showResult = true
                 } label: {
-                    Text("查看结果  ›")
+                    Text(L10n.text("View result  ›"))
                         .modifier(InstrumentHint())
                         .frame(minWidth: 74, minHeight: 32)
                         .contentShape(Rectangle())
@@ -792,7 +792,7 @@ struct HomeView: View {
                 .opacity(hasResultText ? 1 : 0)
                 .allowsHitTesting(hasResultText)
                 .accessibilityHidden(!hasResultText)
-                .accessibilityLabel("查看识别结果")
+                .accessibilityLabel(L10n.text("View recognition result"))
             }
             .frame(width: 98, height: 32, alignment: .trailing)
         }
@@ -886,37 +886,37 @@ struct HomeView: View {
 
     private var statusLine: String {
         if canUseString, session.snapReturnEnabled, stringMotion.armed, stringMotion.chargeTension > 0 {
-            return "松手弹射想法"
+            return L10n.text("Release to launch your idea")
         }
         switch session.phase {
         case .listening:
-            if !linkReady { return "正在连接 Mac · 先说着，连上即发送" }
-            return "松开即发送 · 上滑取消"
+            if !linkReady { return L10n.text("Connecting to Mac · Speak now, send when connected") }
+            return L10n.text("Release to send · Slide up to cancel")
         case .transcribing:
-            if !linkReady { return "正在连接 Mac，连接后立即发送" }
-            return session.message ?? (session.isUploading ? "正在上传音频…" : "正在把语音变成文字")
+            if !linkReady { return L10n.text("Connecting to Mac. Your audio will send as soon as it connects.") }
+            return session.message ?? (session.isUploading ? L10n.text("Uploading audio…") : L10n.text("Turning your voice into text"))
         case .result:
-            if macFinishing { return "等待电脑完成润色与输入" }
-            let done = session.pasted ? session.target.map { "已填入 \($0)" } : nil
-            if stringReady { return (done.map { $0 + " · " } ?? "") + "下拉松手发射" }
-            return done ?? "文字已回传到 iPhone"
+            if macFinishing { return L10n.text("Waiting for your Mac to finish polishing and typing") }
+            let done = session.pasted ? session.target.map { L10n.text("Typed into %@", L10n.argument($0)) } : nil
+            if stringReady { return (done.map { $0 + " · " } ?? "") + L10n.text("Pull down and release to launch") }
+            return done ?? L10n.text("Text sent back to your iPhone")
         case .error:
-            return session.message ?? "请再试一次"
+            return session.message ?? L10n.text("Please try again")
         case .idle:
             break
         }
         if !linkReady {
-            if canRecordNow { return "按住先说着，连上即发送" }
+            if canRecordNow { return L10n.text("Hold to speak now. Send when connected.") }
             switch link.phase {
-            case .searching: return link.macs.isEmpty ? "正在寻找你的 Mac" : "找到多台 Mac，点右上角选择"
-            case .connecting(let name): return "正在连接 \(name)"
-            case .needsCode: return "输入 Mac 上显示的配对码"
-            case .failed: return "链路不可用，点右上角重试"
-            case .idle: return "在 Mac 上打开 iMic"
+            case .searching: return link.macs.isEmpty ? L10n.text("Looking for your Mac") : L10n.text("Multiple Macs found. Choose one at the top right.")
+            case .connecting(let name): return L10n.text("Connecting to %@", L10n.argument(name))
+            case .needsCode: return L10n.text("Enter the pairing code shown on your Mac")
+            case .failed: return L10n.text("Connection unavailable. Tap the top right to retry.")
+            case .idle: return L10n.text("Open iMic on your Mac")
             case .ready: return ""
             }
         }
-        return "按住底部横条开始说话"
+        return L10n.text("Hold the bottom bar to speak")
     }
 
     private var barFill: Color {
@@ -952,22 +952,22 @@ struct HomeView: View {
     }
 
     private var stringControlHint: String {
-        guard linkReady else { return "连接 Mac 后可拨弦" }
-        guard link.gestureSupported else { return "请更新 Mac 端启用弦控制" }
-        if link.clearPending { return "正在清空输入框…" }
-        if session.phase == .listening { return "录音结束并完成输入后可拉弦" }
+        guard linkReady else { return L10n.text("Connect to a Mac to use the string") }
+        guard link.gestureSupported else { return L10n.text("Update iMic on your Mac to enable string controls") }
+        if link.clearPending { return L10n.text("Clearing the text field…") }
+        if session.phase == .listening { return L10n.text("Finish recording and typing before pulling the string") }
         guard link.gestureReady, session.phase != .transcribing, !session.isUploading else {
-            return "等待电脑完成润色、动画与输入"
+            return L10n.text("Waiting for polishing, animation, and typing on your Mac")
         }
-        return session.snapReturnEnabled ? "下拉松手发射文字" : "发射已在 Mac 关闭"
+        return session.snapReturnEnabled ? L10n.text("Pull down and release to launch text") : L10n.text("Text launch is disabled on your Mac")
     }
 
     private var secondaryGestureHint: String {
-        guard linkReady else { return "语音和按键发送到当前选择的 Mac" }
+        guard linkReady else { return L10n.text("Voice and keystrokes go to the selected Mac") }
         var actions: [String] = []
-        if session.pullDeleteEnabled { actions.append("上拉删除／顶部清空") }
-        if session.swipeCursorEnabled { actions.append("左右移动光标") }
-        return actions.isEmpty ? "弦手势已在 Mac 关闭" : actions.joined(separator: " · ")
+        if session.pullDeleteEnabled { actions.append(L10n.text("Pull up to delete / Pull to the top to clear")) }
+        if session.swipeCursorEnabled { actions.append(L10n.text("Slide left or right to move the cursor")) }
+        return actions.isEmpty ? L10n.text("String gestures are disabled on your Mac") : actions.joined(separator: " · ")
     }
 }
 

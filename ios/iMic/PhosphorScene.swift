@@ -274,7 +274,7 @@ enum PhosphorAttachStyle: String, CaseIterable {
     case charge, flow, arc
     static let preferenceKey="imic.display.attach"
     var label:String{switch self{case .charge:return "CHARGE";case .flow:return "FLOW";case .arc:return "ARC"}}
-    var title:String{switch self{case .charge:return "整环充能";case .flow:return "流动光弧";case .arc:return "静止光弧"}}
+    var title:String{switch self{case .charge:return L10n.text("Full ring");case .flow:return L10n.text("Flowing arc");case .arc:return L10n.text("Fixed arc")}}
 
     /// Flowing arcs circle their ring on the ambient clock (it slows to rest with the HUD and
     /// never runs under Reduce Motion). Half go each way, at slightly different speeds; the
@@ -291,6 +291,6 @@ enum PhosphorEffect: String, CaseIterable {
     static let preferenceKey="imic.display.material"
     var crtStrength:Float{self == .crt ? 0.82:0}
     var bloomStrength:Float{self == .clean ? 0:0.5}
-    var title:String{switch self{case .clean:return "清晰";case .glow:return "荧光";case .crt:return "荧光 CRT"}}
+    var title:String{switch self{case .clean:return L10n.text("Clear");case .glow:return L10n.text("Phosphor");case .crt:return L10n.text("Phosphor CRT")}}
     var label:String{rawValue.uppercased()}
 }

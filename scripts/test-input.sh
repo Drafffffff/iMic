@@ -13,7 +13,7 @@ xcrun swiftc -swift-version 5 -F "$FRAMEWORKS" -I "$SWIFT_SUPPORT" \
   -framework AppKit -framework ApplicationServices \
   -Xlinker -rpath -Xlinker "$FRAMEWORKS" \
   -Xlinker -rpath -Xlinker "$SWIFT_SUPPORT" \
-  "$ROOT/shared/IMicLog.swift" "$ROOT/shared/TextRevision.swift" \
+  "$ROOT/shared/Localization.swift" "$ROOT/shared/LinkStatusText.swift" "${ROOT}/shared/IMicLog.swift" "$ROOT/shared/TextRevision.swift" \
   "$ROOT/mac/InputTarget.swift" "$ROOT/tests/InputRange/main.swift" \
   -o "$WORK/input-tests"
 "$WORK/input-tests"

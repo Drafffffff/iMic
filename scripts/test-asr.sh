@@ -12,7 +12,7 @@ xcrun swiftc -swift-version 5 -F "$FRAMEWORKS" -I "$SWIFT_SUPPORT" \
   -L "$SWIFT_SUPPORT" -lXCTestSwiftSupport -framework XCTest \
   -Xlinker -rpath -Xlinker "$FRAMEWORKS" \
   -Xlinker -rpath -Xlinker "$SWIFT_SUPPORT" \
-  "$ROOT/shared/iMicLink.swift" "$ROOT/shared/PolishOptions.swift" "$ROOT/shared/IMicLog.swift" \
+  "$ROOT/shared/Localization.swift" "$ROOT/shared/LinkStatusText.swift" "${ROOT}/shared/iMicLink.swift" "$ROOT/shared/PolishOptions.swift" "$ROOT/shared/IMicLog.swift" \
   "$ROOT/mac/CloudFailure.swift" "$ROOT/mac/ASR.swift" "$ROOT/tests/ASRStreaming/main.swift" \
   -o "$WORK/asr-tests"
 "$WORK/asr-tests"

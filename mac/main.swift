@@ -63,7 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var stageStack: NSStackView!
     var controlsRow: NSStackView!
     var permissionRow: NSStackView!
-    let automatic = NSButton(checkboxWithTitle: "自动输入", target: nil, action: nil)
+    let automatic = NSButton(checkboxWithTitle: L10n.text("Automatic typing"), target: nil, action: nil)
     var copyButton: NSButton!
     let key = NSSecureTextField()
     let endpoint = NSTextField(string: ASRConfiguration.current().endpoint)
@@ -233,20 +233,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             IMicLog.write("mac.link", "state=\(String(describing: state))")
             switch state {
             case .starting:
-                self.setStatus("正在启动链路…")
+                self.setStatus(L10n.text("Starting connection…"))
             case .advertising:
                 if self.connectedName != nil { self.connectedName = nil }
                 self.startBLEBridge()
-                self.setStatus(self.key.stringValue.isEmpty ? "先配置百炼 API Key" : "等待 iPhone 连接")
+                self.setStatus(self.key.stringValue.isEmpty ? L10n.text("Configure your Model Studio API Key first##b5e24567") : L10n.text("Waiting for your iPhone"))
             case .connected(let name):
                 self.connectedName = name
                 self.pairingRequested = false
                 self.pairPanelVisible = false
-                self.setStatus("已连接 \(name)")
+                self.setStatus(L10n.text("Connected to %@", L10n.argument(name)))
                 self.sendFeatureSettings()
             case .failed(let message):
                 self.connectedName = nil
-                self.setStatus("链路启动失败 · \(message)")
+                self.setStatus(L10n.text("Connection failed to start · %@", L10n.argument(message)))
             }
             self.refreshUI()
             self.updateStatusBar()
@@ -257,7 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.pairingRequested = true
             self.show()
             self.cuePairing()
-            self.setStatus("在 iPhone 输入配对码")
+            self.setStatus(L10n.text("Enter the pairing code on your iPhone"))
             self.refreshUI()
             self.updateStatusBar()
         }
@@ -265,8 +265,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self = self else { return }
             IMicLog.write("mac.link", "disconnected")
             self.connectedName = nil
-            self.abortSession(notifyPhone: false, message: "iPhone 已断开")
-            self.setStatus("iPhone 已断开")
+            self.abortSession(notifyPhone: false, message: L10n.text("iPhone disconnected"))
+            self.setStatus(L10n.text("iPhone disconnected"))
             self.refreshUI()
             self.updateStatusBar()
         }
@@ -335,8 +335,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             endSession(message)
         case "audio.cancel":
             if let session = message.session, currentSession == session {
-                abortSession(notifyPhone: false, message: "本次输入已取消")
-                setStatus("本次输入已取消", transient: true)
+                abortSession(notifyPhone: false, message: L10n.text("This input was canceled"))
+                setStatus(L10n.text("This input was canceled"), transient: true)
                 refreshUI()
             }
         case "input":
@@ -428,7 +428,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard pullDeleteEnabled, gestureLease.permits(revision), currentSession == nil, !inserting,
               !clearingInput, !polishEffect.blocksGestures, inputAllowed(), !disableInput,
               let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid() else {
-            link.send(.inputResult(revision: revision, applied: false, message: "Mac 忙碌或当前输入框不可用"))
+            link.send(.inputResult(revision: revision, applied: false, code: "clear_busy", message: L10n.text("Mac is busy or the text field is unavailable")))
             return
         }
         clearingInput = true
@@ -436,10 +436,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         InputTarget.clearFocusedText(pid: app.processIdentifier) { [weak self] applied in
             guard let self else { return }
             self.clearingInput = false
-            self.link.send(.inputResult(revision: revision, applied: applied,
-                message: applied ? nil : "当前输入框无法安全清空，请在电脑端操作"))
+            self.link.send(.inputResult(revision: revision, applied: applied, code: applied ? nil : "clear_unsafe",
+                message: applied ? nil : L10n.text("This text field cannot be safely cleared. Clear it on your computer.")))
             self.sendGestureState()
-            self.setStatus(applied ? "已清空输入框" : "未能清空当前输入框", transient: true)
+            self.setStatus(applied ? L10n.text("Text field cleared##0c8ec41f") : L10n.text("Could not clear this text field"), transient: true)
         }
     }
 
@@ -452,7 +452,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard inputAllowed() else {
             IMicLog.write("mac.input", "ignored action=\(action) permission=false")
             refreshInputPermission()
-            setStatus("需要辅助功能权限才能执行手势", transient: true)
+            setStatus(L10n.text("Accessibility permission is required for gestures"), transient: true)
             return
         }
         let front = NSWorkspace.shared.frontmostApplication
@@ -466,7 +466,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard let pid else {
             IMicLog.write("mac.input", "ignored action=\(action) no target")
-            setStatus("没有可输入的应用", transient: true)
+            setStatus(L10n.text("No app available for typing"), transient: true)
             return
         }
         let key: CGKeyCode
@@ -474,16 +474,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch action {
         case "return":
             guard snapReturnEnabled else { return }
-            key = 36; label = "回车"
+            key = 36; label = L10n.text("Return")
         case "delete":
             guard pullDeleteEnabled else { return }
-            key = 51; label = "删除"
+            key = 51; label = L10n.text("Delete")
         case "left":
             guard swipeCursorEnabled else { return }
-            key = 123; label = "光标 ←"
+            key = 123; label = L10n.text("Cursor ←")
         case "right":
             guard swipeCursorEnabled else { return }
-            key = 124; label = "光标 →"
+            key = 124; label = L10n.text("Cursor →")
         default:
             IMicLog.write("mac.input", "unknown action=\(action)")
             return
@@ -554,7 +554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             IMicLog.write("mac.session", "audio seq=\(seq) packets=\(receivedPackets) frames=\(frames) samples=\(samples) bytes=\(packet.pcm.count)")
         }
         if samples > IMicLink.sampleRate * IMicLink.maxSessionSeconds {
-            abortSession(notifyPhone: true, message: "单次录音最长 \(IMicLink.maxSessionSeconds / 60) 分钟")
+            abortSession(notifyPhone: true, code: "recording_limit", message: L10n.text("Recordings can be up to %@ minutes", L10n.argument(IMicLink.maxSessionSeconds / 60)))
             return
         }
         do {
@@ -564,7 +564,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 asr?.append(accepted)
             }
         } catch {
-            abortSession(notifyPhone: true, message: "音频数据不完整，本次输入已取消")
+            abortSession(notifyPhone: true, code: "audio_incomplete", message: L10n.text("Audio data incomplete. This input was canceled."))
             return
         }
         var energy = 0.0
@@ -576,7 +576,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let count = max(1, packet.pcm.count / 2)
         meter.doubleValue = min(1, sqrt(energy / Double(count)) / 7000)
-        if stopAt == nil { elapsedLabel.stringValue = String(format: "%.1f s", Double(samples) / 16000) }
+        if stopAt == nil { elapsedLabel.stringValue = String(format: "%.1f s", locale: L10n.locale, Double(samples) / 16000) }
 
         if let pending = pendingEndMessage,
            pending.frames == frames, pending.samples == samples {
@@ -588,7 +588,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startSession(_ session: Int, implicit: Bool = false) {
         guard !clearingInput else {
-            link.send(.failure(session: session, code: "busy", message: "正在清空输入框，请稍后重试"))
+            link.send(.failure(session: session, code: "clear_in_progress", message: L10n.text("Clearing the text field. Please retry shortly.")))
             return
         }
         if currentSession == session {
@@ -599,7 +599,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let previous = currentSession, previous != session {
             guard !inserting else {
                 IMicLog.write("mac.session", "start rejected session=\(session) previous=\(previous) inserting=true")
-                link.send(.failure(session: session, code: "busy", message: "上一条正在输入，请稍后重试"))
+                link.send(.failure(session: session, code: "input_in_progress", message: L10n.text("Previous text is still being typed. Please retry shortly.")))
                 return
             }
             // 用户已经开始新会话：旧的 ASR 不能继续占用单会话状态，否则
@@ -616,7 +616,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard !key.stringValue.isEmpty else {
             IMicLog.write("mac.session", "start rejected key missing session=\(session)")
-            link.send(.failure(session: session, code: "key", message: "Mac 尚未配置百炼 API Key"))
+            link.send(.failure(session: session, code: "key", message: L10n.text("No Model Studio API Key configured on your Mac")))
             showSetup(at: .key)
             polishEffect.cancel()
             polishTask?.cancel(); polishTask = nil
@@ -671,7 +671,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         IMicLog.write("mac.session", "start session=\(session) implicit=\(implicit) target=\(targetAppName ?? "-") terminal=\(targetIsTerminal)")
         IMicLog.write("mac.input", "target pid=\(targetPID ?? -1) streaming=\(inputTarget?.allowsStreaming == true) mode=\(inputTarget?.mode.rawValue ?? "unavailable")")
         link.send(.state(session: session, phase: "listening"))
-        setStatus("正在听…")
+        setStatus(L10n.text("Listening…"))
         refreshUI()
         updateStatusBar()
     }
@@ -710,7 +710,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recognizer.onError = { [weak self] message in
             guard let self = self, self.currentSession == session else { return }
             if self.cloudFailure == nil { self.showCloudFailure(.service, provider: .bailian, recognition: true) }
-            self.abortSession(notifyPhone: true, message: message)
+            self.abortSession(notifyPhone: true, code: recognizer.failureCode, message: message)
         }
         recognizer.start(
             key: key.stringValue,
@@ -763,7 +763,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             gate.reset()
             link.send(.result(session: session, text: "", latency: 0, pasted: false, target: targetAppName))
             sendGestureState()
-            setStatus("录音太短，已忽略", transient: true)
+            setStatus(L10n.text("Recording too short. Ignored."), transient: true)
             refreshUI()
             updateStatusBar()
             return
@@ -775,7 +775,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stopAt = Date()
         IMicLog.write("mac.session", "transcribing session=\(session) frames=\(frames) samples=\(samples)")
         link.send(.state(session: session, phase: "transcribing"))
-        setStatus("正在整理文字…")
+        setStatus(L10n.text("Preparing text…"))
         if asr == nil { startRecognition(session) }
         asr?.end()
         refreshUI()
@@ -841,13 +841,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard PolishCredentials.valid(polishKey, for: provider) else { throw PolishConfigurationError.key }
         } catch {
             IMicLog.write("mac.polish", "skipped provider=\(provider.rawValue) reason=invalid_configuration")
-            settingsCoordinator?.showServiceError("\(provider.title)：\(error.localizedDescription)，已保留原文。")
+            settingsCoordinator?.showServiceError(L10n.text("%@: %@. Original text kept.", L10n.argument(provider.title), L10n.argument(error.localizedDescription)))
             showCloudFailure(polishKey.isEmpty ? .key : .address, provider: provider)
             choosePolishResult(session, raw: fallback, polished: nil, latency: latency)
             return
         }
         asr = nil
-        setStatus("正在润色…")
+        setStatus(L10n.text("Polishing…"))
         IMicLog.write("mac.session", "polish session=\(session) provider=\(provider.rawValue) chars=\(raw.count) mode=\(options.mode.rawValue) tone=\(options.tone.rawValue) output=\(options.output.rawValue)")
         // URLSession's request timeout is not a hard wall-clock deadline when
         // a server keeps sending bytes. The utterance has its own terminal gate.
@@ -881,7 +881,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         polishFallback = polished == nil
         polishDeadlineWork?.cancel(); polishDeadlineWork = nil
         polishTask?.cancel(); polishTask = nil
-        if !headless { setStatus("正在完成输入…") }
+        if !headless { setStatus(L10n.text("Finishing typing…")) }
         polishEffect.deliverAfterSweep { [weak self] in
             guard let self, self.currentSession == session else { return }
             self.completeSession(session, text: final, latency: latency)
@@ -960,9 +960,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             pasted = result
         } else if !clean.isEmpty {
-            setStatus("识别完成")
+            setStatus(L10n.text("Recognition complete"))
         } else {
-            setStatus("没有识别到语音")
+            setStatus(L10n.text("No speech recognized"))
         }
         IMicLog.write("mac.session", "finish session=\(session) chars=\(clean.count) latency_ms=\(Int(latency)) pasted=\(pasted) frames=\(frames) samples=\(samples)")
         inserting = false
@@ -999,7 +999,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStatusBar()
     }
 
-    private func abortSession(notifyPhone: Bool, message: String) {
+    private func abortSession(notifyPhone: Bool, code: String = "asr", message: String) {
         polishEffect.cancel()
         polishDeadlineWork?.cancel(); polishDeadlineWork = nil
         polishTask?.cancel(); polishTask = nil
@@ -1038,7 +1038,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         audioNeedCount = 0
         meter.doubleValue = 0
         if notifyPhone {
-            link.send(.failure(session: session, code: "asr", message: message))
+            link.send(.failure(session: session, code: code, message: message))
         }
         sendGestureState()
         if headless { emit("FAILURE \(message)") }
@@ -1056,19 +1056,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 requestAudioNeed(from: waiting)
             }
             if Date().timeIntervalSince(lastPacketAt) > 12 {
-                abortSession(notifyPhone: true, message: "音频补发超时，本次输入已取消")
+                abortSession(notifyPhone: true, code: "audio_resend_timeout", message: L10n.text("Audio resend timed out. This input was canceled."))
             }
-            elapsedLabel.stringValue = String(format: "%.1f s", Double(samples) / 16000)
+            elapsedLabel.stringValue = String(format: "%.1f s", locale: L10n.locale, Double(samples) / 16000)
             return
         }
         if stopAt == nil {
             if Date().timeIntervalSince(lastPacketAt) > 6 {
-                abortSession(notifyPhone: true, message: "音频传输超时，本次输入已取消")
+                abortSession(notifyPhone: true, code: "audio_transfer_timeout", message: L10n.text("Audio transfer timed out. This input was canceled."))
             } else {
-                elapsedLabel.stringValue = String(format: "%.1f s", Double(samples) / 16000)
+                elapsedLabel.stringValue = String(format: "%.1f s", locale: L10n.locale, Double(samples) / 16000)
             }
         } else if let deadline = asr?.completionDeadline, Date() > deadline {
-            abortSession(notifyPhone: true, message: "等待识别结果超时")
+            abortSession(notifyPhone: true, code: "recognition_timeout", message: L10n.text("Timed out waiting for recognition"))
         }
         _ = session
     }
@@ -1095,19 +1095,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // passes here; the copyable transcript keeps its original line breaks.
         let text = TypedTextSafety.sanitize(text, terminal: targetIsTerminal)
         guard !liveInputBlocked else {
-            setStatus("输入位置已变化 · 文字已保留")
+            setStatus(L10n.text("Input position changed · Text kept"))
             return false
         }
         guard inputAllowed() else {
             refreshInputPermission()
-            setStatus("文字已保留 · 请允许自动输入")
+            setStatus(L10n.text("Text kept · Allow automatic typing"))
             return false
         }
         guard let pid = targetPID,
               NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
         else {
             liveInputBlocked = true
-            setStatus("前台应用已变化 · 文字已保留")
+            setStatus(L10n.text("Active app changed · Text kept"))
             return false
         }
         switch inputTarget?.settlePendingReplacement() ?? .none {
@@ -1118,7 +1118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             inputMismatchSince = nil
         case .blocked:
             liveInputBlocked = true
-            setStatus("输入结果暂无法核验 · 完整文字已保留")
+            setStatus(L10n.text("Could not verify typing · Full text kept"))
             IMicLog.write("mac.input", "AX write unresolved; no automatic replay")
             return false
         }
@@ -1128,7 +1128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 inputMismatchSince = nil
             case .interrupted(let reason):
                 liveInputBlocked = true
-                setStatus("输入位置已变化 · 文字已保留")
+                setStatus(L10n.text("Input position changed · Text kept"))
                 IMicLog.write("mac.input", "revision interrupted reason=\(reason)")
                 return false
             case .waiting(let reason):
@@ -1142,7 +1142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         IMicLog.write("mac.input", "mode=keyboard_compatibility reason=range_timeout details=\(reason)")
                         return insert(text)
                     }
-                    setStatus("输入范围暂未同步 · 文字已保留")
+                    setStatus(L10n.text("Input range not synchronized yet · Text kept"))
                     IMicLog.write("mac.input", "target confirmation timed out recoverable=true reason=\(reason)")
                     return false
                 }
@@ -1152,7 +1152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if text != committedInputText {
             guard let inputTarget else {
                 liveInputBlocked = true
-                setStatus("输入位置无法确认 · 文字已保留")
+                setStatus(L10n.text("Could not confirm input position · Text kept"))
                 return false
             }
             let revision = TextRevision(from: committedInputText, to: text)
@@ -1177,7 +1177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             guard succeeded else {
                 liveInputBlocked = true
-                setStatus("输入范围已变化 · 未覆盖原内容，结果已保留")
+                setStatus(L10n.text("Input range changed · Existing content untouched, result kept"))
                 IMicLog.write("mac.input", "revision blocked: field, caret or owned range could not be verified")
                 return false
             }
@@ -1189,8 +1189,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         if currentSession == nil || recognitionFinalReceived {
-            let verb = inputTarget?.requiresConfirmation == true ? "已输入" : "已投递"
-            setStatus("\(verb) · \(targetAppName ?? "当前应用")")
+            let verb = inputTarget?.requiresConfirmation == true ? L10n.text("Typed") : L10n.text("Delivered")
+            setStatus(L10n.text("%@ · %@", L10n.argument(verb), L10n.argument(targetAppName ?? L10n.text("the active app"))))
         }
         return true
     }
@@ -1277,13 +1277,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let code = PairingCode.formatted(store.currentCode())
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(code, forType: .string)
-        setStatus("配对码已复制")
-        pairHint.stringValue = "已复制 · 在 iPhone 输入 \(code)"
+        setStatus(L10n.text("Pairing code copied"))
+        pairHint.stringValue = L10n.text("Copied · Enter %@ on your iPhone", L10n.argument(code))
     }
 
     @objc func rotatePairCode() {
         store.rotateCode()
-        setStatus("已生成新的配对码")
+        setStatus(L10n.text("New pairing code generated"))
         refreshUI()
     }
 
@@ -1291,9 +1291,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !transcriptText.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(transcriptText, forType: .string)
-        copyButton.title = "已复制"
+        copyButton.title = L10n.text("Copied")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.copyButton.title = "复制文字"
+            self?.copyButton.title = L10n.text("Copy text")
         }
     }
 
@@ -1361,11 +1361,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         polishOutputPicker?.isEnabled = !options.isCommand
         polishModeHint?.stringValue = options.mode.detail
         polishToneHint?.stringValue = options.isCommand
-            ? "终端命令不叠加语气；切回文字模式后恢复选择。"
-            : "\(options.tone.detail)\n例如：\(options.tone.example)"
+            ? L10n.text("Terminal commands ignore tone. Your choice is kept for text modes.")
+            : L10n.text("%@\nExample: %@", L10n.argument(options.tone.detail), L10n.argument(options.tone.example))
         polishOptionsHint?.stringValue = options.isCommand
-            ? "命令语法固定为 zsh，不受输出语言影响；语言选择会保留。"
-            : "转换结果使用所选语言。"
+            ? L10n.text("Commands always use zsh syntax, regardless of output language. Your language choice is kept.")
+            : L10n.text("Conversion uses the selected language.")
     }
 
     @objc func toggleLivePreview() {
@@ -1379,7 +1379,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if polishSweepCheck.state == .on { TextPolishEffect.prewarm() }
         // Changing visual preferences must not discard an in-flight final result.
         if polishSweepCheck.state == .off {
-            polishSweepHint.stringValue = "已关闭扫光；仍等待润色结束后一次回写，失败保留百炼原文。"
+            polishSweepHint.stringValue = L10n.text("Highlight disabled. Text is still written once polish finishes. Original Model Studio text is kept if polish fails.")
         }
     }
 
@@ -1387,8 +1387,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard preview == nil else { return }
         let allowed = CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess()
         polishSweepHint.stringValue = allowed
-            ? "屏幕录制已允许。截图与 OCR 只在本机处理，定位失败不阻塞输入。"
-            : "请在系统设置 → 隐私与安全性 → 屏幕录制中允许 iMic；未授权时仍正常输入。"
+            ? L10n.text("Screen Recording allowed. Screenshots and OCR are processed only on this Mac. Failure to locate text does not block typing.")
+            : L10n.text("Allow iMic in System Settings → Privacy & Security → Screen Recording. Typing still works without permission.")
     }
 
     @objc func openBluetoothSettings() {
@@ -1458,11 +1458,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func testInput() {
-        guard preview == nil else { saveFeedback.stringValue = "预览模式不发送文字"; return }
-        guard currentSession == nil else { setStatus("请先结束当前录音"); return }
+        guard preview == nil else { saveFeedback.stringValue = L10n.text("Preview mode does not send text"); return }
+        guard currentSession == nil else { setStatus(L10n.text("Finish the current recording first")); return }
         guard inputAllowed() else { permissions(); return }
-        setStatus("3 秒后输入，请点击目标文本框")
-        saveFeedback.stringValue = "请在 3 秒内点击目标文本框"
+        setStatus(L10n.text("Typing in 3 seconds. Click the target text field."))
+        saveFeedback.stringValue = L10n.text("Click the target text field within 3 seconds")
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
             guard let self = self, self.currentSession == nil else { return }
             let app = NSWorkspace.shared.frontmostApplication
@@ -1478,12 +1478,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func completeInputTest() {
         guard currentSession == nil else { return }
-        guard let succeeded = insert("iMic 输入测试") else {
+        guard let succeeded = insert(L10n.text("iMic typing test")) else {
             scheduleInput { [weak self] in self?.completeInputTest() }
             return
         }
         inputTarget = nil
-        saveFeedback.stringValue = succeeded ? "测试已投递" : "未自动输入，请检查目标位置与权限"
+        saveFeedback.stringValue = succeeded ? L10n.text("Test text delivered") : L10n.text("No automatic typing. Check the target and permissions.")
     }
 
     @objc func forgetDevice(_ sender: NSButton) {
@@ -1519,9 +1519,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let work = DispatchWorkItem { [weak self] in
                 guard let self = self else { return }
                 if let name = self.connectedName {
-                    self.setStatus("已连接 \(name)")
+                    self.setStatus(L10n.text("Connected to %@", L10n.argument(name)))
                 } else {
-                    self.setStatus("等待 iPhone 连接")
+                    self.setStatus(L10n.text("Waiting for your iPhone"))
                 }
             }
             statusResetWork = work
@@ -1553,15 +1553,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch preview {
         case "pairing":
             pairingRequested = true
-            setStatus("在 iPhone 输入配对码")
-            pairHint.stringValue = "在 iPhone 输入这个配对码"
+            setStatus(L10n.text("Enter the pairing code on your iPhone"))
+            pairHint.stringValue = L10n.text("Enter this pairing code on your iPhone##preview")
         case "paired-waiting":
             try? store.trust(deviceID: UUID().uuidString, name: "iPhone 17 Pro", token: Data(repeating: 0x42, count: 32))
-            setStatus("等待 iPhone 连接")
+            setStatus(L10n.text("Waiting for your iPhone"))
         case "ready":
-            setStatus("已连接 iPhone 17 Pro")
+            setStatus(L10n.text("Connected to iPhone 17 Pro"))
         case "listening":
-            setStatus("正在听…")
+            setStatus(L10n.text("Listening…"))
             currentSession = 1
             samples = 12_800
             frames = 40
@@ -1569,24 +1569,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             meter.doubleValue = 0.62
             elapsedLabel.stringValue = "0.8 s"
         case "processing":
-            setStatus("正在整理文字…")
+            setStatus(L10n.text("Preparing text…"))
             currentSession = 1
             stopAt = Date()
             samples = 22_400
         case "result":
-            setStatus("已输入 · Craft")
-            transcriptText = "把今天讨论的交互细节整理成一页说明，重点保留按住说话、松开即输入的节奏。"
+            setStatus(L10n.text("Typed · Craft"))
+            transcriptText = L10n.text("Turn today's discussion about interaction details into a one-page brief. Keep the rhythm of hold to speak, release to type.##b37bdbc1")
             lastInsertSucceeded = true
             samples = 51_200
         case let name where name.hasPrefix("setup"):
             previewSetup = previewSetupSnapshot(name)
-            setStatus("等待 iPhone 连接")
+            setStatus(L10n.text("Waiting for your iPhone"))
         case "permission":
-            setStatus("文字已保留 · 请允许自动输入")
-            transcriptText = "文字已经识别完成，可以先复制使用。"
+            setStatus(L10n.text("Text kept · Allow automatic typing"))
+            transcriptText = L10n.text("Recognition is complete. Copy the text to use it now.")
             automatic.state = .on
         default:
-            setStatus("等待 iPhone 连接")
+            setStatus(L10n.text("Waiting for your iPhone"))
         }
         store.overrideCode("482916")
         refreshUI()
@@ -1680,7 +1680,7 @@ extension AppDelegate: SetupWizardHost {
 
     private func keyChanged() {
         updateKeySource()
-        if connectedName == nil { setStatus("等待 iPhone 连接") }
+        if connectedName == nil { setStatus(L10n.text("Waiting for your iPhone")) }
         refreshUI()
     }
 
@@ -1700,7 +1700,7 @@ extension AppDelegate: SetupWizardHost {
     }
 
     func credentialNote(for provider: PolishProvider) -> String {
-        PolishCredentials.resolve(for: provider)?.source.isExternal == true ? "已自动读取本机配置的 Key。" : ""
+        PolishCredentials.resolve(for: provider)?.source.isExternal == true ? L10n.text("Automatically loaded the Key configured on this Mac.") : ""
     }
 
     func updateKeySource() { settingsCoordinator?.refreshCredentials() }

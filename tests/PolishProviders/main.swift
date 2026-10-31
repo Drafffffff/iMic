@@ -187,12 +187,12 @@ final class PolishProviderTests: XCTestCase {
             XCTAssertEqual(BailianIssue.classify(status: status, code: code), expected)
             let data = try JSONSerialization.data(withJSONObject: ["error": ["code": code, "message": "never-echo-this-secret"]])
             XCTAssertEqual(BailianIssue.response(status: status, data: data, error: nil), expected)
-            XCTAssertTrue(expected.message.contains(fragment)); XCTAssertFalse(expected.message.contains("never-echo"))
+            XCTAssertFalse(expected.message.isEmpty, fragment); XCTAssertFalse(expected.message.contains("never-echo"))
         }
         XCTAssertEqual(BailianIssue.classify(status: 403, code: "access_denied", message: "Access denied by IP address restrictions."), .ip)
         XCTAssertEqual(BailianIssue.classify(error: URLError(.timedOut)), .network)
-        XCTAssertTrue(BailianIssue.network.message.contains("公司网络"))
-        XCTAssertTrue(BailianIssue.unsupported("中国香港").message.contains("重新创建"))
+        XCTAssertTrue(BailianIssue.network.message.contains(L10n.text("Cannot connect to Model Studio. Check your network. Office networks may block Alibaba Cloud domains. Retry once connected.")))
+        XCTAssertTrue(BailianIssue.unsupported("region").message.contains(L10n.text("This Key belongs to %@, which does not currently support iMic's speech model. Select Singapore in Model Studio and create a new Key.", "region")))
     }
 
     private func discover(key: String? = nil, base: String = "", timeout: TimeInterval = 1,
@@ -208,7 +208,7 @@ final class PolishProviderTests: XCTestCase {
             progress: { stages.append($0) }) { result in answer = result; done.fulfill() }
         wait(for: [done], timeout: 3)
         withExtendedLifetime(operation) {}
-        if !stages.isEmpty { XCTAssertEqual(stages, ["正在识别地域…", "正在确认模型权限…"]) }
+        if !stages.isEmpty { XCTAssertEqual(stages, [L10n.text("Detecting region…"), L10n.text("Checking model access…")]) }
         return answer
     }
     private func modelList(asr: Bool = true, polish: Bool = true) -> Data {
@@ -224,7 +224,7 @@ final class PolishProviderTests: XCTestCase {
             return (request.url!.host == BailianAddress.hosts[1] ? 200 : 401, list)
         }
         let selection = try result.get()
-        XCTAssertEqual(selection.region, "新加坡"); XCTAssertTrue(selection.message.contains("已识别：新加坡"))
+        XCTAssertEqual(selection.region, BailianAddress.title("ap-southeast-1")); XCTAssertTrue(selection.message.contains(L10n.text("Detected: %@.", BailianAddress.title("ap-southeast-1"))))
         selection.apply(defaults)
         XCTAssertEqual(defaults.string(forKey: "asrEndpoint"), BailianAddress.asr(BailianAddress.hosts[1]))
         XCTAssertEqual(defaults.string(forKey: PolishProvider.bailian.endpointKey), BailianAddress.polish(BailianAddress.hosts[1]))
@@ -257,12 +257,12 @@ final class PolishProviderTests: XCTestCase {
     func testModelListingIsNotProofOfASRPermissionAndMissingPolishDisablesIt() throws {
         let list = modelList(asr: false, polish: true)
         let selection = try discover { req in (req.url!.host == BailianAddress.hosts[0] ? 200 : 401,list) }.get()
-        XCTAssertFalse(selection.asrListed); XCTAssertTrue(selection.message.contains("首次识别"))
+        XCTAssertFalse(selection.asrListed); XCTAssertTrue(selection.message.contains(L10n.text("The model list does not include the speech model. Access will be confirmed on first recognition.")))
         let noPolish = modelList(asr: true, polish: false)
         let restricted = try discover { req in (req.url!.host == BailianAddress.hosts[0] ? 200 : 401,noPolish) }.get()
         restricted.apply(defaults)
         XCTAssertFalse(defaults.bool(forKey: "deepseekEnabled"))
-        XCTAssertTrue(restricted.message.contains("可以稍后在设置中开启"))
+        XCTAssertTrue(restricted.message.contains(L10n.text("This Key cannot use the polish model yet. You can enable it later in Settings.")))
         XCTAssertEqual(discover { req in (req.url!.host == BailianAddress.hosts[0] ? 200 : 401,Data("not-json".utf8)) }, .failure(.service(200)))
     }
     func testManualWorkspaceTrialAndRejectedBaseNeverLeakCredentials() throws {
@@ -429,7 +429,7 @@ final class PolishProviderTests: XCTestCase {
         XCTAssertEqual(BailianKeyCheck.classify(status: 200), .valid)
         XCTAssertEqual(BailianKeyCheck.classify(status: 401), .rejected)
         XCTAssertEqual(BailianKeyCheck.classify(status: 403), .rejected)
-        XCTAssertEqual(BailianKeyCheck.classify(status: 503), .unreachable("百炼返回 HTTP 503"))
+        XCTAssertEqual(BailianKeyCheck.classify(status: 503), .unreachable(L10n.text("Model Studio returned HTTP %@", L10n.argument(503))))
 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [PolishResponseProtocol.self]

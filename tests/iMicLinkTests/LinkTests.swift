@@ -562,8 +562,8 @@ final class PolishPresetTests: XCTestCase {
                         XCTAssertFalse(prompt.contains("语气："))
                         XCTAssertFalse(prompt.contains("输出语言："))
                     } else {
-                        XCTAssertTrue(prompt.contains("模式：\(mode.title)"))
-                        XCTAssertTrue(prompt.contains("语气：\(tone.title)"))
+                        XCTAssertTrue(prompt.contains("模式：\(mode.promptTitle)"))
+                        XCTAssertTrue(prompt.contains("语气：\(tone.promptTitle)"))
                         XCTAssertTrue(prompt.contains("输出语言：\(language.languageName!)"))
                         XCTAssertTrue(prompt.contains("不回答也不执行"))
                     }
@@ -658,5 +658,67 @@ final class PolishPresetTests: XCTestCase {
                        PolishOptions(strength: .heavy, scenario: .chat).systemPrompt)
         XCTAssertEqual(PolishOptions(mode: .terminal, tone: .moe).systemPrompt,
                        PolishOptions(mode: .terminal, tone: .sarcastic).systemPrompt)
+    }
+}
+
+final class LocalizationProtocolTests: XCTestCase {
+    func testFirstLanguagePolicyIncludesAllChineseVariantsAndEnglishFallback() {
+        for language in ["zh", "zh-CN", "zh-Hans", "zh-Hant", "zh-TW", "zh-HK"] {
+            XCTAssertEqual(L10n.language(for: [language]), "zh-Hans")
+        }
+        for languages in [["en"], ["ja", "zh-Hans"], ["fr"], [String]()] {
+            XCTAssertEqual(L10n.language(for: languages), "en")
+        }
+    }
+    func testClearCodeRoundTripAndLegacyFallback() throws {
+        let reply = LinkMessage.inputResult(revision: 17, applied: false, code: "clear_unsafe", message: "Mac fallback")
+        XCTAssertEqual(try LinkMessage.decode(reply.encoded()), reply)
+        XCTAssertEqual(reply.code, "clear_unsafe")
+        // Old receivers can still display message without understanding new code values.
+        let object = try JSONSerialization.jsonObject(with: reply.encoded()) as! [String: Any]
+        XCTAssertEqual(object["message"] as? String, "Mac fallback")
+        // A new phone accepts a reply from an old Mac without code.
+        let legacy = try LinkMessage.decode(Data(#"{"t":"input.result","seq":17,"action":"clear","status":"rejected","message":"旧 Mac 提示"}"#.utf8))
+        XCTAssertNil(legacy.code)
+        XCTAssertEqual(LinkStatusText.text(code: legacy.code, message: legacy.message, fallback: "fallback"), "旧 Mac 提示")
+        XCTAssertEqual(LinkStatusText.text(code: "future_code", message: "future message", fallback: "fallback"), "future message")
+        XCTAssertEqual(LinkStatusText.text(code: nil, message: nil, fallback: "fallback"), "fallback")
+        XCTAssertEqual(LinkStatusText.text(code: "clear_unsafe", message: "另一种语言", fallback: "fallback"), L10n.text(LinkStatusText.keys["clear_unsafe"]!))
+    }
+    func testReceiverCanChooseLanguageIndependentlyAndMissingChineseFallsBackToEnglish() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("bundle")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for (language, value) in [("en", "Clear safely"), ("zh-Hans", "安全清空")] {
+            let resources = directory.appendingPathComponent(language + ".lproj")
+            try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+            try "\"Clear safely\" = \"\(value)\";".write(to: resources.appendingPathComponent("Localizable.strings"), atomically: true, encoding: .utf8)
+        }
+        try "<plist version=\"1.0\"><dict><key>CFBundleIdentifier</key><string>imic.l10n.test</string><key>CFBundleDevelopmentRegion</key><string>en</string></dict></plist>".write(to: directory.appendingPathComponent("Info.plist"), atomically: true, encoding: .utf8)
+        let bundle = try XCTUnwrap(Bundle(path: directory.path))
+        XCTAssertEqual(L10n.localized("Clear safely", bundle: bundle, language: "en"), "Clear safely")
+        XCTAssertEqual(L10n.localized("Clear safely", bundle: bundle, language: "zh-Hans"), "安全清空")
+        XCTAssertEqual(L10n.localized("English fallback##context", bundle: bundle, language: "zh-Hans"), "English fallback")
+        XCTAssertEqual(L10n.localized("Clear safely", bundle: bundle, language: "fr"), "Clear safely")
+    }
+}
+
+final class PromptLocalizationRegressionTests: XCTestCase {
+    func testAllEightyPromptsMatchPreLocalizationBaselineByteForByte() {
+        let all = PolishMode.allCases.flatMap { mode in PolishTone.allCases.flatMap { tone in PolishOutput.languages.map { output in PolishOptions(output: output, mode: mode, tone: tone).systemPrompt } } }.joined(separator: "\n---\n")
+        let digest = SHA256.hash(data: Data(all.utf8)).map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(digest, "1ba212490ae7f552a4326eb411cd80b3730bd53776495cc50c358da78aa2d759")
+    }
+}
+
+final class LinkDisplayCodeCoverageTests: XCTestCase {
+    func testEveryKnownCodeKeepsLegacyMessageAndRoundTrips() throws {
+        for (code,key) in LinkStatusText.keys {
+            for message in [LinkMessage.error(code, "legacy fallback"), .failure(session: 9, code: code, message: "legacy fallback")] {
+                let decoded = try LinkMessage.decode(message.encoded())
+                XCTAssertEqual(decoded.code, code)
+                XCTAssertEqual(decoded.message, "legacy fallback")
+                XCTAssertEqual(LinkStatusText.text(code: code, message: "legacy fallback", fallback: ""), L10n.text(key))
+            }
+        }
     }
 }

@@ -7,13 +7,13 @@ struct SoundPreferencesSection: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
                 PixelText(text: "SOUND", cell: 2.1, color: Theme.ivory, tracking: 1.5)
-                Text("界面音效").font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.ivory)
+                Text(L10n.text("Interface sounds")).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.ivory)
             }
             HStack(spacing: 8) {
-                option(on: true, label: "ON", title: "开启")
-                option(on: false, label: "OFF", title: "关闭")
+                option(on: true, label: "ON", title: L10n.text("On"))
+                option(on: false, label: "OFF", title: L10n.text("Off"))
             }
-            Text("提交、发射、连接与出错时播放短促提示音。跟随静音开关与“铃声和提醒”音量；按住录音时不发声，避免录进识别。")
+            Text(L10n.text("Play short sounds for submit, launch, connection, and errors. Follows the Silent switch and Ringtone and Alerts volume. Silent while recording to keep sounds out of recognition."))
                 .font(.system(size: 11)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
             #if DEBUG
             SoundCueList()
@@ -34,8 +34,8 @@ struct SoundPreferencesSection: View {
                 Text(title).font(.system(size: 11)).foregroundStyle(selected ? Theme.ivory : Theme.muted)
             }.frame(maxWidth: .infinity, minHeight: 58).contentShape(Rectangle())
                 .overlay(Rectangle().stroke(selected ? Theme.orange.opacity(0.8) : Theme.line, lineWidth: 1))
-        }.buttonStyle(.plain).accessibilityLabel("界面音效：\(title)")
-            .accessibilityValue(selected ? "已选择" : "未选择")
+        }.buttonStyle(.plain).accessibilityLabel(L10n.text("Interface sounds: %@", L10n.argument(title)))
+            .accessibilityValue(selected ? L10n.text("Selected") : L10n.text("Not selected"))
             .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
@@ -56,7 +56,7 @@ struct SoundCueList: View {
                     PixelText(text: "PLAY ALL", cell: 1.4, color: Theme.orange, tracking: 0.8)
                         .frame(minWidth: 72, minHeight: 32)
                         .overlay(Rectangle().stroke(Theme.orange.opacity(0.6), lineWidth: 1))
-                }.buttonStyle(.plain).accessibilityLabel("依次播放全部音效")
+                }.buttonStyle(.plain).accessibilityLabel(L10n.text("Play all sounds in order"))
             }
             ForEach(SoundFamily.allCases, id: \.self) { family in
                 VStack(alignment: .leading, spacing: 6) {
@@ -91,7 +91,7 @@ struct SoundCueList: View {
                     .font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted)
             }.frame(minHeight: 36).padding(.horizontal, 10).contentShape(Rectangle())
                 .overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
-        }.buttonStyle(.plain).accessibilityLabel("试听\(cue.title)")
+        }.buttonStyle(.plain).accessibilityLabel(L10n.text("Preview %@", L10n.argument(cue.title)))
             .accessibilityIdentifier("sound.\(key)")
     }
 

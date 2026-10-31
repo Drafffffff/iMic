@@ -1,11 +1,12 @@
 // Real headless Chrome checks; starts and closes an owned agent-browser session.
-// python3 -m http.server -d site 8000
+// Start your own HTTP server and set IMIC_SITE_URL.
 // node tools/test-site-browser.mjs [optional-owned-browser-cdp-url]
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-const base = process.env.IMIC_SITE_URL || 'http://127.0.0.1:8000/';
+const base = process.env.IMIC_SITE_URL;
+assert(base, 'Set IMIC_SITE_URL to an HTTP server owned by this worktree');
 const output = path.resolve('build/ux-shots/site');
 await fs.mkdir(output, {recursive:true});
 const report=[];
@@ -70,7 +71,7 @@ const href=()=>evaluate('document.querySelector("#mac-download-link").href');
 const valid={tag_name:'v9.8.7',assets:[{name:'iMic-9.8.7-macOS-universal.dmg',size:1581866,browser_download_url:'https://github.com/Drafffffff/iMic/releases/download/v9.8.7/iMic-9.8.7-macOS-universal.dmg'},{name:'SHA256SUMS.txt',browser_download_url:'https://github.com/Drafffffff/iMic/releases/download/v9.8.7/SHA256SUMS.txt'}]};
 try{
 await check('Real latest API → matching DMG, version and checksum',async()=>{await navigate();const url=await href();const match=url.match(/releases\/download\/v([^/]+)\/iMic-(.+)-macOS-universal\.dmg$/);assert(match,'Expected a versioned official DMG');assert.equal(match[1],match[2]);assert((await evaluate('document.querySelector("#release-meta").textContent')).includes(match[1]));assert((await evaluate('document.querySelector("#checksum-link").href')).endsWith(`/v${match[1]}/SHA256SUMS.txt`));await shot('desktop-hero');await scroll('#feel');await shot('desktop-feel');await scroll('#download');await shot('desktop-download');});
-await check('Seven sections, three FEEL features, MODES and legacy START',async()=>{await navigate({reduced:true,response:{body:valid}});assert.deepEqual(await evaluate('[...document.querySelectorAll("main>section")].map(s=>s.id)'),['','anywhere','feel','modes','private','download','faq']);assert.deepEqual(await evaluate('[...document.querySelectorAll(".feature .index")].map(n=>n.textContent)'),['01 / 03','02 / 03','03 / 03']);assert.equal(await evaluate('document.querySelectorAll("#modes .example").length'),5);assert.equal(await evaluate('document.querySelector("#download").contains(document.querySelector("#start"))'),true);assert.equal(await evaluate('document.querySelector("#download").contains(document.querySelector(".steps"))'),true);assert.deepEqual(await evaluate('[...document.querySelectorAll(".masthead nav a")].map(a=>a.getAttribute("href"))'),['#anywhere','#feel','#modes','#private','#download']);assert.equal(await evaluate('[...document.querySelectorAll("#faq details")].some(d=>d.textContent.includes("新安装默认开启实时预览")&&d.textContent.includes("可能重复或误删"))'),true);});
+await check('Seven sections, three FEEL features, MODES and legacy START',async()=>{await navigate({reduced:true,response:{body:valid}});assert.deepEqual(await evaluate('[...document.querySelectorAll("main>section")].map(s=>s.id)'),['','anywhere','feel','modes','private','download','faq']);assert.deepEqual(await evaluate('[...document.querySelectorAll(".feature .index")].map(n=>n.textContent)'),['01 / 03','02 / 03','03 / 03']);assert.equal(await evaluate('document.querySelectorAll("#modes .example").length'),5);assert.equal(await evaluate('document.querySelector("#download").contains(document.querySelector("#start"))'),true);assert.equal(await evaluate('document.querySelector("#download").contains(document.querySelector(".steps"))'),true);assert.deepEqual(await evaluate('[...document.querySelectorAll(".masthead nav > a")].map(a=>a.getAttribute("href"))'),['#anywhere','#feel','#modes','#private','#download']);assert.equal(await evaluate('[...document.querySelectorAll("#faq details")].some(d=>d.textContent.includes("新安装默认开启实时预览")&&d.textContent.includes("可能重复或误删"))'),true);});
 await check('1440px hero fits one screen; wider layout and legible Mac text',async()=>{await navigate({reduced:true,response:{body:valid}});const sizes=await evaluate('(()=>{const v=document.querySelector(".hero-media").getBoundingClientRect(),c=document.querySelector(".hero-copy").getBoundingClientRect();return {bottom:v.bottom,left:v.left,copyRight:c.right,width:v.width,shell:document.querySelector(".shell").getBoundingClientRect().width,title:parseFloat(getComputedStyle(document.querySelector("h1")).fontSize),height:document.body.scrollHeight}})()');assert(sizes.bottom<=900);assert((await evaluate('document.querySelector(".hero-actions").getBoundingClientRect().bottom'))<=900);assert((await evaluate('document.querySelector(".hero-copy").getBoundingClientRect().bottom'))<=900);assert(sizes.left>=sizes.copyRight);assert(sizes.shell>1120);assert(sizes.title>=64&&sizes.title<=72);assert(sizes.height<=6093);assert(48*(1880/1656)/2*(sizes.width/1400)>=13);});
 await check('Tablet uses two columns; 390px hero uses the portrait recording',async()=>{await navigate({width:820,height:1180,reduced:true,response:{body:valid}});assert.equal(await evaluate('getComputedStyle(document.querySelector(".hero")).gridTemplateColumns.split(" ").length'),2);await navigate({width:390,height:844,reduced:true,response:{body:valid}});assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);assert.match(await evaluate('document.querySelector(".hero video").poster'),/hero-mobile\.webp$/);await evaluate('document.querySelector(".hero .video-toggle").click()');await until('!document.querySelector(".hero video").paused');assert.match(await evaluate('document.querySelector(".hero video").currentSrc'),/hero-mobile\.mp4$/);await until('document.querySelector(".hero video").videoWidth===720');await call('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});await delay(100);assert.match(await evaluate('document.querySelector(".hero video").poster'),/\/hero\.webp$/);});
 // Animation assertions exercise actual text, CSS, media queries and viewport observation.
@@ -139,6 +140,47 @@ await check('Reduced motion: posters only until explicit play',async()=>{await n
 await check('Lazy videos start in viewport and pause after leaving',async()=>{await navigate();await until('!document.querySelector("video").paused');assert.equal(await evaluate('document.querySelector("#sound-feature video").getAttribute("src")'),null);await scroll('#download');await until('document.querySelector("video").paused');});
 await check('Bailian FAQ gives Beijing, full permissions and rejects plan keys',async()=>{await navigate({reduced:true,response:{body:valid}});const text=await evaluate('document.querySelector("#faq details").textContent');for(const phrase of ['1.','2.','3.','实名认证','华北2（北京）','权限选「全部」','套餐 Key（Token Plan、Coding Plan）不能用于 iMic','免费额度'])assert(text.includes(phrase),phrase);});
 await check('FAQ keyboard interaction and storage-free page',async()=>{await navigate({reduced:true});await scroll('#faq');await evaluate('document.querySelector("summary").focus()');assert.equal(await evaluate('document.activeElement.tagName'),'SUMMARY');await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});await call('Input.dispatchKeyEvent',{type:'char',text:'\r',unmodifiedText:'\r',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});assert.equal(await evaluate('document.querySelector("details").open'),true);assert.equal(await evaluate('localStorage.length'),0);assert.equal(await evaluate('document.cookie'),'');});
+// English coverage uses the same shared media, download code and animation.
+for (const width of [1440,390]) {
+ await check(`English ${width}px: metadata, navigation, no clipping and downloads`,async()=>{
+  await navigate({url:'en/',width,height:width===390?844:900,reduced:true,response:{body:valid}});
+  assert.equal(await evaluate('document.documentElement.lang'),'en');
+  assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
+  assert.equal(await evaluate('document.querySelector("#language-banner")'),null);
+  assert.equal(await evaluate('document.querySelectorAll("link[rel=alternate][hreflang]").length'),3);
+  assert.match(await evaluate('document.querySelector(".language-switch").href'),/\/$/);
+  assert.match(await href(),/v9\.8\.7/);
+  assert.match(await evaluate('document.querySelector(".field-text").dataset.text'),/Meeting at three/);
+  assert.equal(await evaluate('document.querySelectorAll("video").length'),4);
+  const review='docs/reviews/english-ui';await fs.mkdir(review,{recursive:true});
+  const {data}=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+  await fs.writeFile(path.join(review,`site-en-${width}.png`),Buffer.from(data,'base64'));
+  if(width===1440){const metrics=await call('Page.getLayoutMetrics');const full=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip:{x:0,y:0,width:1440,height:metrics.cssContentSize.height,scale:1}});await fs.writeFile(path.join(review,'site-en-full.png'),Buffer.from(full.data,'base64'));}
+ });
+}
+await check('English animation pause labels and reduced-motion fallback',async()=>{
+ await navigate({url:'en/',response:{body:valid}});await scroll('#anywhere');
+ await until('document.querySelector(".field-demo").dataset.state === "running"');
+ await click('[data-demo-toggle]');assert.equal(await evaluate('document.querySelector("[data-demo-toggle]").textContent'),'Play illustration');
+ await click('[data-demo-toggle]');assert.equal(await evaluate('document.querySelector("[data-demo-toggle]").textContent'),'Pause illustration');
+});
+await check('English API fallback, no JavaScript and from=ios',async()=>{
+ await navigate({url:'en/',response:{status:403}});assert.equal(await href(),fallback);assert.match(await evaluate('document.querySelector("#release-meta").textContent'),/^Latest version/);
+ await navigate({url:'en/',noJS:true});assert.equal(await href(),fallback);
+ await navigate({url:'en/?from=ios#download',width:390,height:844,mobile:true,reduced:true,response:{body:valid},init:'navigator.share=async data=>{window.__share=data}'});
+ assert.equal(await evaluate('document.querySelector("#origin-banner").hidden'),false);
+ await evaluate('document.querySelector("#share-link").click()');assert.equal(await evaluate('window.__share.url'),'https://drafffffff.github.io/iMic/en/?from=ios#download');
+ assert((await evaluate('document.querySelector("#share-link").getBoundingClientRect().bottom'))<=844);
+});
+await check('Language suggestion is dismissible, storage-free and never redirects',async()=>{
+ const language=lang=>`Object.defineProperty(navigator,"language",{value:${JSON.stringify(lang)}})`;
+ await navigate({init:language('en-US'),response:{body:valid}});
+ assert.equal(await evaluate('document.querySelector("#language-banner").hidden'),false);assert.equal(await evaluate('location.pathname'),new URL(base).pathname);
+ const {data}=await call('Page.captureScreenshot',{format:'png'});await fs.writeFile('docs/reviews/english-ui/site-zh-suggestion.png',Buffer.from(data,'base64'));
+ await click('#language-banner button');assert.equal(await evaluate('document.querySelector("#language-banner").hidden'),true);
+ assert.equal(await evaluate('document.cookie'), '');assert.equal(await evaluate('sessionStorage.length + localStorage.length'),0);
+ await navigate({init:language('zh-TW'),response:{body:valid}});assert.equal(await evaluate('document.querySelector("#language-banner").hidden'),true);
+});
 }finally{
  await fs.mkdir('build/site-tests',{recursive:true});
  await fs.writeFile('build/site-tests/browser-results.json',JSON.stringify(report,null,2));

@@ -64,7 +64,7 @@ struct PhosphorClearArtwork:View{
             Image(systemName:"trash").font(.system(size:15,weight:.semibold))
             PixelText(text:"CLEAR",cell:1.5,color:Theme.orange,tracking:1)
             Spacer()
-            Text("拉入清空输入框").font(.system(size:11,weight:.medium))
+            Text(L10n.text("Drag here to clear the text field")).font(.system(size:11,weight:.medium))
         }.foregroundStyle(Theme.orange).padding(.horizontal,24)
             .padding(.top,46).padding(.bottom,12).frame(width:width,height:84)
     }
@@ -92,7 +92,7 @@ struct PhosphorArtwork: View {
                 HStack{
                     Spacer()
                     if state.hasResult{
-                        Text("查看结果  ›").modifier(InstrumentHint()).frame(width:98,height:14,alignment:.trailing)
+                        Text(L10n.text("View result  ›")).modifier(InstrumentHint()).frame(width:98,height:14,alignment:.trailing)
                     }else{HUDLabel(text:"PCM / 16K").frame(width:98,height:14,alignment:.trailing)}
                 }.frame(height:14).padding(.top,12)
             }.frame(width:width,height:116,alignment:.top)
@@ -141,7 +141,7 @@ struct PhosphorArtwork: View {
             HUDLabel(text:"VOICE / INPUT").padding(.bottom,13)
             PixelText(text:state.status,cell:state.statusCell,color:state.statusColor,tracking:2.8)
                 .frame(height:30,alignment:.center)
-            Text(state.statusLine).modifier(InstrumentHint()).lineLimit(2).multilineTextAlignment(.center)
+            Text(state.statusLine).modifier(InstrumentHint()).lineLimit(state.status == "ERROR" ? nil : 2).multilineTextAlignment(.center)
                 .lineSpacing(3).frame(minHeight:34,alignment:.top).fixedSize(horizontal:false,vertical:true).padding(.top,13)
         }
     }

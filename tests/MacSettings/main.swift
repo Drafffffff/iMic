@@ -89,24 +89,24 @@ key.value = "sk-valid-preview-new-key"
 check(key.dirty && app.key.stringValue == initialBackend, "A draft must not alter running credentials")
 var done = false
 key.save { check($0, "Valid preview key saves"); done = true }
-check(!key.saveButton.isEnabled && key.feedback.stringValue == "正在识别地域…", "Validation is visibly pending")
+check(!key.saveButton.isEnabled && key.feedback.stringValue == L10n.text("Detecting region…"), "Validation is visibly pending")
 wait(until: { done })
 check(!key.dirty && app.key.stringValue == "sk-valid-preview-new-key", "Only a verified save adopts the draft")
 key.value = "sk-bad-preview-key"
 done = false
 key.save { check(!$0, "Rejected key must not save"); done = true }
 wait(until: { done })
-check(key.feedback.stringValue.contains("Key 无效"), "Rejection is actionable inline")
+check(key.feedback.stringValue.contains(BailianIssue.invalidKey.message), "Rejection is actionable inline")
 check(app.key.stringValue == "sk-valid-preview-new-key", "Rejected draft leaves running credential intact")
 settings.window.performClose(nil)
 check(settings.window.attachedSheet != nil, "Dirty drafts require a close sheet")
 print("Checking close / cancel")
-allViews(settings.window.attachedSheet!.contentView!).compactMap { $0 as? NSButton }.first { $0.title == "取消" }!.performClick(nil)
+allViews(settings.window.attachedSheet!.contentView!).compactMap { $0 as? NSButton }.first { $0.title == L10n.text("Cancel") }!.performClick(nil)
 wait(until: { settings.window.attachedSheet == nil })
 check(settings.window.isVisible && key.dirty, "Cancel retains the draft")
 settings.window.performClose(nil)
 print("Checking close / discard")
-allViews(settings.window.attachedSheet!.contentView!).compactMap { $0 as? NSButton }.first { $0.title == "放弃" }!.performClick(nil)
+allViews(settings.window.attachedSheet!.contentView!).compactMap { $0 as? NSButton }.first { $0.title == L10n.text("Discard") }!.performClick(nil)
 wait(until: { !settings.window.isVisible && !key.dirty })
 check(!settings.window.isVisible && !key.dirty, "Discard closes and clears only drafts")
 app.polishProviderPicker.selectItem(at: PolishProvider.allCases.firstIndex(of: .deepseek)!)
@@ -114,7 +114,7 @@ app.polishProviderPicker.sendAction(app.polishProviderPicker.action!, to: app.po
 check(DeepSeekConfiguration.provider == .deepseek, "Provider switches immediately without a key")
 settings.select(.advanced)
 let advanced = tabs.tabViewItems[4].viewController!.view
-check(allViews(advanced).compactMap { $0 as? NSTextField }.contains { $0.stringValue.contains("此来源缺少有效 Key") }, "Missing key warning stays visible")
+check(allViews(advanced).compactMap { $0 as? NSTextField }.contains { $0.stringValue.contains(L10n.text("This provider has no valid Key. Polish will keep the original text.")) }, "Missing key warning stays visible")
 app.applyPolishPreferences(LinkPolishPreferences(enabled: false, options: PolishOptions(output: .japanese, mode: .terminal, tone: .rant)), confirmingSave: true)
 check(app.deepseekCheck.state == .off && app.polishFields?.isHidden == true, "Phone preference entry updates the Mac switch")
 check(app.polishModeButtons.selectedSegment == PolishMode.allCases.firstIndex(of: .terminal), "Phone mode reaches the same segmented control")
@@ -126,28 +126,28 @@ let menuMode = app.menuModeItems.first { $0.title == PolishMode.agent.title }!
 app.selectMenuMode(menuMode)
 check(DeepSeekConfiguration.options.mode == .agent && DeepSeekConfiguration.options.output == .japanese && DeepSeekConfiguration.options.tone == .rant, "Menu changes mode only, keeping tone and language")
 check(menuMode.state == .on && app.polishModeButtons.selectedSegment == 0, "Menu and settings checks agree")
-let settingsIndex = app.statusMenu.items.firstIndex { $0.title == "设置…" }!
+let settingsIndex = app.statusMenu.items.firstIndex { $0.title == L10n.text("Settings…") }!
 let websiteItem = app.statusMenu.items[settingsIndex + 1]
-check(websiteItem.title == "iMic 官网与帮助…" && websiteItem.action == #selector(AppDelegate.openWebsite), "Website help follows settings in menu")
-let websiteButton = allViews(advanced).compactMap { $0 as? NSButton }.first { $0.title == "iMic 官网 ↗" }
+check(websiteItem.title == L10n.text("iMic website and help…") && websiteItem.action == #selector(AppDelegate.openWebsite), "Website help follows settings in menu")
+let websiteButton = allViews(advanced).compactMap { $0 as? NSButton }.first { $0.title == L10n.text("iMic website ↗") }
 check(websiteButton?.action == #selector(AppDelegate.openWebsite), "Advanced help shares the menu action")
-check(SetupLinks.website.absoluteString == "https://drafffffff.github.io/iMic/", "Shared website destination")
+check(SetupLinks.website.absoluteString == "https://drafffffff.github.io/iMic/" + (L10n.isChinese ? "" : "en/"), "Shared website destination")
 app.openWebsite() // Preview must return before opening the browser.
-check(!app.statusMenu.items.contains { $0.title == "复制配对码" || $0.title == "设置向导…" }, "Low frequency operations leave the top-level menu")
+check(!app.statusMenu.items.contains { $0.title == L10n.text("Copy pairing code") || $0.title == "设置向导…" }, "Low frequency operations leave the top-level menu")
 app.showCloudFailure(.key, provider: .bailian, recognition: true)
-check(app.issueLabel.stringValue.contains("Key 无效") && app.menuStatusItem.title.contains("Key 无效"), "ASR failures show reason in main and menu")
+check(app.issueLabel.stringValue.contains(BailianIssue.invalidKey.message) && app.menuStatusItem.title.contains(BailianIssue.invalidKey.message), "ASR failures show reason in main and menu")
 app.polishFallback = true
 app.lastInsertSucceeded = false
 app.refreshCloudFailure()
-check(app.issueLabel.stringValue.contains("原文已保留"), "Failed delivery never claims text was inserted")
+check(app.issueLabel.stringValue.contains(L10n.text("Polish failed. Original text kept for copying.")), "Failed delivery never claims text was inserted")
 app.lastInsertSucceeded = true
 app.refreshCloudFailure()
-check(app.issueLabel.stringValue.contains("已输入原文"), "Polish fallback after input is explicit")
+check(app.issueLabel.stringValue.contains(L10n.text("Polish failed. Original text typed.")), "Polish fallback after input is explicit")
 app.showCloudFailure(.network, provider: .bailian, recognition: true)
 app.performIssueAction()
-check(app.connectionRecovered && app.issueLabel.stringValue.contains("重新录音") && app.menuIssueAction.isHidden, "Retry checks connectivity and asks for a fresh recording")
+check(app.connectionRecovered && app.issueLabel.stringValue.contains(L10n.text("Connection check passed. Record again on your iPhone.")) && app.menuIssueAction.isHidden, "Retry checks connectivity and asks for a fresh recording")
 app.refreshUI()
-check(app.issueLabel.stringValue.contains("连接检查通过"), "Recovery message survives a UI refresh")
+check(app.issueLabel.stringValue.contains(L10n.text("Connection check passed. Record again on your iPhone.")), "Recovery message survives a UI refresh")
 app.clearCloudFailure()
 check(app.issueRow.isHidden && app.menuIssueAction.isHidden, "A new session clears stale failures")
 settings.window.makeKeyAndOrderFront(nil)
@@ -164,10 +164,10 @@ let wizardContent = wizard.window!.contentView!
 let wizardKey = allViews(wizardContent).compactMap { $0 as? NSSecureTextField }.first!
 wizardKey.stringValue = "export DASHSCOPE_API_KEY='sk-auto-paste-preview-key'\r\n"
 wizard.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: wizardKey))
-wait(until: { allViews(wizardContent).compactMap { $0 as? NSTextField }.contains { $0.stringValue.contains("已识别：华北2（北京）") } })
+wait(until: { allViews(wizardContent).compactMap { $0 as? NSTextField }.contains { $0.stringValue.contains(L10n.text("Detected: %@.", BailianAddress.title("cn-beijing"))) } })
 check(app.setupSnapshot().key?.key == "sk-auto-paste-preview-key", "Native paste is cleaned, verified and adopted without pressing Validate")
 check(app.endpoint.stringValue == BailianAddress.asr(BailianAddress.hosts[0]), "Wizard synchronizes running recognition endpoint")
-let next = allViews(wizardContent).compactMap { $0 as? NSButton }.first { $0.title == "下一步" }
+let next = allViews(wizardContent).compactMap { $0 as? NSButton }.first { $0.title == L10n.text("Next") }
 check(next?.isEnabled == true, "Successful automatic verification enables next step")
 wizard.close()
 
@@ -196,10 +196,10 @@ print("Mac settings: five toolbar panes, external key override, verified save, r
 settings.select(.general)
 let general = tabs.tabViewItems[0].viewController!.view
 let generalButtons = allViews(general).compactMap { $0 as? NSButton }
-check(generalButtons.contains { $0.title == "自动检查更新" }, "General has automatic update checks")
-check(generalButtons.contains { $0.title == "自动下载并安装更新" && $0.state == .off }, "Automatic installation defaults off")
+check(generalButtons.contains { $0.title == L10n.text("Check for updates automatically") }, "General has automatic update checks")
+check(generalButtons.contains { $0.title == L10n.text("Download and install updates automatically") && $0.state == .off }, "Automatic installation defaults off")
 check(allViews(general).compactMap { $0 as? NSTextField }.contains { $0.stringValue == MacUpdater.version }, "General shows marketing and build versions")
-check(app.statusMenu.items.contains { $0.title == "检查更新…" && $0.action == #selector(AppDelegate.checkForUpdates) }, "Menu shares updater action")
+check(app.statusMenu.items.contains { $0.title == L10n.text("Check for updates…") && $0.action == #selector(AppDelegate.checkForUpdates) }, "Menu shares updater action")
 app.currentSession = nil; app.inserting = false; app.clearingInput = false
 check(!app.updateIsIdle, "The native wizard above was closed unfinished; updates must remain deferred")
 SetupProgress.clear() // Finish the separate wizard fixture before checking other idle states.
@@ -216,3 +216,32 @@ check(!app.updateIsIdle, "Unfinished setup defers updates even when its window i
 SetupProgress.clear()
 check(app.updateIsIdle, "Finishing setup resumes updates")
 print("Mac updater settings, menu and recording / typing / clearing / setup gates passed")
+
+#if DEBUG
+if let output = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--capture-ui=") }) {
+    let directory = URL(fileURLWithPath: String(output.dropFirst("--capture-ui=".count)))
+    try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    func captureView(_ view: NSView, _ name: String) {
+        view.layoutSubtreeIfNeeded()
+        let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        try! bitmap.representation(using: .png, properties: [:])!.write(to: directory.appendingPathComponent(name + ".png"))
+    }
+    for pane in SettingsPane.allCases {
+        settings.select(pane); settings.window.makeKeyAndOrderFront(nil)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        captureView(settings.window.contentView!.superview!, "settings-" + pane.rawValue)
+    }
+    settings.window.orderOut(nil)
+    app.show(); captureView(app.window.contentView!.superview!, "main")
+    let wizard = SetupWizard(host: app)
+    wizard.reopen(at: .key); wizard.previewKeyState("invalid")
+    RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+    captureView(wizard.window!.contentView!.superview!, "setup-key-error")
+    wizard.reopen(at: .permissions)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+    captureView(wizard.window!.contentView!.superview!, "setup-permissions")
+    wizard.close()
+    print("Captured main, all five settings panes and both setup steps")
+}
+#endif

@@ -1,5 +1,7 @@
 name: iMic
 options:
+  developmentLanguage: en
+  knownRegions: [en, zh-Hans]
   minimumXcodeGenVersion: 2.38.0
   deploymentTarget:
     iOS: "17.0"

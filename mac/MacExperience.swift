@@ -13,25 +13,25 @@ extension AppDelegate: NSMenuDelegate {
             let value = NSMenuItem(title: title, action: action, keyEquivalent: key)
             value.target = self; return value
         }
-        menuStatusItem = item("○ 等待 iPhone 连接", nil); menuStatusItem.isEnabled = false
+        menuStatusItem = item(L10n.text("○ Waiting for your iPhone"), nil); menuStatusItem.isEnabled = false
         menu.addItem(menuStatusItem)
-        menuIssueAction = item("打开设置", #selector(performIssueAction)); menuIssueAction.isHidden = true
+        menuIssueAction = item(L10n.text("Open Settings"), #selector(performIssueAction)); menuIssueAction.isHidden = true
         menu.addItem(menuIssueAction)
-        menuPolishItem = item("AI 润色", #selector(toggleMenuPolish)); menu.addItem(menuPolishItem)
+        menuPolishItem = item(L10n.text("AI polish"), #selector(toggleMenuPolish)); menu.addItem(menuPolishItem)
         let modes = NSMenu(); modes.autoenablesItems = false
         menuModeItems = PolishMode.allCases.enumerated().map { index, mode in
             let value = item(mode.title, #selector(selectMenuMode(_:))); value.tag = index
             modes.addItem(value); return value
         }
-        let mode = item("转换模式", nil); mode.submenu = modes; menu.addItem(mode)
+        let mode = item(L10n.text("Conversion mode"), nil); mode.submenu = modes; menu.addItem(mode)
         menu.addItem(.separator())
-        menu.addItem(item("打开 iMic", #selector(show)))
-        menu.addItem(item("设置…", #selector(showSettings), key: ","))
-        menu.addItem(item("iMic 官网与帮助…", #selector(openWebsite)))
-        menu.addItem(item("检查更新…", #selector(checkForUpdates)))
-        menu.addItem(item("配对新 iPhone…", #selector(pairNewPhone)))
+        menu.addItem(item(L10n.text("Open iMic"), #selector(show)))
+        menu.addItem(item(L10n.text("Settings…"), #selector(showSettings), key: ","))
+        menu.addItem(item(L10n.text("iMic website and help…"), #selector(openWebsite)))
+        menu.addItem(item(L10n.text("Check for updates…"), #selector(checkForUpdates)))
+        menu.addItem(item(L10n.text("Pair a new iPhone…"), #selector(pairNewPhone)))
         menu.addItem(.separator())
-        menu.addItem(item("退出 iMic", #selector(quit), key: "q"))
+        menu.addItem(item(L10n.text("Quit iMic"), #selector(quit), key: "q"))
         statusMenu = menu
         let appMenu = NSMenu(); let root = NSMenuItem(); root.submenu = menu
         appMenu.addItem(root); NSApp.mainMenu = appMenu
@@ -48,16 +48,16 @@ extension AppDelegate: NSMenuDelegate {
     func refreshStatusMenu() {
         guard menuStatusItem != nil else { return }
         if connectionRecovered {
-            menuStatusItem.title = "连接检查通过 · 请重新录音"
+            menuStatusItem.title = L10n.text("Connection check passed · Record again")
         } else if let cloudFailure {
             menuStatusItem.title = cloudFailure.title(service: issueServiceName)
         } else if automatic.state == .on && !inputPermissionState().allowed {
-            menuStatusItem.title = "需要设置：辅助功能"
+            menuStatusItem.title = L10n.text("Setup required: Accessibility")
         } else if let connectedName {
-            menuStatusItem.title = "● 已连接 \(connectedName)"
-        } else { menuStatusItem.title = "○ 等待 iPhone 连接" }
+            menuStatusItem.title = L10n.text("● Connected to %@", L10n.argument(connectedName))
+        } else { menuStatusItem.title = L10n.text("○ Waiting for your iPhone") }
         menuIssueAction?.isHidden = cloudFailure == nil
-        menuIssueAction?.title = cloudFailure == .network ? "重试连接" : "打开设置"
+        menuIssueAction?.title = cloudFailure == .network ? L10n.text("Retry connection") : L10n.text("Open Settings")
         menuIssueAction?.isEnabled = currentSession == nil && connectionCheck == nil
         menuPolishItem.state = DeepSeekConfiguration.enabled ? .on : .off
         for (index, item) in menuModeItems.enumerated() {
@@ -88,9 +88,9 @@ extension AppDelegate: NSMenuDelegate {
 
     var issueServiceName: String {
         switch issueProvider {
-        case .bailian: return "百炼"
+        case .bailian: return L10n.text("Model Studio")
         case .deepseek: return "DeepSeek"
-        case .custom: return "自定义服务"
+        case .custom: return L10n.text("Custom service")
         }
     }
     func showCloudFailure(_ failure: CloudFailure, provider: PolishProvider, recognition: Bool = false) {
@@ -107,7 +107,7 @@ extension AppDelegate: NSMenuDelegate {
         guard issueRow != nil else { return }
         issueRow.isHidden = cloudFailure == nil && !connectionRecovered
         if connectionRecovered {
-            issueLabel.stringValue = "连接检查通过，请在 iPhone 重新录音。"
+            issueLabel.stringValue = L10n.text("Connection check passed. Record again on your iPhone.")
             issueButton.isHidden = true
             return
         }
@@ -115,16 +115,16 @@ extension AppDelegate: NSMenuDelegate {
         issueButton.isHidden = false
         if polishFallback && currentSession == nil {
             issueLabel.stringValue = polishFallbackIsCommand
-                ? "润色失败，已保留为安全注释。"
-                : lastInsertSucceeded ? "润色失败，已输入原文。" : "润色失败，原文已保留，可复制。"
+                ? L10n.text("Polish failed. Kept as a safe comment.")
+                : lastInsertSucceeded ? L10n.text("Polish failed. Original text typed.") : L10n.text("Polish failed. Original text kept for copying.")
             issueLabel.stringValue += " " + cloudFailure.title(service: issueServiceName)
         } else { issueLabel.stringValue = cloudFailure.title(service: issueServiceName) }
         let console = issueProvider == .bailian && cloudFailure.needsConsole
-        issueButton.title = console ? "打开百炼控制台" : cloudFailure == .network ? "重试连接" : "打开设置"
+        issueButton.title = console ? L10n.text("Open Model Studio Console") : cloudFailure == .network ? L10n.text("Retry connection") : L10n.text("Open Settings")
         issueButton.action = console ? #selector(openFailureConsole) : #selector(performIssueAction)
         issueButton.setAccessibilityLabel(issueButton.title)
         issueButton.isEnabled = currentSession == nil && connectionCheck == nil
-        issueButton.toolTip = cloudFailure == .network ? "检查服务连接；本次音频不会重发，请在连接恢复后重新录音。" : nil
+        issueButton.toolTip = cloudFailure == .network ? L10n.text("Check the service connection. This audio will not be sent again. Record again after the connection recovers.") : nil
     }
     @objc private func openFailureConsole() {
         guard preview == nil else { return }
@@ -168,7 +168,7 @@ extension AppDelegate: NSMenuDelegate {
                 self.showCloudFailure(issue, provider: provider, recognition: recognition)
             }
         }
-        issueLabel.stringValue = "正在检查连接…"
+        issueLabel.stringValue = L10n.text("Checking connection…")
         if recognition {
             connectionCheck = SettingsValidation.runBailian(key: credential, endpoint: address, completion: completion)
         } else if let request = try? SettingsValidation.request(provider: provider, key: credential,
@@ -177,7 +177,7 @@ extension AppDelegate: NSMenuDelegate {
         } else { showCloudFailure(credential.isEmpty ? .key : .address, provider: provider); return }
         if connectionCheck != nil {
             refreshCloudFailure(); refreshStatusMenu()
-            issueLabel.stringValue = "正在检查连接…"
+            issueLabel.stringValue = L10n.text("Checking connection…")
         }
     }
 }
