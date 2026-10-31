@@ -47,9 +47,12 @@ if [ -n "$RELEASE_IDENTITY" ]; then
     *) echo "发布版必须使用团队 5H39F98ND4 的 Developer ID Application 身份。" >&2; exit 1 ;;
   esac
   [ -n "$NOTARY_PROFILE" ] || { echo "自动更新发布必须设置 IMIC_NOTARY_PROFILE，确保最终 DMG 已公证。" >&2; exit 1; }
-  security find-identity -v -p codesigning | grep -Fq "\"$RELEASE_IDENTITY\"" || {
-    echo "钥匙串中没有可用的签名身份：$RELEASE_IDENTITY（证书需带私钥）。" >&2; exit 1; }
-  echo "==> 构建 Mac 通用版（Apple Silicon + Intel，$RELEASE_IDENTITY）"
+  # Read the full output before matching: grep -q exits early and, under pipefail, the
+  # writer's SIGPIPE turns a match into a failure (intermittently).
+  IDENTITIES=$(security find-identity -v -p codesigning)
+  grep -Fq "\"$RELEASE_IDENTITY\"" <<<"$IDENTITIES" || {
+    echo "钥匙串中没有可用的签名身份：${RELEASE_IDENTITY}（证书需带私钥）。" >&2; exit 1; }
+  echo "==> 构建 Mac 通用版（Apple Silicon + Intel，${RELEASE_IDENTITY}）"
 else
   echo "==> 构建 Mac 通用版（Apple Silicon + Intel，ad-hoc 签名）"
 fi
@@ -58,7 +61,8 @@ IMIC_CONFIGURATION=release IMIC_ARCH=universal IMIC_BUILD_DIR="$WORK/mac" IMIC_S
 APP="$WORK/mac/iMic.app"
 if [ -n "$RELEASE_IDENTITY" ]; then
   "$ROOT/scripts/sign-mac.sh" "$APP" "$RELEASE_IDENTITY" release
-  codesign -dv "$APP" 2>&1 | grep -q '^TeamIdentifier=5H39F98ND4$' || {
+  TEAM=$(codesign -dv "$APP" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+  [ "$TEAM" = 5H39F98ND4 ] || {
     echo "Developer ID 团队不匹配。" >&2; exit 1; }
 fi
 APP_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")
