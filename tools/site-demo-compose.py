@@ -216,8 +216,8 @@ def plan(scene, events):
         lefts, rights = times(events, "input", action="left"), times(events, "input", action="right")
         dels, clr = times(events, "input", action="delete"), first(events, "input", action="clear")
         rt = first(events, "input", action="return")
-        segs = [(holds[0] - 0.3, tys[0] + 0.5), (lefts[0] - 0.3, clr + 0.75),
-                (holds[1] - 0.25, tys[1] + 0.45), (rt - 0.75, rt + 1.0)]
+        segs = [(holds[0] - 0.25, tys[0] + 0.45), (lefts[0] - 0.25, clr + 0.65),
+                (holds[1] - 0.2, tys[1] + 0.4), (rt - 0.7, rt + 0.95)]
         cam = [("full", holds[0] - 0.4), ("wide", lefts[0] - 0.2), ("wide", rt + 2)]
         beats = [lefts[0], dels[0], clr, rt]
         labels = [("CURSOR", lefts[0] - 0.25, (rights or lefts)[-1] + 0.55),

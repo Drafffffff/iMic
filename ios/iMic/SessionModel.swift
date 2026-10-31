@@ -1260,22 +1260,47 @@ final class SessionModel: ObservableObject {
         transcript = ""
         message = nil
         spectrumStore.reset()
-        startPreviewSpectrum()
         #if DEBUG
-        startDemoLiveText()
+        if DemoScript.shared.active { startDemoLiveText() } else { startPreviewSpectrum() }
+        #else
+        startPreviewSpectrum()
         #endif
     }
 
     #if DEBUG
     private var demoLiveTimer: Timer?
 
-    /// Demo recordings only: reveal the scripted words at a speaking pace while held.
+    /// Demo recordings only: play the utterance's synthesized speech through the same
+    /// analyzer as the microphone (real waveform), revealing the words in step with it.
     private func startDemoLiveText() {
         guard DemoScript.shared.active else { return }
+        let index = DemoScript.shared.currentIndex
         let words = Array(DemoScript.shared.beginUtterance().live)
         liveTranscript = ""
-        var shown = 0
         demoLiveTimer?.invalidate()
+        if let pcm = DemoScript.shared.speech[index], pcm.count > 640 {
+            var offset = 0
+            let total = pcm.count
+            let timer = Timer(timeInterval: 0.02, repeats: true) { [weak self] timer in
+                Task { @MainActor in
+                    guard let self, self.phase == .listening, offset < total else { timer.invalidate(); return }
+                    let end = min(offset + 640, total)      // 20 ms of 16-bit 16 kHz audio
+                    self.analyzeVisuals(pcm.subdata(in: offset..<end))
+                    self.elapsed = Double(end) / 32_000
+                    offset = end
+                    let shown = min(words.count, Int((Double(end) / Double(total) * Double(words.count)).rounded(.up)))
+                    if shown != self.liveTranscript.count {
+                        self.liveTranscript = String(words.prefix(shown))
+                        DemoScript.shared.record("live", ["text": self.liveTranscript])
+                    }
+                }
+            }
+            demoLiveTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
+            return
+        }
+        startPreviewSpectrum()   // speech not synthesized yet: keep the preview animation
+        var shown = 0
         let pace = max(0.055, min(0.13, 2.0 / Double(max(1, words.count))))
         let timer = Timer(timeInterval: pace, repeats: true) { [weak self] timer in
             Task { @MainActor in
@@ -1293,7 +1318,7 @@ final class SessionModel: ObservableObject {
     private func finishDemoUtterance() -> Bool {
         guard isPreview, DemoScript.shared.active else { return false }
         demoLiveTimer?.invalidate(); demoLiveTimer = nil
-        previewTimer?.invalidate()
+        stopVisualInput()        // as on a real release: stop feeding, let the waveform settle
         let item = DemoScript.shared.finishUtterance()
         DemoScript.shared.record("release", ["live": liveTranscript])
         Haptics.shared.play(.release)      // as on a real release that is sent
