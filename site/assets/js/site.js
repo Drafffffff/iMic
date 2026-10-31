@@ -212,7 +212,9 @@ const SHARE_URL = document.querySelector("#share-manual").href;
   compactVideo.addEventListener("change", updateResponsivePosters);
   function setButton(video) {
     const button = video.parentElement.querySelector(".video-toggle");
+    // The whole video is the control; the label stays for keyboard and screen readers.
     button.textContent = video.paused ? button.dataset.playLabel : button.dataset.pauseLabel;
+    button.dataset.state = video.paused ? "paused" : "playing";
     button.setAttribute("aria-label", `${button.textContent}：${video.getAttribute("aria-label")}`);
   }
   function play(video) {
@@ -225,7 +227,7 @@ const SHARE_URL = document.querySelector("#share-manual").href;
       const on = video.muted;
       video.muted = !on;
       button.setAttribute("aria-pressed", String(on));
-      button.textContent = on ? button.dataset.onLabel : button.dataset.offLabel;
+      button.setAttribute("aria-label", on ? button.dataset.onLabel : button.dataset.offLabel);
       if (on) { manuallyPaused.delete(video); video.currentTime = 0; play(video); }
     });
   });

@@ -301,3 +301,17 @@ h2 { text-shadow: 0 0 14px rgba(242, 240, 230, .1); }
 @media (prefers-reduced-motion: reduce) { body::after { display: none; } }
 @media print { body::before, body::after { display: none; } }
 html[lang="en"] h1 { letter-spacing: -.025em; }
+
+/* Video controls without chrome: the whole frame toggles playback. A small pixel play mark
+   appears only while paused; keyboard focus still shows the outline. */
+.video-toggle { inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; color: transparent; font-size: 0; cursor: pointer; }
+.video-toggle:focus-visible { outline-offset: -4px; }
+.video-toggle[data-state="playing"]::after { content: none; }
+.video-toggle::after { content: ""; position: absolute; left: 18px; bottom: 18px; width: 14px; height: 16px; background: var(--ivory); clip-path: polygon(0 0, 0 100%, 100% 50%); opacity: .85; filter: drop-shadow(0 0 6px rgba(242, 240, 230, .6)); }
+.video-toggle:hover::after { background: var(--orange); filter: drop-shadow(0 0 8px rgba(var(--glow), .9)); }
+/* SOUND: muted by default; a corner badge turns audio on. */
+.sound-toggle { top: 12px; right: 12px; width: 34px; height: 34px; padding: 0; display: grid; place-items: center; border: 1px solid #4a4741; border-radius: 2px; background: rgba(9, 9, 9, .72); color: var(--muted); z-index: 3; }
+.sound-toggle:hover { color: var(--ivory); border-color: #77716a; }
+.sound-toggle .sound-on, .sound-toggle[aria-pressed="true"] .sound-off { display: none; }
+.sound-toggle[aria-pressed="true"] .sound-on { display: block; }
+.sound-toggle[aria-pressed="true"] { color: var(--orange); border-color: var(--orange); box-shadow: 0 0 14px rgba(var(--glow), .35); }
