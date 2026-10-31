@@ -567,6 +567,9 @@ final class SessionModel: ObservableObject {
     func endListening(cancelled: Bool) {
         wantsRecording = false
         guard phase == .listening else { return }
+        #if DEBUG
+        if !cancelled, finishDemoUtterance() { return }
+        #endif
         defer {
             if !isPreview {
                 Task {
@@ -1258,7 +1261,61 @@ final class SessionModel: ObservableObject {
         message = nil
         spectrumStore.reset()
         startPreviewSpectrum()
+        #if DEBUG
+        startDemoLiveText()
+        #endif
     }
+
+    #if DEBUG
+    private var demoLiveTimer: Timer?
+
+    /// Demo recordings only: reveal the scripted words at a speaking pace while held.
+    private func startDemoLiveText() {
+        guard DemoScript.shared.active else { return }
+        let words = Array(DemoScript.shared.beginUtterance().live)
+        liveTranscript = ""
+        var shown = 0
+        demoLiveTimer?.invalidate()
+        let pace = max(0.055, min(0.13, 2.0 / Double(max(1, words.count))))
+        let timer = Timer(timeInterval: pace, repeats: true) { [weak self] timer in
+            Task { @MainActor in
+                guard let self, self.phase == .listening, shown < words.count else { timer.invalidate(); return }
+                shown += 1
+                self.liveTranscript = String(words.prefix(shown))
+                DemoScript.shared.record("live", ["text": self.liveTranscript])
+            }
+        }
+        demoLiveTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    /// Demo recordings only: a release lands the scripted text as if the Mac typed it.
+    private func finishDemoUtterance() -> Bool {
+        guard isPreview, DemoScript.shared.active else { return false }
+        demoLiveTimer?.invalidate(); demoLiveTimer = nil
+        previewTimer?.invalidate()
+        let item = DemoScript.shared.finishUtterance()
+        DemoScript.shared.record("release", ["live": liveTranscript])
+        Haptics.shared.play(.release)      // as on a real release that is sent
+        phase = .transcribing
+        let polishes = DemoScript.shared.polishes
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(380))
+            if polishes {
+                DemoScript.shared.record("polish.start", ["raw": item.live])
+                try? await Task.sleep(for: .milliseconds(1700))
+            }
+            guard let self, self.phase == .transcribing else { return }
+            self.transcript = item.final
+            self.pasted = true
+            self.target = "Messages"
+            self.phase = .result
+            Haptics.shared.play(.result)   // as when a real result arrives from the Mac
+            DemoScript.shared.record("typed", ["raw": item.live, "final": item.final])
+        }
+        return true
+    }
+    #endif
 
     private func startPreviewSpectrum() {
         previewTimer?.invalidate()

@@ -129,6 +129,16 @@ const SHARE_URL = "https://drafffffff.github.io/iMic/?from=ios#download";
     load(video);
     video.play().catch(() => setButton(video));
   }
+  document.querySelectorAll(".sound-toggle").forEach((button) => {
+    const video = button.parentElement.querySelector("video");
+    button.addEventListener("click", () => {
+      const on = video.muted;
+      video.muted = !on;
+      button.setAttribute("aria-pressed", String(on));
+      button.textContent = on ? button.dataset.onLabel : button.dataset.offLabel;
+      if (on) { manuallyPaused.delete(video); video.currentTime = 0; play(video); }
+    });
+  });
   videos.forEach((video) => {
     video.muted = true;
     const button = video.parentElement.querySelector(".video-toggle");

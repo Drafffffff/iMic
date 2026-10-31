@@ -67,6 +67,11 @@ final class LinkClient: ObservableObject {
         case bluetooth
     }
 
+    #if DEBUG
+    /// Landing-page demo recordings log preview inputs (set by DemoScript; nil otherwise).
+    static var demoInputObserver: ((String) -> Void)?
+    #endif
+
     /// Set synchronously before HomeView appears; also gates foreground activation.
     var startDeferred = false
     @Published private(set) var localNetworkDenied = false
@@ -1402,6 +1407,9 @@ final class LinkClient: ObservableObject {
               let revision = gestureRevision else { return false }
         if action == "clear" { clearPending = true }
         if isPreview {
+            #if DEBUG
+            LinkClient.demoInputObserver?(action)
+            #endif
             if action == "clear" {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     self.clearPending = false

@@ -26,6 +26,10 @@ iOS Release 不是免签包，也不是 TestFlight/App Store 分发；不包含�
 
 TestFlight 发布使用独立的签名归档流程，见 [TestFlight 发布说明](docs/TESTFLIGHT.md)。当前 GitHub 的未签名 IPA 不等于 TestFlight 构建；[测试版上手说明](docs/TESTFLIGHT-QUICKSTART.md)与[隐私说明](docs/PRIVACY.md)可供测试者阅读。
 
+### 官网演示视频
+
+`site/assets/video/` 里的演示视频由真实 App 录制合成，`./scripts/site-demo.sh` 可以一键重新生成（需要 Xcode、ffmpeg、带 Pillow 和 numpy 的 Python，以及已安装 iMic 的辅助功能授权）。过程中 Mac 演示窗口会在主屏幕中央出现，请勿操作电脑。
+
 ## 源码构建环境
 
 - Mac：macOS 13+，Command Line Tools（`xcode-select --install`），百炼 API Key；无需完整 Xcode 或 XcodeGen。
