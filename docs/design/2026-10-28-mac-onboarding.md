@@ -4,7 +4,7 @@
 
 ## 原则
 
-用户只需要做两件事：打开权限、填一个百炼 Key。界面不出现存储方案、环境变量、来源标签等实现细节；这些只写在 README 的常见问题里。
+用户只需要做两件事：打开权限、填一个百炼 Key。界面不出现存储方案、环境变量、来源标签等实现细节；这些只写在 [DEVELOPMENT.md 的 Mac 常见问题](../DEVELOPMENT.md#mac-常见问题)里。
 
 ## 改动前的问题
 
@@ -61,7 +61,7 @@
 
 - `build-mac.sh`：`DEVELOPER_DIR` 未设置时依次尝试 `/Applications/Xcode.app` 与 `xcode-select -p`；缺少 `swiftc` 或 macOS SDK 时提示 `xcode-select --install`（只需命令行工具）。ad-hoc 签名时用中文说明需要重新添加辅助功能。
 - `install-mac.sh`：`--build` 先构建再安装，`--no-open`、`--dry-run`；检查 `/Applications` 写权限；安装后提示首次设置向导，ad-hoc 签名时提示删除旧的辅助功能条目。
-- README：Mac 端只需命令行工具；一条命令安装；常见问题（权限失效、Translocation、Key 存放与读取顺序、找不到 Mac、卸载）。
+- [DEVELOPMENT.md](../DEVELOPMENT.md)：Mac 端只需命令行工具；一条命令安装；常见问题（权限失效、Translocation、Key 存放与读取顺序、找不到 Mac、卸载）。
 
 ## 主窗口与设置页精简
 
