@@ -1,0 +1,59 @@
+Test Suite 'PolishProviderTests' started at 2026-10-31 23:51:46.609.
+Test Case '-[main.PolishProviderTests testActionableErrorsUseServiceCodeBeforeHTTPStatusAndNeverEchoBodies]' started.
+Test Case '-[main.PolishProviderTests testActionableErrorsUseServiceCodeBeforeHTTPStatusAndNeverEchoBodies]' passed (0.025 seconds).
+Test Case '-[main.PolishProviderTests testAmbiguousAll401AndPlanHeuristicRequireEvidence]' started.
+Test Case '-[main.PolishProviderTests testAmbiguousAll401AndPlanHeuristicRequireEvidence]' passed (0.022 seconds).
+Test Case '-[main.PolishProviderTests testAppFileWinsThenEnvironmentThenShellFiles]' started.
+Test Case '-[main.PolishProviderTests testAppFileWinsThenEnvironmentThenShellFiles]' passed (0.020 seconds).
+Test Case '-[main.PolishProviderTests testBailianAddressesShareOneAllowlistAndDeriveBothEndpoints]' started.
+Test Case '-[main.PolishProviderTests testBailianAddressesShareOneAllowlistAndDeriveBothEndpoints]' passed (0.011 seconds).
+Test Case '-[main.PolishProviderTests testBailianEnvironmentKeyCannotFillOtherProviderCredentials]' started.
+Test Case '-[main.PolishProviderTests testBailianEnvironmentKeyCannotFillOtherProviderCredentials]' passed (0.002 seconds).
+Test Case '-[main.PolishProviderTests testBailianKeyCheckUsesRecognitionHostAndClassifiesResponses]' started.
+Test Case '-[main.PolishProviderTests testBailianKeyCheckUsesRecognitionHostAndClassifiesResponses]' passed (0.004 seconds).
+Test Case '-[main.PolishProviderTests testBailianPolishUsesSameIPAndBillingErrorsAsRecognition]' started.
+Test Case '-[main.PolishProviderTests testBailianPolishUsesSameIPAndBillingErrorsAsRecognition]' passed (0.005 seconds).
+Test Case '-[main.PolishProviderTests testClientFallsBackOnHTTPAndNetworkFailure]' started.
+Test Case '-[main.PolishProviderTests testClientFallsBackOnHTTPAndNetworkFailure]' passed (0.003 seconds).
+Test Case '-[main.PolishProviderTests testCommandOutputStripsWrappersButRejectsMultipleLines]' started.
+Test Case '-[main.PolishProviderTests testCommandOutputStripsWrappersButRejectsMultipleLines]' passed (0.001 seconds).
+Test Case '-[main.PolishProviderTests testDiscoveryDeadlineAndCancellation]' started.
+Test Case '-[main.PolishProviderTests testDiscoveryDeadlineAndCancellation]' passed (0.199 seconds).
+Test Case '-[main.PolishProviderTests testEmptyToolMetadataAcceptsTextButActualToolCallsAreRejected]' started.
+Test Case '-[main.PolishProviderTests testEmptyToolMetadataAcceptsTextButActualToolCallsAreRejected]' passed (0.003 seconds).
+Test Case '-[main.PolishProviderTests testExecutableShellAssignmentIsNeverReadAsCredential]' started.
+Test Case '-[main.PolishProviderTests testExecutableShellAssignmentIsNeverReadAsCredential]' passed (0.002 seconds).
+Test Case '-[main.PolishProviderTests testExistingOfficialSettingsSurviveProviderRoundTrip]' started.
+Test Case '-[main.PolishProviderTests testExistingOfficialSettingsSurviveProviderRoundTrip]' passed (0.009 seconds).
+Test Case '-[main.PolishProviderTests testInvalidAndPlaintextRemoteEndpointsAreRejectedBeforeRequest]' started.
+Test Case '-[main.PolishProviderTests testInvalidAndPlaintextRemoteEndpointsAreRejectedBeforeRequest]' passed (0.007 seconds).
+Test Case '-[main.PolishProviderTests testManualWorkspaceTrialAndRejectedBaseNeverLeakCredentials]' started.
+Test Case '-[main.PolishProviderTests testManualWorkspaceTrialAndRejectedBaseNeverLeakCredentials]' passed (0.007 seconds).
+Test Case '-[main.PolishProviderTests testModelListingIsNotProofOfASRPermissionAndMissingPolishDisablesIt]' started.
+Test Case '-[main.PolishProviderTests testModelListingIsNotProofOfASRPermissionAndMissingPolishDisablesIt]' passed (0.008 seconds).
+Test Case '-[main.PolishProviderTests testNewInstallsDefaultToBailianPolish]' started.
+Test Case '-[main.PolishProviderTests testNewInstallsDefaultToBailianPolish]' passed (0.006 seconds).
+Test Case '-[main.PolishProviderTests testNewModesUseRealRequestAndResultPolicy]' started.
+Test Case '-[main.PolishProviderTests testNewModesUseRealRequestAndResultPolicy]' passed (0.005 seconds).
+Test Case '-[main.PolishProviderTests testOldPreferencesMigrateAndNewSelectionsSurviveReload]' started.
+Test Case '-[main.PolishProviderTests testOldPreferencesMigrateAndNewSelectionsSurviveReload]' passed (0.004 seconds).
+Test Case '-[main.PolishProviderTests testPastedKeyCleanupPreservesStrictLiteralFormat]' started.
+Test Case '-[main.PolishProviderTests testPastedKeyCleanupPreservesStrictLiteralFormat]' passed (0.003 seconds).
+Test Case '-[main.PolishProviderTests testPolishEnabledDefaultUsesBailianKeyAndPreservesSavedChoice]' started.
+Test Case '-[main.PolishProviderTests testPolishEnabledDefaultUsesBailianKeyAndPreservesSavedChoice]' passed (0.006 seconds).
+Test Case '-[main.PolishProviderTests testProviderCredentialStoresStaySeparateInAppFile]' started.
+Test Case '-[main.PolishProviderTests testProviderCredentialStoresStaySeparateInAppFile]' passed (0.015 seconds).
+Test Case '-[main.PolishProviderTests testRegionDiscoveryUniqueSingaporeAlsoUpdatesPolishEndpoint]' started.
+Test Case '-[main.PolishProviderTests testRegionDiscoveryUniqueSingaporeAlsoUpdatesPolishEndpoint]' passed (0.004 seconds).
+Test Case '-[main.PolishProviderTests testRequestUsesOutputSpecificPrompt]' started.
+Test Case '-[main.PolishProviderTests testRequestUsesOutputSpecificPrompt]' passed (0.003 seconds).
+Test Case '-[main.PolishProviderTests testResponseUsesOnlyFinalContentAndRetainsSafetyPolicy]' started.
+Test Case '-[main.PolishProviderTests testResponseUsesOnlyFinalContentAndRetainsSafetyPolicy]' passed (0.002 seconds).
+Test Case '-[main.PolishProviderTests testSettingsVerificationRequestsAndRecognitionHostBoundary]' started.
+Test Case '-[main.PolishProviderTests testSettingsVerificationRequestsAndRecognitionHostBoundary]' passed (0.002 seconds).
+Test Case '-[main.PolishProviderTests testUnsupportedRegionsAndPartialTimeoutsHaveSpecificOutcomes]' started.
+Test Case '-[main.PolishProviderTests testUnsupportedRegionsAndPartialTimeoutsHaveSpecificOutcomes]' passed (0.010 seconds).
+Test Case '-[main.PolishProviderTests testValidationRedirectPolicyRejectsEveryRedirect]' started.
+Test Case '-[main.PolishProviderTests testValidationRedirectPolicyRejectsEveryRedirect]' passed (0.002 seconds).
+Test Suite 'PolishProviderTests' passed at 2026-10-31 23:51:47.010.
+	 Executed 28 tests, with 0 failures (0 unexpected) in 0.389 (0.401) seconds

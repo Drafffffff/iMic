@@ -1,0 +1,3 @@
+en ["en"]
+zh-Hans ["zh_CN"]
+zh-Hant ["zh_TW"]

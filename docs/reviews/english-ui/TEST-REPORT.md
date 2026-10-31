@@ -25,8 +25,8 @@
 | 项目 | 结果 | 耗时 | 关键输出 |
 | --- | --- | ---: | --- |
 | `xcodebuild test -destination <owned SE UDID> -parallel-testing-enabled NO -only-testing:iMicUITests/EnglishUIReviewTests CODE_SIGNING_ALLOWED=NO` | PASS | 84.95s | Executed 1 test, 0 failures；SE 中英文欢迎页、下载说明及全部设置可滚动阅读，底部按钮可点击。 [日志](logs/extra-0.txt) |
-| `./scripts/test-mac-settings.sh --capture-ui=docs/reviews/english-ui/mac-en -AppleLanguages (en)` | PASS | 27.94s | 原生设置测试全量通过，已截取完整窗口与全部分页。 [日志](logs/extra-1.txt) |
-| `./scripts/test-mac-settings.sh --capture-ui=docs/reviews/english-ui/mac-zh-Hans -AppleLanguages (zh-Hans)` | PASS | 28.18s | 原生设置测试全量通过，已截取完整窗口与全部分页。 [日志](logs/extra-2.txt) |
+| `./scripts/test-mac-settings.sh --capture-ui=docs/reviews/english-ui/mac-en -AppleLanguages '(en)'` | PASS | 27.94s | 原生设置测试全量通过，已截取完整窗口与全部分页。 [日志](logs/extra-1.txt) |
+| `./scripts/test-mac-settings.sh --capture-ui=docs/reviews/english-ui/mac-zh-Hans -AppleLanguages '(zh-Hans)'` | PASS | 28.18s | 原生设置测试全量通过，已截取完整窗口与全部分页。 [日志](logs/extra-2.txt) |
 | `DEVELOPER_DIR=/Library/Developer/CommandLineTools IMIC_BUILD_DIR=build/mac-clt.noindex ./scripts/build-mac.sh` | PASS | 约 79.9s | 使用实际 CLT Swift 编译器与 SDK；签名校验成功。[日志](logs/clt-build.txt) |
 
 Mac 采用生成的 `.strings`，不依赖 xcstringstool。Sparkle 原生资源跟随系统，Foundation 实测 en → en，zh-Hans → zh_CN，zh-Hant → zh_TW。[输出](logs/sparkle-language.txt)。

@@ -1,0 +1,7 @@
+/Users/drafff/.codex/worktrees/english-ui/iMic/build/vendor/Sparkle-2.10.1.tar.xz: OK
+Sparkle 2.10.1：SHA-256 校验通过。
+Checking close / cancel
+Checking close / discard
+Mac settings: five toolbar panes, external key override, verified save, rejected draft, close sheet, immediate provider, phone/menu sync, silent launch/reopen, waiting/pairing, failure actions and preview isolation passed
+Mac updater settings, menu and recording / typing / clearing / setup gates passed
+Captured main, all five settings panes and both setup steps

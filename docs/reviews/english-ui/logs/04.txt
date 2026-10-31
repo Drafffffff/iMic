@@ -1,0 +1,45 @@
+Test Suite 'InputRangeTests' started at 2026-10-31 23:51:50.617.
+Test Case '-[main.InputRangeTests testCaretFailureAfterSuccessfulWriteNeedsConfirmationNotFallback]' started.
+Test Case '-[main.InputRangeTests testCaretFailureAfterSuccessfulWriteNeedsConfirmationNotFallback]' passed (0.001 seconds).
+Test Case '-[main.InputRangeTests testClearRequiresTheCompleteUnchangedFieldSelection]' started.
+Test Case '-[main.InputRangeTests testClearRequiresTheCompleteUnchangedFieldSelection]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testCodexUsesKeyboardEvenWhenItAdvertisesRangeSupport]' started.
+Test Case '-[main.InputRangeTests testCodexUsesKeyboardEvenWhenItAdvertisesRangeSupport]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testDifferentOwnedTextCannotBeRevised]' started.
+Test Case '-[main.InputRangeTests testDifferentOwnedTextCannotBeRevised]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testElectronEditorsStayInKeyboardCompatibilityWhenRangesAppear]' started.
+Test Case '-[main.InputRangeTests testElectronEditorsStayInKeyboardCompatibilityWhenRangesAppear]' passed (0.001 seconds).
+Test Case '-[main.InputRangeTests testEmptyTextCannotClaimAnArbitraryRange]' started.
+Test Case '-[main.InputRangeTests testEmptyTextCannotClaimAnArbitraryRange]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testExplicitClearRequiresAnEditableTextRole]' started.
+Test Case '-[main.InputRangeTests testExplicitClearRequiresAnEditableTextRole]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testFirstCharacterWrapMovesStartWithoutChangingOwnedText]' started.
+Test Case '-[main.InputRangeTests testFirstCharacterWrapMovesStartWithoutChangingOwnedText]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testMatchingTextInAnotherDraftDoesNotTransferOwnership]' started.
+Test Case '-[main.InputRangeTests testMatchingTextInAnotherDraftDoesNotTransferOwnership]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testNonBMPContextAndJoinedEmojiKeepUTF16Coordinates]' started.
+Test Case '-[main.InputRangeTests testNonBMPContextAndJoinedEmojiKeepUTF16Coordinates]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testOtherTargetsKeepRangeVerificationWhenAvailable]' started.
+Test Case '-[main.InputRangeTests testOtherTargetsKeepRangeVerificationWhenAvailable]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testOttyPresentationRangesDoNotEnableAXRevision]' started.
+Test Case '-[main.InputRangeTests testOttyPresentationRangesDoNotEnableAXRevision]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testSelectionFailureRecoversBeforeKeyboardFallbackWithoutWriting]' started.
+Test Case '-[main.InputRangeTests testSelectionFailureRecoversBeforeKeyboardFallbackWithoutWriting]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testSpacesAndMissingExplicitLineBreaksAreNotSilentlyDiscarded]' started.
+Test Case '-[main.InputRangeTests testSpacesAndMissingExplicitLineBreaksAreNotSilentlyDiscarded]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testSuccessfulTransactionDoesNotUseRecovery]' started.
+Test Case '-[main.InputRangeTests testSuccessfulTransactionDoesNotUseRecovery]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testTailVerificationFailureFallsBackOnlyAfterRecovery]' started.
+Test Case '-[main.InputRangeTests testTailVerificationFailureFallsBackOnlyAfterRecovery]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testUnknownKeyboardSelectionDoesNotAcceptGhostCompletion]' started.
+Test Case '-[main.InputRangeTests testUnknownKeyboardSelectionDoesNotAcceptGhostCompletion]' passed (0.001 seconds).
+Test Case '-[main.InputRangeTests testUnrecoverableSelectionOrUserTakeoverBlocksFallback]' started.
+Test Case '-[main.InputRangeTests testUnrecoverableSelectionOrUserTakeoverBlocksFallback]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testWrapAfterLastCharacterKeepsTheRenderedCaretInTheOwnedSpan]' started.
+Test Case '-[main.InputRangeTests testWrapAfterLastCharacterKeepsTheRenderedCaretInTheOwnedSpan]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testWrappedTranscriptAndReflowedContextRemainVerifiable]' started.
+Test Case '-[main.InputRangeTests testWrappedTranscriptAndReflowedContextRemainVerifiable]' passed (0.000 seconds).
+Test Case '-[main.InputRangeTests testWriteThatTakesEffectButReportsFailureIsNeverReplayed]' started.
+Test Case '-[main.InputRangeTests testWriteThatTakesEffectButReportsFailureIsNeverReplayed]' passed (0.000 seconds).
+Test Suite 'InputRangeTests' passed at 2026-10-31 23:51:50.626.
+	 Executed 21 tests, with 0 failures (0 unexpected) in 0.006 (0.009) seconds

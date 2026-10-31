@@ -259,13 +259,13 @@
       "log": "build/l10n/se-scroll-verified.log"
     },
     {
-      "command": "./scripts/test-mac-settings.sh --capture-ui=docs/reviews/english-ui/mac-en -AppleLanguages (en)",
+      "command": "./scripts/test-mac-settings.sh --capture-ui=docs/reviews/english-ui/mac-en -AppleLanguages '(en)'",
       "result": "PASS",
       "seconds": 27.94,
       "log": "build/l10n/mac-capture-final-en.log"
     },
     {
-      "command": "./scripts/test-mac-settings.sh --capture-ui=docs/reviews/english-ui/mac-zh-Hans -AppleLanguages (zh-Hans)",
+      "command": "./scripts/test-mac-settings.sh --capture-ui=docs/reviews/english-ui/mac-zh-Hans -AppleLanguages '(zh-Hans)'",
       "result": "PASS",
       "seconds": 28.18,
       "log": "build/l10n/mac-capture-final-zh-Hans.log"
