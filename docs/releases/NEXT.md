@@ -17,4 +17,4 @@
 
 - 新增 GitHub Pages 单页官网：交互预览、润色示例、隐私、安装指引和动态 Mac 下载；支持 iPhone 引导直达下载及分享至 Mac。
 - Mac 菜单「设置…」下新增「iMic 官网与帮助…」，高级设置底部新增官网链接；预览模式不打开浏览器。
-- 发布前需手动配置 Pages Source 与 github-pages 分支规则，TestFlight 公链待补充。
+- 已上线：https://drafffffff.github.io/iMic/（2026-10-31 首次部署；`site/` 有改动推送到工作分支时自动部署）。TestFlight 公开链接待补充。
