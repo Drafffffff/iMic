@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Dependency-free Pages validation (also runs on the GitHub hosted runner)."""
+from appcast import validate as validate_appcast
 import re
 import struct
 import sys
+import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -12,6 +14,10 @@ errors, external, refs, documents = [], set(), [], {}
 
 def require(condition, message):
     if not condition: errors.append(message)
+
+if (root / 'appcast.xml').exists():
+    try: validate_appcast(root / 'appcast.xml')
+    except (ValueError, OSError, ET.ParseError) as error: require(False, f'appcast.xml: {error}')
 
 class Page(HTMLParser):
     def __init__(self, path):

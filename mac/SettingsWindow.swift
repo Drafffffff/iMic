@@ -43,6 +43,8 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     private var accessStatus: NSTextField!
     private var screenStatus: NSTextField!
     private var bluetoothStatus: NSTextField!
+    private var updateChecks: NSButton?
+    private var updateInstalls: NSButton?
     var loginCheck: NSButton!
     var loginHint: NSTextField!
     var loginSettingsButton: NSButton!
@@ -107,7 +109,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         let pane = SettingsPane.allCases[tabs.selectedTabViewItemIndex]
         defaults.set(pane.rawValue, forKey: "settings.selectedPane")
         if pane == .permissions { refreshPermissions() }
-        if pane == .general { refreshLoginState() }
+        if pane == .general { refreshLoginState(); refreshUpdates() }
         window.recalculateKeyViewLoop()
         resize()
     }
@@ -127,7 +129,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         }
         window.setFrame(frame, display: true, animate: window.isVisible)
     }
-    func show() { refreshCredentials(); refreshPermissions(); refreshLoginState(); resize() }
+    func show() { refreshCredentials(); refreshPermissions(); refreshLoginState(); refreshUpdates(); resize() }
 
     private func column(_ views: [NSView], spacing: CGFloat = 12) -> NSStackView {
         let stack = app!.column(views, spacing: spacing); stack.detachesHiddenViews = true
@@ -176,9 +178,34 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         let show = NSButton(checkboxWithTitle: "启动时显示主窗口", target: self, action: #selector(toggleShowMain(_:)))
         show.state = defaults.bool(forKey: "showMainWindowOnLaunch") ? .on : .off
         show.setAccessibilityLabel(show.title)
+        let checks = NSButton(checkboxWithTitle: "自动检查更新", target: self, action: #selector(toggleUpdateChecks(_:)))
+        updateChecks = checks
+        checks.state = app.macUpdater.automaticallyChecks ? .on : .off
+        checks.isEnabled = MacUpdater.configured || preview
+        checks.setAccessibilityLabel(checks.title)
+        let installs = NSButton(checkboxWithTitle: "自动下载并安装更新", target: self, action: #selector(toggleUpdateInstalls(_:)))
+        updateInstalls = installs
+        installs.state = app.macUpdater.automaticallyInstalls ? .on : .off
+        installs.isEnabled = MacUpdater.configured || preview
+        installs.setAccessibilityLabel(installs.title)
+        let updates = column([heading("UPDATES"), note(MacUpdater.version), checks, installs,
+            note(MacUpdater.configured ? "每天检查一次；录音、输入和设置向导期间推迟提示与重启。" : "此开发构建尚未配置更新公钥，自动检查已关闭。"),
+            app.linkButton("检查更新…", #selector(AppDelegate.checkForUpdates))], spacing: 9)
         app.saveFeedback.font = .systemFont(ofSize: 11); app.saveFeedback.textColor = .imicMuted
         return column([heading("INPUT"), input, app.divider(), heading("STARTUP"),
-            loginCheck, loginHint, loginSettingsButton, show, app.divider(), app.linkButton("测试输入", #selector(AppDelegate.testInput)), app.saveFeedback])
+            loginCheck, loginHint, loginSettingsButton, show, app.divider(), updates, app.divider(), app.linkButton("测试输入", #selector(AppDelegate.testInput)), app.saveFeedback])
+    }
+    private func refreshUpdates() {
+        updateChecks?.state = app?.macUpdater.automaticallyChecks == true ? .on : .off
+        updateInstalls?.state = app?.macUpdater.automaticallyInstalls == true ? .on : .off
+    }
+    @objc private func toggleUpdateChecks(_ sender: NSButton) {
+        guard !preview else { return }
+        app?.macUpdater.setAutomaticChecks(sender.state == .on)
+    }
+    @objc private func toggleUpdateInstalls(_ sender: NSButton) {
+        guard !preview else { return }
+        app?.macUpdater.setAutomaticInstalls(sender.state == .on)
     }
     private func bailian() -> NSStackView {
         let app = app!

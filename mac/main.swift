@@ -4,7 +4,7 @@ import ApplicationServices
 private let launchArguments = CommandLine.arguments
 private let headlessMode = launchArguments.contains("--headless")
 private let previewMode = launchArguments.first { $0.hasPrefix("--ui-preview=") }
-    .map { String($0.dropFirst("--ui-preview=".count)) }
+    .map { String($0.dropFirst("--ui-preview=".count)) } ?? (MacUpdater.testing ? "settings-general" : nil)
 private let pairCodeArgument = launchArguments.first { $0.hasPrefix("--pair-code=") }
     .map { String($0.dropFirst("--pair-code=".count)) }
 private let disableInput = headlessMode || launchArguments.contains("--no-input")
@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var settingsWindow: NSWindow!
     var settingsCoordinator: SettingsWindowCoordinator?
     var setupWizard: SetupWizard?
+    lazy var macUpdater = MacUpdater(app: self)
     /// Fake wizard state for --ui-preview=setup-*; never used with real permissions.
     var previewSetup: SetupSnapshot?
     var statusMenu: NSMenu!
@@ -194,6 +195,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let preview = preview {
             showPreview(preview)
+            #if DEBUG
+            if MacUpdater.testing {
+                IMicLog.write("mac.updater.test", "version=\(MacUpdater.version) accessibility=\(AXIsProcessTrusted())")
+                if launchArguments.contains("--debug-update-check") { macUpdater.check() }
+                else { macUpdater.start() }
+            }
+            #endif
             return
         }
         if pendingReopen { show(); pendingReopen = false }
@@ -203,6 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installLinkHandlers()
         link.start()
         presentLaunchWindows(needsSetup: shouldShowSetupOnLaunch())
+        macUpdater.start()
 
         watchdog = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.tick()

@@ -1,0 +1,7 @@
+          cmd LC_RPATH
+      cmdsize 32
+         path /usr/lib/swift (offset 12)
+--
+          cmd LC_RPATH
+      cmdsize 48
+         path @executable_path/../Frameworks (offset 12)

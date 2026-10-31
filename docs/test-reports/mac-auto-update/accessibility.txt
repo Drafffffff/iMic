@@ -1,0 +1,5 @@
+2026-10-31T14:09:07.003Z [mac.updater.test] version=1.4.4 (100) accessibility=true
+2026-10-31T14:09:48.102Z [mac.updater.test] version=1.4.4 (101) accessibility=false
+2026-10-31T14:11:01.549Z [mac.updater.test] version=1.4.4 (100) accessibility=true
+2026-10-31T14:15:30.043Z [mac.updater.test] version=1.4.4 (100) accessibility=true
+2026-10-31T14:16:39.340Z [mac.updater.test] version=1.4.4 (101) accessibility=true
