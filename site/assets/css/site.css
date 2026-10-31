@@ -295,8 +295,12 @@ h2 { text-shadow: 0 0 14px rgba(242, 240, 230, .1); }
 /* HTML-in-Canvas (Chrome origin trial / flag): the real headline element is drawn into a
    canvas and re-lit with bloom and scanlines. Text stays in the DOM for selection and
    assistive technology; every other browser keeps the CSS glow above. */
-.crt-title { display: block; width: calc(100% + 2 * var(--crt-pad, 24px)); margin: calc(-1 * var(--crt-pad, 24px)); }
-.crt-title > h1 { margin: var(--crt-pad, 24px); text-shadow: none; }
+.hero-copy { position: relative; }
+.crt-title, .crt-copy { -webkit-user-select: none; user-select: none; }
+.crt-title { position: absolute; z-index: 0; display: block; pointer-events: none; }
+.crt-copy { margin: var(--crt-pad, 24px); text-shadow: none; }
+.crt-lit { position: relative; z-index: 1; color: transparent; text-shadow: none; }
+.crt-lit .accent { color: transparent; text-shadow: none; }
 
 @media (prefers-reduced-motion: reduce) { body::after { display: none; } }
 @media print { body::before, body::after { display: none; } }

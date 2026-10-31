@@ -270,7 +270,9 @@ const SHARE_URL = document.querySelector("#share-manual").href;
 
 /* HTML-in-Canvas CRT headline. Only runs where the browser can draw DOM into a canvas
    (Chrome origin trial or chrome://flags/#canvas-draw-element); everywhere else the
-   CSS glow is the whole effect. The <h1> stays a real, selectable, accessible element. */
+   CSS glow is the whole effect. The real <h1> stays on top as a normal element with
+   transparent text, so selection, cursor and double-click are native in every browser;
+   the canvas underneath only paints a hidden copy with glow and scanlines. */
 (() => {
   "use strict";
   const title = document.querySelector("#hero-title");
@@ -281,8 +283,13 @@ const SHARE_URL = document.querySelector("#share-manual").href;
   canvas.className = "crt-title";
   if ("content" in HTMLCanvasElement.prototype) canvas.setAttribute("content", "drawable");
   else canvas.setAttribute("layoutsubtree", "");
+  canvas.setAttribute("aria-hidden", "true");
+  const copy = title.cloneNode(true);
+  copy.removeAttribute("id");
+  copy.className = "crt-copy";
+  canvas.append(copy);
   title.before(canvas);
-  canvas.append(title);
+  title.classList.add("crt-lit");
   const ctx = canvas.getContext("2d");
   const glow = document.createElement("canvas");
   const glowCtx = glow.getContext("2d");
@@ -293,18 +300,19 @@ const SHARE_URL = document.querySelector("#share-manual").href;
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    width = canvas.clientWidth;
+    width = title.offsetWidth + pad * 2;
     height = title.offsetHeight + pad * 2;
-    canvas.style.height = height + "px";
+    Object.assign(canvas.style, { left: title.offsetLeft - pad + "px", top: title.offsetTop - pad + "px", width: width + "px", height: height + "px" });
+    copy.style.width = title.offsetWidth + "px";
     canvas.width = glow.width = buffer.width = Math.round(width * dpr);
     canvas.height = glow.height = buffer.height = Math.round(height * dpr);
     paint();
   }
 
   function drawTitle(target) {
-    const result = target.drawElementImage(title, pad, pad);
-    // Before Chrome 155 the call returned a DOMMatrix that had to be applied by hand.
-    if (result && typeof result.toString === "function") title.style.transform = result.toString();
+    // The copy is never hit-tested (the canvas ignores pointer events), so the DOMMatrix
+    // returned before Chrome 155 can be ignored.
+    target.drawElementImage(copy, pad, pad);
   }
 
   function paint() {
@@ -395,7 +403,7 @@ const SHARE_URL = document.querySelector("#share-manual").href;
   function start() { if (!frame && !reducedMotion.matches) frame = requestAnimationFrame(tick); }
 
   canvas.addEventListener("paint", paint);
-  new ResizeObserver(resize).observe(canvas);
+  new ResizeObserver(resize).observe(title);
   new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; if (visible) start(); }).observe(canvas);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) start(); });
   reducedMotion.addEventListener("change", () => { paint(); start(); });
