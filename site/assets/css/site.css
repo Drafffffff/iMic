@@ -346,3 +346,8 @@ html.is-signal-drop main { filter: saturate(1.6) contrast(1.15); }
 /* Selection: the whole selection lights up as a solid ivory block, text included, with a
    soft glow, like the canvas-lit headline. Copying is unaffected. */
 ::selection { background: var(--ivory); color: var(--ivory); text-shadow: 0 0 10px rgba(242, 240, 230, .9), 0 0 26px rgba(242, 240, 230, .55); }
+
+/* Halo behind selected lines (see site.js); the selection itself paints the white block. */
+.selection-glow { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: 25; }
+.selection-glow i { position: absolute; box-shadow: 0 0 14px 3px rgba(242, 240, 230, .55), 0 0 42px 10px rgba(242, 240, 230, .28), 0 0 90px 24px rgba(242, 240, 230, .12); mix-blend-mode: screen; }
+@media print { .selection-glow { display: none; } }
