@@ -39,6 +39,8 @@ const SHARE_URL = document.querySelector("#share-manual").href;
           complete = true;
           demo.dataset.phase = "complete";
           field.closest(".field-scene").classList.remove("is-active");
+          // The command "lands" in the terminal: a short glitch on that window.
+          document.dispatchEvent(new CustomEvent("imic:glitch", { detail: { target: field.closest(".field-window"), level: "small" } }));
           wait = 2600;
         }
       }
@@ -212,7 +214,9 @@ const SHARE_URL = document.querySelector("#share-manual").href;
   compactVideo.addEventListener("change", updateResponsivePosters);
   function setButton(video) {
     const button = video.parentElement.querySelector(".video-toggle");
+    // The whole video is the control; the label stays for keyboard and screen readers.
     button.textContent = video.paused ? button.dataset.playLabel : button.dataset.pauseLabel;
+    button.dataset.state = video.paused ? "paused" : "playing";
     button.setAttribute("aria-label", `${button.textContent}：${video.getAttribute("aria-label")}`);
   }
   function play(video) {
@@ -225,7 +229,7 @@ const SHARE_URL = document.querySelector("#share-manual").href;
       const on = video.muted;
       video.muted = !on;
       button.setAttribute("aria-pressed", String(on));
-      button.textContent = on ? button.dataset.onLabel : button.dataset.offLabel;
+      button.setAttribute("aria-label", on ? button.dataset.onLabel : button.dataset.offLabel);
       if (on) { manuallyPaused.delete(video); video.currentTime = 0; play(video); }
     });
   });
@@ -283,15 +287,17 @@ const SHARE_URL = document.querySelector("#share-manual").href;
   const glow = document.createElement("canvas");
   const glowCtx = glow.getContext("2d");
   const pad = parseFloat(getComputedStyle(canvas).getPropertyValue("--crt-pad")) || 24;
-  let dpr = 1, width = 0, height = 0, visible = true, frame = 0, band = 0;
+  let dpr = 1, width = 0, height = 0, visible = true, frame = 0, band = 0, glitchUntil = 0;
+  const buffer = document.createElement("canvas");
+  const bufferCtx = buffer.getContext("2d");
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     width = canvas.clientWidth;
     height = title.offsetHeight + pad * 2;
     canvas.style.height = height + "px";
-    canvas.width = glow.width = Math.round(width * dpr);
-    canvas.height = glow.height = Math.round(height * dpr);
+    canvas.width = glow.width = buffer.width = Math.round(width * dpr);
+    canvas.height = glow.height = buffer.height = Math.round(height * dpr);
     paint();
   }
 
@@ -337,7 +343,47 @@ const SHARE_URL = document.querySelector("#share-manual").href;
       ctx.fillRect(0, y - 40 * dpr, canvas.width, 80 * dpr);
     }
     ctx.restore();
+    if (performance.now() < glitchUntil) tear();
   }
+
+  // Glitch: cut the lit headline into bands, shove them sideways and split the colour
+  // channels into saturated cyan and magenta ghosts.
+  function tint(color) {
+    bufferCtx.setTransform(1, 0, 0, 1, 0, 0);
+    bufferCtx.clearRect(0, 0, buffer.width, buffer.height);
+    bufferCtx.globalCompositeOperation = "source-over";
+    bufferCtx.drawImage(glow, 0, 0);
+    bufferCtx.globalCompositeOperation = "source-in";
+    bufferCtx.fillStyle = color;
+    bufferCtx.fillRect(0, 0, buffer.width, buffer.height);
+    return buffer;
+  }
+  function tear() {
+    const w = canvas.width, h = canvas.height, shift = 18 * dpr;
+    glowCtx.setTransform(1, 0, 0, 1, 0, 0);
+    glowCtx.clearRect(0, 0, w, h);
+    glowCtx.drawImage(canvas, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.drawImage(tint("rgba(0, 240, 255, 0.9)"), -shift * (0.3 + Math.random()), 0);
+    ctx.drawImage(tint("rgba(255, 43, 214, 0.9)"), shift * (0.3 + Math.random()), 0);
+    ctx.restore();
+    let y = 0;
+    while (y < h) {
+      const band = Math.max(4 * dpr, Math.random() * h * 0.28);
+      const dx = Math.random() < 0.55 ? (Math.random() - 0.5) * shift * 4 : 0;
+      ctx.drawImage(glow, 0, y, w, band, dx, y, w, band);
+      y += band;
+    }
+  }
+  document.addEventListener("imic:glitch-title", (event) => {
+    if (reducedMotion.matches) return;
+    glitchUntil = performance.now() + (event.detail?.duration || 320);
+    const loop = () => { if (canvas.requestPaint) canvas.requestPaint(); else paint(); if (performance.now() < glitchUntil + 60) setTimeout(loop, 55); };
+    loop();
+  });
 
   function tick(time) {
     frame = 0;
@@ -356,4 +402,144 @@ const SHARE_URL = document.querySelector("#share-manual").href;
   document.documentElement.dataset.crt = "canvas";
   resize();
   start();
+})();
+
+
+/* Glitch: rare, short and loud. One scheduler, one glitch at a time, nothing at all for
+   reduced motion. Colour changes stay under three per second (WCAG 2.3.1). */
+(() => {
+  "use strict";
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  const STEP = 55;                       // ms per glitch frame
+  let busy = false, signalDone = false, interacting = false;
+  const allowed = () => !reducedMotion.matches && !document.hidden && !busy;
+  const random = (min, max) => min + Math.random() * (max - min);
+
+  // CSS path: two coloured clones of the element tear across it, then everything snaps back.
+  function glitch(element, level = "small") {
+    if (!element || !allowed() || interacting) return false;
+    if (element.closest(".crt-title") || (element.id === "hero-title" && document.documentElement.dataset.crt === "canvas")) {
+      busy = true;
+      const duration = level === "large" ? 420 : 320;
+      document.dispatchEvent(new CustomEvent("imic:glitch-title", { detail: { duration } }));
+      setTimeout(() => { busy = false; }, duration + 80);
+      return true;
+    }
+    busy = true;
+    const duration = level === "small" ? random(120, 200) : random(250, 400);
+    const strength = level === "small" ? 6 : 16;
+    const host = element.offsetParent || document.body;
+    const layer = document.createElement("div");
+    layer.className = "glitch-layer";
+    layer.setAttribute("aria-hidden", "true");
+    Object.assign(layer.style, { left: element.offsetLeft + "px", top: element.offsetTop + "px", width: element.offsetWidth + "px", height: element.offsetHeight + "px" });
+    const ghosts = ["cyan", "magenta"].map((tone) => {
+      const ghost = element.cloneNode(true);
+      ghost.removeAttribute("id");
+      ghost.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
+      ghost.classList.add("glitch-ghost", "glitch-" + tone);
+      layer.append(ghost);
+      return ghost;
+    });
+    if (getComputedStyle(host).position === "static") host.style.position = "relative";
+    host.append(layer);
+    element.classList.add("is-glitching");
+    const started = performance.now();
+    (function frame() {
+      const t = performance.now() - started;
+      if (t >= duration) {
+        layer.remove();
+        element.classList.remove("is-glitching");
+        element.style.removeProperty("clip-path");
+        element.style.removeProperty("transform");
+        busy = false;
+        return;
+      }
+      ghosts.forEach((ghost, i) => {
+        const top = random(0, 70), bottom = random(0, 100 - top - 8);
+        ghost.style.clipPath = `inset(${top}% 0 ${bottom}% 0)`;
+        ghost.style.transform = `translateX(${(i ? 1 : -1) * random(strength * 0.4, strength)}px)`;
+      });
+      const cut = random(10, 80);
+      element.style.clipPath = Math.random() < 0.5 ? `polygon(0 0, 100% 0, 100% ${cut}%, 0 ${cut}%, 0 ${cut + 6}%, 100% ${cut + 6}%, 100% 100%, 0 100%)` : "";
+      element.style.transform = Math.random() < 0.4 ? `translateX(${random(-strength, strength) * 0.5}px)` : "";
+      setTimeout(frame, STEP);
+    })();
+    return true;
+  }
+
+  // Full-viewport signal drop, at most once per visit.
+  function signalDrop() {
+    if (signalDone || !allowed() || interacting) return;
+    signalDone = true;
+    busy = true;
+    const overlay = document.createElement("div");
+    overlay.className = "signal-drop";
+    overlay.setAttribute("aria-hidden", "true");
+    const colors = ["#00f0ff", "#ff2bd6", "#ff4a00", "#f2f0e6"];
+    for (let i = 0; i < 7; i++) {
+      const bar = document.createElement("i");
+      Object.assign(bar.style, { top: random(0, 96) + "vh", height: random(0.6, 7) + "vh", background: colors[i % colors.length], transform: `translateX(${random(-30, 30)}vw)` });
+      overlay.append(bar);
+    }
+    document.body.append(overlay);
+    document.documentElement.classList.add("is-signal-drop");
+    const main = document.querySelector("main");
+    let frames = 0;
+    (function frame() {
+      if (++frames > 4) {
+        overlay.remove();
+        document.documentElement.classList.remove("is-signal-drop");
+        if (main) main.style.removeProperty("transform");
+        busy = false;
+        return;
+      }
+      overlay.querySelectorAll("i").forEach((bar) => { bar.style.transform = `translateX(${random(-40, 40)}vw) scaleY(${random(0.4, 1.6)})`; });
+      if (main) main.style.transform = `translateX(${random(-14, 14)}px)`;
+      setTimeout(frame, STEP);
+    })();
+  }
+
+  // Never glitch what the user is working with.
+  ["pointerdown", "keydown", "selectionchange"].forEach((type) => document.addEventListener(type, () => {
+    interacting = true;
+    clearTimeout(signalDrop.idle);
+    signalDrop.idle = setTimeout(() => { interacting = false; }, 1500);
+  }));
+
+  document.addEventListener("imic:glitch", (event) => event.detail?.level === "signal" ? signalDrop() : glitch(event.detail?.target, event.detail?.level));
+
+  // MEDIUM: the headline, shortly after load, then every 25–50 s while it is on screen.
+  const title = document.querySelector("#hero-title");
+  let titleVisible = true;
+  if (title && "IntersectionObserver" in window) {
+    new IntersectionObserver(([entry]) => { titleVisible = entry.isIntersecting; }).observe(title.closest(".hero") || title);
+    const schedule = (delay) => setTimeout(() => {
+      if (titleVisible) glitch(document.querySelector("#hero-title"), "medium");
+      schedule(random(25000, 50000));
+    }, delay);
+    schedule(random(2000, 4000));
+  }
+
+  // SMALL: pixel labels, once each as they scroll in, about a third of the time.
+  if ("IntersectionObserver" in window) {
+    const labels = new IntersectionObserver((entries) => {
+      entries.forEach(({ target, isIntersecting }) => {
+        if (!isIntersecting) return;
+        labels.unobserve(target);
+        if (Math.random() < 0.3) setTimeout(() => glitch(target, "small"), random(150, 600));
+      });
+    }, { threshold: 0.8 });
+    document.querySelectorAll("main .pixel").forEach((label) => labels.observe(label));
+  }
+
+  // Download button: once per visit on first hover.
+  const download = document.querySelector(".hero .button.primary");
+  if (download) download.addEventListener("pointerenter", () => glitch(download, "small"), { once: true });
+
+  // LARGE: one signal drop per visit, somewhere after the first minute on the page.
+  setTimeout(() => {
+    const attempt = () => { if (!signalDone) { if (allowed() && !interacting) signalDrop(); else setTimeout(attempt, 5000); } };
+    attempt();
+  }, random(60000, 90000));
 })();
