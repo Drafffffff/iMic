@@ -1,0 +1,23 @@
+{
+  "browser": {
+    "protocolVersion": "1.3",
+    "product": "Chrome/151.0.7922.71",
+    "revision": "@ef35003457e93c278f911a334b06e4a5f8967e06",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+    "jsVersion": "15.1.206.10"
+  },
+  "viewport": [
+    1440,
+    900
+  ],
+  "state": "running",
+  "seconds": 10.00178899988532,
+  "mainThreadMS": 110.21600000000001,
+  "mainThreadPercent": 1.1019628588571877,
+  "scriptMS": 6.04,
+  "layoutMS": 16.354999999999993,
+  "styleMS": 6.404999999999999,
+  "layouts": 84,
+  "offscreenPaused": true,
+  "offscreenTextUnchanged": true
+}

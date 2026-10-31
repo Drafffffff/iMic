@@ -1,0 +1,37 @@
+{
+  "baseCommit": "abe7dd2a9929d74d28926900c2ad80db92573652",
+  "files": [
+    {
+      "path": "site/index.html",
+      "before": 19941,
+      "after": 27263,
+      "delta": 7322
+    },
+    {
+      "path": "site/assets/css/site.css",
+      "before": 14075,
+      "after": 16485,
+      "delta": 2410
+    },
+    {
+      "path": "site/assets/js/site.js",
+      "before": 8942,
+      "after": 11424,
+      "delta": 2482
+    }
+  ],
+  "netAddedBytes": 12214,
+  "conservativeNewHTMLBytes": 8258,
+  "conservativeAddedCSSBytes": 3315,
+  "addedJSBytes": 2482,
+  "conservativeAddedTotalBytes": 14055,
+  "limitBytes": 15000,
+  "unchanged": [
+    "FAQ",
+    "DOWNLOAD",
+    "H1",
+    "all video/picture markup",
+    "all existing media files",
+    "og:image"
+  ]
+}

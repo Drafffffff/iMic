@@ -85,6 +85,26 @@ for value in ('canonical', 'og:title', 'og:description', 'og:image', 'og:url', '
 require('id="download"' in index, 'download anchor missing')
 for anchor in ('feel', 'modes', 'anywhere', 'private', 'start', 'faq'):
     require(anchor in documents[root/'index.html'].ids, f'Missing section/legacy anchor: {anchor}')
+require(re.findall(r'<section\b[^>]*\bid="([^"]+)"', index) ==
+        ['anywhere', 'feel', 'modes', 'private', 'download', 'faq'],
+        'ANYWHERE must be the first section after HERO')
+nav = re.search(r'<nav aria-label="主导航">(.*?)</nav>', index, re.S)
+require(nav is not None and 'href="#anywhere"' in nav[1], 'Scenario navigation missing')
+anywhere = re.search(r'<section id="anywhere".*?</section>', index, re.S)
+require(anywhere is not None, 'ANYWHERE missing')
+if anywhere:
+    scene = anywhere[0]
+    require('试试' not in scene and '示意动画' in scene, 'Scenario copy must be clear and identify the illustration')
+    require('role="img" aria-label=' in scene and 'class="field-grid" aria-hidden="true"' in scene,
+            'Illustration needs one accessible description, with animated text hidden')
+    fields = re.findall(r'class="field-text" data-text="([^"]+)">([^<]+)</span>', scene)
+    require(len(fields) == 6 and all(text == fallback for text, fallback in fields),
+            'Six fields need complete static fallback text')
+    require('辅助功能权限' in scene and '前台变化' in scene and '不自动输入' in scene,
+            'Permission and app-switch limitations missing')
+    require('实时预览、润色扫光与清空效果因应用而异' in scene and 'href="#faq"' in scene,
+            'Enhanced feature limitations must link to FAQ')
+require('Mac 上任意输入框' in index, 'Any-field metadata missing')
 for identifier in ('origin-banner', 'mac-download-link', 'share-link', 'release-meta', 'mobile-download-note', 'share-status', 'share-manual', 'checksum-link', 'testflight-pending', 'testflight-link'):
     require(identifier in documents[root/'index.html'].ids, f'Download contract missing: {identifier}')
 require('data-hero-version' in index and index.count('data-dmg-link') >= 2, 'Download data attributes missing')
