@@ -551,3 +551,32 @@ const SHARE_URL = document.querySelector("#share-manual").href;
     attempt();
   }, random(60000, 90000));
 })();
+
+/* Selection halo: CSS cannot light up the selection box itself, so glowing boxes are laid
+   exactly behind each selected line. Unselected text is untouched; the halo follows the
+   selection and disappears with it. */
+(() => {
+  "use strict";
+  const layer = document.createElement("div");
+  layer.className = "selection-glow";
+  layer.setAttribute("aria-hidden", "true");
+  document.body.append(layer);
+  let queued = false;
+  function draw() {
+    queued = false;
+    const selection = getSelection();
+    layer.replaceChildren();
+    if (!selection || selection.isCollapsed || !selection.rangeCount) return;
+    const rects = [];
+    for (let i = 0; i < selection.rangeCount; i++) rects.push(...selection.getRangeAt(i).getClientRects());
+    const x = scrollX, y = scrollY;
+    rects.filter((r) => r.width > 1 && r.height > 1).slice(0, 240).forEach((r) => {
+      const box = document.createElement("i");
+      Object.assign(box.style, { left: r.left + x + "px", top: r.top + y + "px", width: r.width + "px", height: r.height + "px" });
+      layer.append(box);
+    });
+  }
+  const queue = () => { if (!queued) { queued = true; requestAnimationFrame(draw); } };
+  document.addEventListener("selectionchange", queue);
+  addEventListener("resize", queue);
+})();
