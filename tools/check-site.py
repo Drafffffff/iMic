@@ -98,10 +98,57 @@ for label,size,limit in budgets:
     print(f'{label}: {size:,} bytes / {limit:,} bytes')
     require(size <= limit, f'{label} over budget: {size} > {limit}')
 require(poster_size > 0, 'hero poster missing')
+def boxes(data, start=0, end=None):
+    """Yield (type, payload_start, payload_end) for ISO-BMFF boxes in data[start:end]."""
+    end = len(data) if end is None else end
+    while start + 8 <= end:
+        size, kind = struct.unpack_from('>I4s', data, start)
+        header = 8
+        if size == 1:
+            size, header = struct.unpack_from('>Q', data, start + 8)[0], 16
+        elif size == 0:
+            size = end - start
+        if size < header:
+            return
+        yield kind.decode('latin-1'), start + header, start + size
+        start += size
+
+def child(data, parent, kind):
+    for name, a, b in boxes(data, *parent):
+        if name == kind:
+            return a, b
+    return None
+
+def video_fps(data):
+    moov = next(((a, b) for k, a, b in boxes(data) if k == 'moov'), None)
+    for kind, a, b in boxes(data, *moov):
+        if kind != 'trak':
+            continue
+        mdia = child(data, (a, b), 'mdia')
+        hdlr = child(data, mdia, 'hdlr')
+        if data[hdlr[0] + 8:hdlr[0] + 12] != b'vide':
+            continue
+        mdhd = child(data, mdia, 'mdhd')
+        version = data[mdhd[0]]
+        timescale = struct.unpack_from('>I', data, mdhd[0] + (20 if version == 1 else 12))[0]
+        stbl = child(data, child(data, mdia, 'minf'), 'stbl')
+        stts = child(data, stbl, 'stts')
+        count = struct.unpack_from('>I', data, stts[0] + 4)[0]
+        frames = ticks = 0
+        for i in range(count):
+            n, delta = struct.unpack_from('>II', data, stts[0] + 8 + i * 8)
+            frames += n; ticks += n * delta
+        return frames / (ticks / timescale) if ticks else 0
+    return 0
+
+# Demo videos: hero ≤3 MB, others ≤2.5 MB; ≤12s; 60fps; only sound.mp4 carries audio.
 for path in sorted(root.rglob('*.mp4')):
     data=path.read_bytes()
-    require(len(data)<=1_500_000, f'{path.name}: video exceeds 1.5 MB')
-    require(b'avc1' in data and b'soun' not in data, f'{path.name}: expected H.264 without audio')
+    limit = 3_000_000 if path.name.startswith('hero') else 2_500_000
+    require(len(data)<=limit, f'{path.name}: video exceeds {limit:,} bytes')
+    has_audio = b'soun' in data
+    require(b'avc1' in data, f'{path.name}: expected H.264')
+    require(has_audio == (path.name == 'sound.mp4'), f'{path.name}: audio track only allowed in sound.mp4')
     moov, mdat = data.find(b'moov'), data.find(b'mdat')
     require(0 <= moov < mdat, f'{path.name}: missing faststart')
     mvhd = data.find(b'mvhd')
@@ -111,8 +158,10 @@ for path in sorted(root.rglob('*.mp4')):
         offset=mvhd+(24 if version==1 else 16)
         scale=struct.unpack_from('>I',data,offset)[0]
         duration=struct.unpack_from('>Q' if version==1 else '>I',data,offset+4)[0]/scale
-        require(0<duration<=8.05, f'{path.name}: duration {duration:.3f}s outside budget')
-        print(f'Video {path.name}: {duration:.2f}s · {len(data):,} bytes / 1,500,000 bytes · H.264 · faststart · silent')
+        require(0<duration<=12.05, f'{path.name}: duration {duration:.3f}s outside budget')
+        fps = video_fps(data)
+        require(abs(fps - 60) < 0.5, f'{path.name}: {fps:.2f} fps, expected 60')
+        print(f'Video {path.name}: {duration:.2f}s · {fps:.0f}fps · {len(data):,} bytes / {limit:,} bytes · H.264 · faststart · {"AAC audio" if has_audio else "silent"}')
 # PNG header dimensions; no image library required in CI.
 og=root/'assets/icons/og.png'
 if og.is_file():

@@ -223,6 +223,7 @@ struct HomeView: View {
             }
             #endif
             #if DEBUG
+            DemoTouchOverlay.installIfNeeded()
             if ProcessInfo.processInfo.arguments.contains("--ui-preview=devices") {
                 showDevices = true
             }

@@ -81,6 +81,10 @@ final class SoundDesign {
             return
         }
         fire(cue, variant: variant, reason: "event")
+        #if DEBUG
+        let key = cue.key(variant)
+        Task { @MainActor in DemoScript.shared.record("sound", ["cue": key]) }
+        #endif
     }
 
     /// 调试试听：忽略设置开关，仍要求前台。
