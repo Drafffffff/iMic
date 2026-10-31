@@ -11380,7 +11380,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "For overseas accounts, use Alibaba Cloud’s international site and create a Key in Singapore."
+            "value": "Have an Alibaba Cloud China account? Create the Key in Beijing (cn-beijing) on the China site instead."
           }
         },
         "zh-Hans": {
