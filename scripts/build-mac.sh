@@ -3,6 +3,26 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 VERSION=$(cat "$ROOT/VERSION")
+BUILD=$(cat "$ROOT/MAC_BUILD")
+[[ "$BUILD" =~ ^[1-9][0-9]*$ ]] || { echo "MAC_BUILD 必须为正整数。" >&2; exit 1; }
+CONFIG=${IMIC_CONFIGURATION:-release}
+SWIFT_FLAGS=(-D IMIC_RELEASE)
+PUBLIC_KEY_FILE="$ROOT/mac/sparkle-public-key.txt"
+if [ "$CONFIG" = debug ]; then
+  SWIFT_FLAGS=(-D DEBUG)
+  BUILD=${IMIC_TEST_BUILD:-$BUILD}
+  [[ "$BUILD" =~ ^[1-9][0-9]*$ ]] || { echo "测试构建号必须为正整数。" >&2; exit 1; }
+  PUBLIC_KEY_FILE=${IMIC_TEST_PUBLIC_KEY_FILE:-$PUBLIC_KEY_FILE}
+elif [ "$CONFIG" != release ]; then
+  echo "IMIC_CONFIGURATION 只支持 release / debug。" >&2; exit 1
+fi
+PUBLIC_KEY=$(cat "$PUBLIC_KEY_FILE")
+AUTOMATIC_CHECKS=true
+if ! python3 "$ROOT/tools/appcast.py" key "$PUBLIC_KEY_FILE"; then
+  AUTOMATIC_CHECKS=false
+  echo "提示：更新公钥尚未配置；开发构建关闭自动更新检查。" >&2
+fi
+"$ROOT/scripts/fetch-sparkle.sh"
 if [ "${DEVELOPER_DIR+x}" != x ]; then
   DEVELOPER_DIR=""
   if [ -d /Applications/Xcode.app/Contents/Developer ]; then
@@ -35,7 +55,8 @@ swiftc -swift-version 5 -O "$ROOT/tools/icon.swift" -o "$TOOLS/icon-gen" -framew
 iconutil -c icns "$OUT/iMic.iconset" -o "$APP/Contents/Resources/iMic.icns"
 
 build_binary() {
-  swiftc -swift-version 5 -O -target "${1}-apple-macosx13.0" -sdk "$SDK" \
+  swiftc -swift-version 5 -O "${SWIFT_FLAGS[@]}" -F "$ROOT/build/vendor/Sparkle" -framework Sparkle \
+    -Xlinker -rpath -Xlinker @executable_path/../Frameworks -target "${1}-apple-macosx13.0" -sdk "$SDK" \
     -framework AppKit -framework Network -framework CryptoKit -framework ApplicationServices -framework Vision -framework ScreenCaptureKit -framework ServiceManagement \
     "$ROOT/shared/iMicLink.swift" \
     "$ROOT/shared/IMicLog.swift" \
@@ -57,6 +78,7 @@ build_binary() {
     "$ROOT/mac/SettingsValidation.swift" \
     "$ROOT/mac/SettingsField.swift" \
     "$ROOT/mac/SettingsWindow.swift" \
+    "$ROOT/mac/Updater.swift" \
     "$ROOT/mac/InputTarget.swift" \
     "$ROOT/mac/PolishPresentation.swift" \
     "$ROOT/mac/TextMarkerGeometry.swift" \
@@ -91,7 +113,14 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>CFBundleIconFile</key><string>iMic</string>
 <key>CFBundleExecutable</key><string>iMic</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleVersion</key><string>1</string>
+<key>CFBundleVersion</key><string>$BUILD</string>
+<key>SUFeedURL</key><string>https://drafffffff.github.io/iMic/appcast.xml</string>
+<key>SUPublicEDKey</key><string>$PUBLIC_KEY</string>
+<key>SUEnableAutomaticChecks</key><$AUTOMATIC_CHECKS/>
+<key>SUScheduledCheckInterval</key><integer>86400</integer>
+<key>SUAutomaticallyUpdate</key><false/>
+<key>SUEnableSystemProfiling</key><false/>
+<key>SUVerifyUpdateBeforeExtraction</key><true/>
 <key>CFBundleShortVersionString</key><string>$VERSION</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
@@ -103,6 +132,14 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>NSHumanReadableCopyright</key><string>iMic · 语音输入，少一步。</string>
 </dict></plist>
 PLIST
+if [ "$CONFIG" = debug ] && [ "${IMIC_UPDATE_TEST:-0}" = 1 ]; then
+  /usr/libexec/PlistBuddy -c 'Add :IMicUpdaterTest bool true' "$APP/Contents/Info.plist"
+fi
+mkdir -p "$APP/Contents/Frameworks"
+rm -rf "$APP/Contents/Frameworks/Sparkle.framework"
+ditto "$ROOT/build/vendor/Sparkle/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
+rm -rf "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices"
+rm "$APP/Contents/Frameworks/Sparkle.framework/XPCServices"
 mkdir -p "$APP/Contents/Resources/Legal"
 cp "$ROOT/LICENSE" "$ROOT/THIRD_PARTY_NOTICES.md" "$APP/Contents/Resources/Legal/"
 ditto "$ROOT/licenses" "$APP/Contents/Resources/Legal/licenses"
@@ -116,7 +153,7 @@ if [ -z "$IDENTITY" ]; then
   echo "可设置 IMIC_SIGNING_IDENTITY 指定签名证书。" >&2
   IDENTITY="-"
 fi
-codesign --force --sign "$IDENTITY" --identifier com.drafffffff.imic --entitlements "$ROOT/mac/iMic.entitlements" "$APP"
+"$ROOT/scripts/sign-mac.sh" "$APP" "$IDENTITY"
 codesign --verify --deep --strict "$APP"
 SIGNING_LABEL="$IDENTITY"
 if [ "$IDENTITY" = "-" ]; then SIGNING_LABEL=ad-hoc; fi

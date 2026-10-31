@@ -192,3 +192,25 @@ if let output = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("-
 check(fileFingerprint() == before, "Previews and unchanged external credentials must not touch credentials.json")
 check(UserDefaults.standard.object(forKey: "polishProvider") as? String == standardBefore, "Preview actions must not change real preferences")
 print("Mac settings: five toolbar panes, external key override, verified save, rejected draft, close sheet, immediate provider, phone/menu sync, silent launch/reopen, waiting/pairing, failure actions and preview isolation passed")
+
+settings.select(.general)
+let general = tabs.tabViewItems[0].viewController!.view
+let generalButtons = allViews(general).compactMap { $0 as? NSButton }
+check(generalButtons.contains { $0.title == "自动检查更新" }, "General has automatic update checks")
+check(generalButtons.contains { $0.title == "自动下载并安装更新" && $0.state == .off }, "Automatic installation defaults off")
+check(allViews(general).compactMap { $0 as? NSTextField }.contains { $0.stringValue == MacUpdater.version }, "General shows marketing and build versions")
+check(app.statusMenu.items.contains { $0.title == "检查更新…" && $0.action == #selector(AppDelegate.checkForUpdates) }, "Menu shares updater action")
+app.currentSession = nil; app.inserting = false; app.clearingInput = false
+check(app.updateIsIdle, "Idle permits update UI")
+app.currentSession = 42
+check(!app.updateIsIdle, "Recording / recognition / polish session defers update UI")
+app.currentSession = nil; app.inserting = true
+check(!app.updateIsIdle, "Typing defers update UI")
+app.inserting = false; app.clearingInput = true
+check(!app.updateIsIdle, "Clearing defers update UI")
+app.clearingInput = false
+SetupProgress.save(.key)
+check(!app.updateIsIdle, "Unfinished setup defers updates even when its window is closed")
+SetupProgress.clear()
+check(app.updateIsIdle, "Finishing setup resumes updates")
+print("Mac updater settings, menu and recording / typing / clearing / setup gates passed")

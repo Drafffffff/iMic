@@ -2,6 +2,7 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
+"$ROOT/scripts/fetch-sparkle.sh"
 WORK=$(mktemp -d /tmp/imic-settings-tests.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 python3 - "$ROOT" "$WORK" <<'PY'
@@ -17,6 +18,8 @@ PY
 SOURCES=()
 while IFS= read -r source; do SOURCES+=("$source"); done < "$WORK/sources.txt"
 xcrun swiftc -D DEBUG -swift-version 5 -framework AppKit -framework Network -framework CryptoKit \
+  -F "$ROOT/build/vendor/Sparkle" -framework Sparkle \
+  -Xlinker -rpath -Xlinker "$ROOT/build/vendor/Sparkle" \
   -framework ApplicationServices -framework Vision -framework ScreenCaptureKit -framework ServiceManagement \
   "${SOURCES[@]}" "$ROOT/tests/MacSettings/main.swift" -o "$WORK/settings-tests"
 "$WORK/settings-tests" --ui-preview=settings-external-key "$@"
