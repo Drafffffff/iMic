@@ -201,6 +201,8 @@ check(generalButtons.contains { $0.title == "自动下载并安装更新" && $0.
 check(allViews(general).compactMap { $0 as? NSTextField }.contains { $0.stringValue == MacUpdater.version }, "General shows marketing and build versions")
 check(app.statusMenu.items.contains { $0.title == "检查更新…" && $0.action == #selector(AppDelegate.checkForUpdates) }, "Menu shares updater action")
 app.currentSession = nil; app.inserting = false; app.clearingInput = false
+check(!app.updateIsIdle, "The native wizard above was closed unfinished; updates must remain deferred")
+SetupProgress.clear() // Finish the separate wizard fixture before checking other idle states.
 check(app.updateIsIdle, "Idle permits update UI")
 app.currentSession = 42
 check(!app.updateIsIdle, "Recording / recognition / polish session defers update UI")
