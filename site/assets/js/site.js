@@ -8,6 +8,74 @@ const SHARE_URL = "https://drafffffff.github.io/iMic/?from=ios#download";
   "use strict";
   const query = new URLSearchParams(location.search);
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  // Static, complete HTML is also the no-JS / reduced-motion fallback.
+  const demo = document.querySelector(".field-demo");
+  if (demo && "IntersectionObserver" in window) {
+    const fields = [...demo.querySelectorAll(".field-text")];
+    const toggle = document.querySelector("[data-demo-toggle]");
+    let timer, inView = false, paused = false, index = 0, count = 0, complete = false;
+    function stop() {
+      clearTimeout(timer);
+      timer = null;
+      demo.dataset.state = "paused";
+    }
+    function reset() {
+      fields.forEach((field) => { field.textContent = ""; });
+      index = 0; count = 0; complete = false;
+      demo.dataset.phase = "typing";
+    }
+    function step() {
+      timer = null;
+      if (complete) reset();
+      const field = fields[index];
+      fields.forEach((item, i) => item.closest(".field-scene").classList.toggle("is-active", i === index));
+      field.textContent = [...field.dataset.text].slice(0, ++count).join("");
+      let wait = 65;
+      if (count >= [...field.dataset.text].length) {
+        count = 0;
+        index++;
+        wait = 450;
+        if (index === fields.length) {
+          complete = true;
+          demo.dataset.phase = "complete";
+          field.closest(".field-scene").classList.remove("is-active");
+          wait = 2600;
+        }
+      }
+      timer = setTimeout(step, wait);
+    }
+    function sync() {
+      stop();
+      toggle.hidden = reducedMotion.matches;
+      if (reducedMotion.matches) {
+        fields.forEach((field) => {
+          field.textContent = field.dataset.text;
+          field.closest(".field-scene").classList.remove("is-active");
+        });
+        complete = true;
+        demo.dataset.phase = "complete";
+        demo.dataset.state = "static";
+      } else if (inView && !document.hidden && !paused) {
+        demo.dataset.state = "running";
+        timer = setTimeout(step, 65);
+      }
+    }
+    // Pause the clock entirely outside the viewport or in a background tab.
+    new IntersectionObserver(([entry]) => {
+      inView = entry.isIntersecting;
+      sync();
+    }).observe(demo);
+    toggle.addEventListener("click", () => {
+      paused = !paused;
+      toggle.setAttribute("aria-pressed", String(paused));
+      toggle.textContent = paused ? "播放示意" : "暂停示意";
+      sync();
+    });
+    reducedMotion.addEventListener("change", sync);
+    document.addEventListener("visibilitychange", sync);
+    if (!reducedMotion.matches) reset();
+    sync();
+  }
   const card = document.querySelector("#mac-download");
   const meta = document.querySelector("#release-meta");
   // Keep user-facing strings in the HTML, including dynamic templates.

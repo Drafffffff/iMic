@@ -1,0 +1,24 @@
+HTML + CSS + JS: 55,972 bytes / 150,000 bytes
+Hero poster WebP: 22,756 bytes / 200,000 bytes
+First-screen envelope (no video): 650,998 bytes / 1,000,000 bytes
+site total: 5,254,719 bytes / 15,000,000 bytes
+Video hero-mobile.mp4: 9.63s · 60fps · 683,352 bytes / 1,500,000 bytes · H.264 · faststart · silent
+Video hero.mp4: 9.63s · 60fps · 930,238 bytes / 3,000,000 bytes · H.264 · faststart · silent
+Video polish.mp4: 8.70s · 60fps · 602,863 bytes / 2,500,000 bytes · H.264 · faststart · silent
+Video sound.mp4: 11.07s · 60fps · 722,837 bytes / 2,500,000 bytes · H.264 · faststart · AAC audio
+Video string.mp4: 12.48s · 60fps · 1,108,116 bytes / 2,500,000 bytes · H.264 · faststart · silent
+
+External links (navigation/API only):
+  https://api.github.com/repos/Drafffffff/iMic/releases/latest
+  https://bailian.console.aliyun.com/?tab=model#/api-key
+  https://drafffffff.github.io/iMic/
+  https://drafffffff.github.io/iMic/?from=ios#download
+  https://github.com/Drafffffff/iMic
+  https://github.com/Drafffffff/iMic/blob/codex/ui-phosphor-wireframe/LICENSE
+  https://github.com/Drafffffff/iMic/blob/codex/ui-phosphor-wireframe/docs/PRIVACY.md
+  https://github.com/Drafffffff/iMic/issues
+  https://github.com/Drafffffff/iMic/releases
+  https://github.com/Drafffffff/iMic/releases/latest
+  mailto:i0.0ia@qq.com
+
+PASS: 2 HTML pages, 39 files, local references, anchors, accessibility attributes and budgets.

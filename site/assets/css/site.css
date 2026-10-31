@@ -47,7 +47,8 @@ p + p { margin-top: 14px; }
 .status-dot { width: 5px; height: 5px; background: var(--orange); display: inline-block; }
 .accent { color: var(--orange); }
 .intro { max-width: 32em; font-size: 18px; line-height: 1.85; color: #c7c4bb; margin-top: 24px; }
-.desktop-break { display: none; }
+.hero-reach { font-size: clamp(17px, 1.5vw, 21px); line-height: 1.6; margin-top: 22px; }
+.hero-reach + .intro { margin-top: 12px; font-size: 16px; }
 .hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 18px 22px; margin-top: 28px; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; border: 1px solid transparent; padding: 11px 19px; text-decoration: none; font-size: 14px; font-weight: 600; line-height: 1.5; border-radius: 2px; }
 .primary { background: var(--orange); color: #160b05; }
@@ -91,14 +92,36 @@ p + p { margin-top: 14px; }
 .after { font-size: 15px; }
 .fine { font-size: 12px; line-height: 1.8; color: var(--muted); }
 .fine a { color: var(--ivory); }
-#anywhere { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: start; gap: 80px; }
-#anywhere .section-heading { margin-bottom: 20px; }
-#anywhere h2 { font-size: clamp(28px, 2.7vw, 40px); }
-#anywhere .section-heading p { font-size: 14px; max-width: 36em; margin-top: 12px; }
-.app-list { list-style: none; display: flex; flex-wrap: wrap; gap: 2px 24px; margin: 0; padding: 0; font: 16px/1.8 var(--body); }
-.two-notes { display: grid; gap: 20px; color: var(--muted); font-size: 14px; padding-top: 34px; }
-.two-notes strong { display: block; color: var(--ivory); font-size: 17px; font-weight: 500; margin-bottom: 8px; }
+#anywhere .section-heading { display: grid; grid-template-columns: 1.3fr 1fr; align-items: end; gap: 32px; margin-bottom: 26px; }
+#anywhere h2 { font-size: clamp(28px, 2.7vw, 40px); text-wrap: balance; }
+#anywhere .section-heading p { margin: 0; font-size: 14px; }
+.field-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 28px; }
+.field-scene { min-width: 0; }
+.field-window { height: 100px; position: relative; border: 1px solid var(--line); padding: 15px 18px; contain: layout paint; }
+.field-scene.is-active .field-window { border-color: var(--orange); }
+.field-entry { font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; }
+.field-text::after { content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 3px; vertical-align: -.12em; background: var(--orange); opacity: 0; }
+.field-demo[data-state="running"] .is-active .field-text::after { animation: field-caret .8s step-end infinite; }
+@keyframes field-caret { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+.field-caption { display: flex; gap: 12px; align-items: center; margin-top: 8px; color: var(--muted); font-size: 12px; }
+.field-label { display: block; flex-shrink: 0; }
+.field-chrome { color: var(--muted); font-size: 10px; border-bottom: 1px solid var(--line); padding-bottom: 5px; margin-bottom: 8px; }
+.field-chat .field-window { border-radius: 12px 12px 12px 0; }
+.chat-echo { width: 36%; height: 9px; background: var(--line); margin-bottom: 12px; }
+.field-docs .field-window { border-left: 10px solid var(--line); }
+.doc-rule { width: 40%; border-top: 2px solid var(--muted); margin-bottom: 12px; }
+.field-search .field-window { display: flex; align-items: center; gap: 10px; }
+.search-mark { color: var(--muted); font-size: 25px; }
+.field-code .field-window { padding-left: 42px; }
+.code-gutter { position: absolute; left: 12px; top: 15px; color: var(--muted); font: 10px/2.3 var(--mono); }
+.code-comment, .terminal-prompt { color: var(--muted); }
+.field-terminal .field-entry { font-family: var(--mono); }
+.demo-caption { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-top: 12px; }
+.demo-toggle { flex-shrink: 0; background: none; color: var(--ivory); border: 0; border-bottom: 1px solid var(--muted); padding: 0; font-size: 12px; }
+.two-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; color: var(--muted); font-size: 13px; margin-top: 24px; }
+.two-notes strong { color: var(--ivory); font-size: 15px; font-weight: 500; margin-right: 8px; }
 .two-notes p + p { margin-top: 0; }
+.tested-apps { margin-top: 16px; }
 .privacy-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 44px; margin-bottom: 24px; }
 .privacy-list .index { margin-bottom: 14px; }
 .privacy-list h3 { font-size: 20px; margin-bottom: 12px; }
@@ -146,7 +169,6 @@ details p { max-width: 36em; font-size: 14px; color: var(--muted); padding-top: 
   .examples { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 24px; }
   .example { grid-column: span 2; }
   .example:nth-child(n+4) { grid-column: span 3; }
-  #anywhere { gap: 40px; }
   .privacy-list, .steps { gap: 28px; }
 }
 @media (min-width: 760px) and (max-width: 999px) {
@@ -155,14 +177,13 @@ details p { max-width: 36em; font-size: 14px; color: var(--muted); padding-top: 
   .intro { font-size: 16px; }
   .hero-actions { align-items: flex-start; flex-direction: column; }
   .feature, .feature:nth-of-type(even) { gap: 30px; }
-  #anywhere { grid-template-columns: 1fr 1fr; }
   .card-top { align-items: flex-start; flex-direction: column; gap: 6px; }
   .faq { gap: 32px; }
 }
 @media (max-width: 759px) {
   html { scroll-padding-top: 20px; }
   .masthead { height: 76px; }
-  .masthead nav { gap: 18px; font-size: 12px; }
+  .masthead nav { gap: clamp(10px, 3.5vw, 18px); font-size: 12px; }
   .wordmark { height: 23px; }
   #modes .section-heading { display: block; }
   #modes .section-heading p { margin-top: 16px; }
@@ -196,9 +217,18 @@ details p { max-width: 36em; font-size: 14px; color: var(--muted); padding-top: 
 #modes .section-heading .pixel { grid-column: 1/-1; }
 #modes .section-heading p { max-width: 36em; margin: 0; }
 .section-note { margin-top: -10px; }
-  #anywhere { grid-template-columns: 1fr; gap: 26px; }
+  #anywhere .section-heading { grid-template-columns: 1fr; gap: 16px; }
+  .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 14px; }
+  .field-window { height: 144px; padding: 12px; }
+  .field-entry { font-size: 14px; }
+  .field-caption { gap: 8px; flex-wrap: wrap; }
+  .field-code .field-window { padding-left: 30px; }
+  .code-gutter { left: 6px; top: 12px; }
+  .field-chrome { font-size: 10px; }
+  .demo-caption { align-items: flex-start; }
+  .two-notes { grid-template-columns: 1fr; }
   #anywhere h2 { font-size: 29px; }
-  .two-notes { padding-top: 0; gap: 22px; }
+  .two-notes { gap: 14px; }
   .privacy-list, .steps, .downloads, .faq { grid-template-columns: 1fr; gap: 28px; }
   .privacy-list .index { margin-bottom: 8px; }
   .steps { margin-bottom: 30px; }
