@@ -4,7 +4,7 @@
 
 **一只手机，接管所有输入。**
 
-多台 Mac 随时切换，任意输入框按住就说。给 Agent 下指令，说完下拉就发送。
+多台 Mac 随时切换，任意输入框按住就说。给 Agent 下指令，下拉弹射想法。
 
 [English](README.en.md) · [官网](https://drafffffff.github.io/iMic/) · [下载 Mac 版](https://github.com/Drafffffff/iMic/releases/latest) · [反馈](https://github.com/Drafffffff/iMic/issues)
 

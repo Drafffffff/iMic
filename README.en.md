@@ -4,7 +4,7 @@
 
 **One phone. Every input.**
 
-Switch Macs anytime and speak into any text field. Tell your agent what to do, then pull down to send.
+Switch Macs anytime and speak into any text field. Tell your agent what to do, then pull down to launch the idea.
 
 [中文](README.md) · [Website](https://drafffffff.github.io/iMic/en/) · [Get the Mac app](https://github.com/Drafffffff/iMic/releases/latest) · [Feedback](https://github.com/Drafffffff/iMic/issues)
 
