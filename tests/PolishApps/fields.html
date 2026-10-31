@@ -15,6 +15,10 @@
   .code { font: 14px Menlo, monospace; white-space: pre; overflow-x: auto; }
   /* Chat composer look (dark, compact) kept inside the viewport: a fixed bottom
      position can fall below the display edge when the window is taller than it. */
+  textarea.growing { min-height: 48px; height: 48px; overflow-y: hidden; }
+  textarea.grow-bottom, textarea.grow-animated, textarea.grow-max { position: fixed; left: 40px; bottom: 40px; }
+  textarea.grow-animated { transition: height 160ms ease; }
+  textarea.grow-max { overflow-y: auto; }
   .chat { margin-top: 120px; border-radius: 14px; }
 </style>
 </head>
@@ -34,7 +38,7 @@ const slot = document.getElementById("slot");
 let field;
 if (kind === "input") {
   field = document.createElement("input"); field.className = "field"; field.value = pre + post;
-} else if (kind === "textarea" || kind === "code") {
+} else if (kind === "textarea" || kind === "code" || kind.startsWith("grow-")) {
   field = document.createElement("textarea"); field.className = "field" + (kind === "code" ? " code" : "");
   field.value = pre + post;
 } else {
@@ -51,6 +55,21 @@ if (kind === "input") {
   }
 }
 slot.appendChild(field);
+if (kind.startsWith("grow-")) {
+  field.classList.add("growing", kind);
+  const measure = field.cloneNode();
+  measure.removeAttribute("id"); measure.tabIndex = -1; measure.setAttribute("aria-hidden", "true");
+  Object.assign(measure.style, { position: "fixed", left: "-10000px", bottom: "auto", top: "0", visibility: "hidden",
+    height: "0", minHeight: "0", maxHeight: "none", transition: "none" });
+  slot.appendChild(measure);
+  function resize() {
+    measure.value = field.value;
+    const max = kind === "grow-max" ? parseFloat(getComputedStyle(field).lineHeight) * 4 + 22 : 500;
+    field.style.height = Math.max(48, Math.min(max, measure.scrollHeight + 2)) + "px";
+    if (kind === "grow-max") field.scrollTop = field.scrollHeight;
+  }
+  field.addEventListener("input", resize); resize();
+}
 let placed = false;
 function placeCaret() {
   if (placed) return; placed = true;
