@@ -338,3 +338,7 @@ html.is-signal-drop body::before { background: repeating-linear-gradient(to bott
 html.is-signal-drop main { filter: saturate(1.6) contrast(1.15); }
 
 @media (prefers-reduced-motion: reduce) { .glitch-layer, .signal-drop { display: none !important; } }
+
+/* Selection: the whole selection lights up as a solid ivory block, text included, with a
+   soft glow, like the canvas-lit headline. Copying is unaffected. */
+::selection { background: var(--ivory); color: var(--ivory); text-shadow: 0 0 10px rgba(242, 240, 230, .9), 0 0 26px rgba(242, 240, 230, .55); }
