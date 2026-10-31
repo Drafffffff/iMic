@@ -1146,15 +1146,15 @@ final class StringMotionStore: ObservableObject {
         if abs(pull) < StringSpring.threshold(height: height) {
             next = nil
         } else if pull > 0 {
-            next = returnEnabled ? "松手回弹 · 过中线发射文字" : "发射已在 Mac 关闭"
+            next = returnEnabled ? L10n.text("Release to spring back · Launch text at the center line") : L10n.text("Text launch is disabled on your Mac")
         } else if !deleteEnabled {
-            next = "删除已在 Mac 关闭"
+            next = L10n.text("Delete is disabled on your Mac")
         } else if deleteHold.repeating {
-            next = "正在连续删除 · 下移或松手停止"
+            next = L10n.text("Deleting continuously · Move down or release to stop")
         } else if deleteHold.armedAt != nil {
-            next = "松手删除一字 · 保持上拉连续删除"
+            next = L10n.text("Release to delete one character · Keep pulling up to repeat")
         } else {
-            next = "连续删除已暂停 · 继续上拉可恢复"
+            next = L10n.text("Continuous delete paused · Pull up further to resume")
         }
         if hint != next { hint = next }
     }

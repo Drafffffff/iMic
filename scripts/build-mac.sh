@@ -49,6 +49,9 @@ esac
 
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$TOOLS"
 
+python3 "$ROOT/tools/generate-l10n.py"
+cp -R "$ROOT/mac/Resources/"*.lproj "$APP/Contents/Resources/"
+
 # App icon
 swiftc -swift-version 5 -O "$ROOT/tools/icon.swift" -o "$TOOLS/icon-gen" -framework AppKit
 "$TOOLS/icon-gen" mac "$OUT/iMic.iconset"
@@ -58,7 +61,7 @@ build_binary() {
   swiftc -swift-version 5 -O "${SWIFT_FLAGS[@]}" -F "$ROOT/build/vendor/Sparkle" -framework Sparkle \
     -Xlinker -rpath -Xlinker @executable_path/../Frameworks -target "${1}-apple-macosx13.0" -sdk "$SDK" \
     -framework AppKit -framework Network -framework CryptoKit -framework ApplicationServices -framework Vision -framework ScreenCaptureKit -framework ServiceManagement \
-    "$ROOT/shared/iMicLink.swift" \
+    "$ROOT/shared/Localization.swift" "$ROOT/shared/LinkStatusText.swift" "$ROOT/shared/iMicLink.swift" \
     "$ROOT/shared/IMicLog.swift" \
     "$ROOT/shared/DeepSeekPolicy.swift" \
     "$ROOT/shared/TextRevision.swift" \
@@ -108,6 +111,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>com.drafffffff.imic</string>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string></array>
 <key>CFBundleName</key><string>iMic</string>
 <key>CFBundleDisplayName</key><string>iMic</string>
 <key>CFBundleIconFile</key><string>iMic</string>
@@ -125,11 +130,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
-<key>NSLocalNetworkUsageDescription</key><string>iMic 通过本地网络或点对点链路与你的 iPhone 建立加密语音连接。</string>
-<key>NSBluetoothAlwaysUsageDescription</key><string>iMic 在局域网不可用时通过蓝牙点对点连接 iPhone。</string>
-<key>NSScreenCaptureUsageDescription</key><string>iMic 仅在本机识别目标输入框的文字位置，用于润色完成时的扫光效果，不保存或上传截图。</string>
+<key>NSLocalNetworkUsageDescription</key><string>iMic connects to your iPhone over an encrypted local network or peer-to-peer voice link.</string>
+<key>NSBluetoothAlwaysUsageDescription</key><string>iMic connects to your iPhone over Bluetooth when the local network is unavailable.</string>
+<key>NSScreenCaptureUsageDescription</key><string>iMic locates text in the target field on this Mac for the polish highlight. Screenshots are never saved or uploaded.</string>
 <key>NSBonjourServices</key><array><string>_imic._tcp</string></array>
-<key>NSHumanReadableCopyright</key><string>iMic · 语音输入，少一步。</string>
+<key>NSHumanReadableCopyright</key><string>iMic · Voice input, one step less.</string>
 </dict></plist>
 PLIST
 if [ "$CONFIG" = debug ] && [ "${IMIC_UPDATE_TEST:-0}" = 1 ]; then

@@ -53,7 +53,8 @@ for path in sorted(root.rglob('*.html')):
     page = Page(path)
     documents[path] = page
     require(page.h1 == 1, f'{path.name}: expected exactly one h1, got {page.h1}')
-    require(page.lang == 'zh-Hans', f'{path.name}: lang must be zh-Hans')
+    expected_language = 'en' if path.parent.name == 'en' else 'zh-Hans'
+    require(page.lang == expected_language, f'{path}: lang must be {expected_language}')
 
 def resolve(path, url):
     p = unquote(urlsplit(url).path)
@@ -70,7 +71,7 @@ for path, url, tag, key, a in refs:
     if parsed.scheme or parsed.netloc:
         require(parsed.scheme in ('https', 'mailto'), f'{path.name}: unsupported URL {url}')
         external.add(url)
-        asset = tag in ('script', 'img', 'video', 'source') or (tag == 'link' and a.get('rel') not in ('canonical',))
+        asset = tag in ('script', 'img', 'video', 'source') or (tag == 'link' and a.get('rel') not in ('canonical', 'alternate'))
         require(not asset, f'{path.name}: external resource forbidden: {url}')
         continue
     target = resolve(path, url)
@@ -118,6 +119,22 @@ require('brand-dot' not in index, 'Duplicate brand dot')
 require(index.count('class="feature"') == 3, 'FEEL must contain three features')
 require('新安装默认开启实时预览' in index and '可能重复或误删' in index and '无法监视用户接管' in index, 'Live preview risk disclosure missing')
 require('href="https://github.com/Drafffffff/iMic/releases/latest"' in index, 'no-JS release fallback missing')
+
+# Bilingual pages share every asset and section, with explicit language navigation.
+english = (root/'en/index.html').read_text()
+for filename, source, language in [('index.html', index, 'zh-Hans'), ('en/index.html', english, 'en')]:
+    for lang in ['zh-Hans','en','x-default']:
+        require(f'hreflang="{lang}"' in source, f'{filename}: missing alternate {lang}')
+    require('class="language-switch"' in source, f'{filename}: language switch missing')
+    for value in ['og:title','og:description','og:url','twitter:card','data-template','data-demo-toggle']:
+        require(value in source, f'{filename}: missing {value}')
+    require('?from=ios#download' in source, f'{filename}: missing iPhone deep link')
+require(re.findall(r'<section\b[^>]*\bid="([^"]+)"', english) == re.findall(r'<section\b[^>]*\bid="([^"]+)"',index), 'English section structure differs')
+require(not re.search('[\u3400-\u9fff]', re.sub(r'>中文<', '>ZH<', english)), 'Untranslated Chinese in English page')
+require('/ap-southeast-1/model/settings/api-key' in english and 'Singapore' in english and 'Free Quota Only' in english, 'International Key guidance missing')
+require('may duplicate or delete text by mistake' in english and 'refuse clearing' in english and 'does not type automatically' in english, 'English risk warnings missing')
+require('id="language-banner"' in index, 'English suggestion missing')
+require(not (root/'en/assets').exists(), 'English must share assets')
 
 files = [p for p in root.rglob('*') if p.is_file()]
 code = sum(p.stat().st_size for p in files if p.suffix in ('.html','.css','.js'))

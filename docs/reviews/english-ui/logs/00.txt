@@ -1,0 +1,211 @@
+Building for debugging...
+[Starting]
+[1 / 5]
+[2 / 6] iMicLink
+[3 / 7] iMicLink
+[8 / 12] iMicLink
+[11 / 14] iMicLinkTests-product
+[13 / 16] iMicLinkTests-product
+[15 / 16] iMicLinkTests-product
+[20 / 20] iMicLink-product
+Build complete! (3.12秒)
+Test Suite 'All tests' started at 2026-11-01 00:06:55.538.
+Test Suite 'iMicLinkTests.xctest' started at 2026-11-01 00:06:55.551.
+Test Suite 'AudioSessionBoundsTests' started at 2026-11-01 00:06:55.551.
+Test Case '-[iMicLinkTests.AudioSessionBoundsTests testLongSessionAndPartialFinalFrameAreAccepted]' started.
+Test Case '-[iMicLinkTests.AudioSessionBoundsTests testLongSessionAndPartialFinalFrameAreAccepted]' passed (0.005 seconds).
+Test Case '-[iMicLinkTests.AudioSessionBoundsTests testMismatchedAndOverflowingEndCountsAreRejected]' started.
+Test Case '-[iMicLinkTests.AudioSessionBoundsTests testMismatchedAndOverflowingEndCountsAreRejected]' passed (0.000 seconds).
+Test Suite 'AudioSessionBoundsTests' passed at 2026-11-01 00:06:55.556.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.005 (0.005) seconds
+Test Suite 'DeepSeekPolicyTests' started at 2026-11-01 00:06:55.556.
+Test Case '-[iMicLinkTests.DeepSeekPolicyTests testKeepsQuestionAndRequest]' started.
+Test Case '-[iMicLinkTests.DeepSeekPolicyTests testKeepsQuestionAndRequest]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.DeepSeekPolicyTests testRejectsAnswerToQuestion]' started.
+Test Case '-[iMicLinkTests.DeepSeekPolicyTests testRejectsAnswerToQuestion]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.DeepSeekPolicyTests testRejectsOverCompression]' started.
+Test Case '-[iMicLinkTests.DeepSeekPolicyTests testRejectsOverCompression]' passed (0.000 seconds).
+Test Suite 'DeepSeekPolicyTests' passed at 2026-11-01 00:06:55.557.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'GestureControlTests' started at 2026-11-01 00:06:55.557.
+Test Case '-[iMicLinkTests.GestureControlTests testClearContactDissolvesBeforeContinuousSpringReturn]' started.
+Test Case '-[iMicLinkTests.GestureControlTests testClearContactDissolvesBeforeContinuousSpringReturn]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.GestureControlTests testFullScreenStretchKeepsInitialDeleteFeelAndReachesZone]' started.
+Test Case '-[iMicLinkTests.GestureControlTests testFullScreenStretchKeepsInitialDeleteFeelAndReachesZone]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.GestureControlTests testGestureMessagesRoundTripAndRejectMalformedState]' started.
+Test Case '-[iMicLinkTests.GestureControlTests testGestureMessagesRoundTripAndRejectMalformedState]' passed (0.002 seconds).
+Test Case '-[iMicLinkTests.GestureControlTests testPipelineCompletionAndStaleLease]' started.
+Test Case '-[iMicLinkTests.GestureControlTests testPipelineCompletionAndStaleLease]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.GestureControlTests testPullRatchetConsumesNewTeethWithoutJitterOrCatchUpBursts]' started.
+Test Case '-[iMicLinkTests.GestureControlTests testPullRatchetConsumesNewTeethWithoutJitterOrCatchUpBursts]' passed (0.000 seconds).
+Test Suite 'GestureControlTests' passed at 2026-11-01 00:06:55.562.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Suite 'LinkCryptoTests' started at 2026-11-01 00:06:55.562.
+Test Case '-[iMicLinkTests.LinkCryptoTests testDifferentCodesCannotOpen]' started.
+Test Case '-[iMicLinkTests.LinkCryptoTests testDifferentCodesCannotOpen]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.LinkCryptoTests testPairingCodeAcceptsOnlyASCIIDigits]' started.
+Test Case '-[iMicLinkTests.LinkCryptoTests testPairingCodeAcceptsOnlyASCIIDigits]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.LinkCryptoTests testPairingCodeIsAlwaysSixDigits]' started.
+Test Case '-[iMicLinkTests.LinkCryptoTests testPairingCodeIsAlwaysSixDigits]' passed (0.002 seconds).
+Test Case '-[iMicLinkTests.LinkCryptoTests testPairingDerivesTheSameKeyOnBothSides]' started.
+Test Case '-[iMicLinkTests.LinkCryptoTests testPairingDerivesTheSameKeyOnBothSides]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.LinkCryptoTests testPairingThrottleCodeRotationKeepsLockButDropsFailures]' started.
+Test Case '-[iMicLinkTests.LinkCryptoTests testPairingThrottleCodeRotationKeepsLockButDropsFailures]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.LinkCryptoTests testPairingThrottleLocksAfterLimitAndEscalates]' started.
+Test Case '-[iMicLinkTests.LinkCryptoTests testPairingThrottleLocksAfterLimitAndEscalates]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.LinkCryptoTests testSessionUsesStoredToken]' started.
+Test Case '-[iMicLinkTests.LinkCryptoTests testSessionUsesStoredToken]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.LinkCryptoTests testTamperingIsRejected]' started.
+Test Case '-[iMicLinkTests.LinkCryptoTests testTamperingIsRejected]' passed (0.000 seconds).
+Test Suite 'LinkCryptoTests' passed at 2026-11-01 00:06:55.569.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.006 (0.007) seconds
+Test Suite 'LinkDisplayCodeCoverageTests' started at 2026-11-01 00:06:55.569.
+Test Case '-[iMicLinkTests.LinkDisplayCodeCoverageTests testEveryKnownCodeKeepsLegacyMessageAndRoundTrips]' started.
+Test Case '-[iMicLinkTests.LinkDisplayCodeCoverageTests testEveryKnownCodeKeepsLegacyMessageAndRoundTrips]' passed (0.009 seconds).
+Test Suite 'LinkDisplayCodeCoverageTests' passed at 2026-11-01 00:06:55.578.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.009 (0.009) seconds
+Test Suite 'LinkPolishPreferencesTests' started at 2026-11-01 00:06:55.578.
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testAdvertisedCapabilityRequiresCompletePolishState]' started.
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testAdvertisedCapabilityRequiresCompletePolishState]' passed (0.002 seconds).
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testInvalidPreferencesAreRejectedInCommandsAndState]' started.
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testInvalidPreferencesAreRejectedInCommandsAndState]' passed (0.008 seconds).
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testLegacySettingsRemainUnsupportedWithoutPolishState]' started.
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testLegacySettingsRemainUnsupportedWithoutPolishState]' passed (0.030 seconds).
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testPolishCommandRequiresEveryPreferenceField]' started.
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testPolishCommandRequiresEveryPreferenceField]' passed (0.008 seconds).
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testPolishOutputIsOptionalAndForwardCompatible]' started.
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testPolishOutputIsOptionalAndForwardCompatible]' passed (0.002 seconds).
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testPolishSettingsRoundTripCarriesOutputAndPhoneFeatures]' started.
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testPolishSettingsRoundTripCarriesOutputAndPhoneFeatures]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testSaveConfirmationRequiresCapabilityAndCompleteState]' started.
+Test Case '-[iMicLinkTests.LinkPolishPreferencesTests testSaveConfirmationRequiresCapabilityAndCompleteState]' passed (0.001 seconds).
+Test Suite 'LinkPolishPreferencesTests' passed at 2026-11-01 00:06:55.632.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.051 (0.055) seconds
+Test Suite 'LinkWireTests' started at 2026-11-01 00:06:55.632.
+Test Case '-[iMicLinkTests.LinkWireTests testAudioPacketRejectsShortPayload]' started.
+Test Case '-[iMicLinkTests.LinkWireTests testAudioPacketRejectsShortPayload]' passed (0.003 seconds).
+Test Case '-[iMicLinkTests.LinkWireTests testFramesSurviveArbitrarySplits]' started.
+Test Case '-[iMicLinkTests.LinkWireTests testFramesSurviveArbitrarySplits]' passed (0.015 seconds).
+Test Case '-[iMicLinkTests.LinkWireTests testMessageUsesSnakeCase]' started.
+Test Case '-[iMicLinkTests.LinkWireTests testMessageUsesSnakeCase]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.LinkWireTests testMultipleFramesInOneRead]' started.
+Test Case '-[iMicLinkTests.LinkWireTests testMultipleFramesInOneRead]' passed (0.006 seconds).
+Test Case '-[iMicLinkTests.LinkWireTests testRejectsOversizedFrame]' started.
+Test Case '-[iMicLinkTests.LinkWireTests testRejectsOversizedFrame]' passed (0.007 seconds).
+Test Case '-[iMicLinkTests.LinkWireTests testRejectsUnknownKind]' started.
+Test Case '-[iMicLinkTests.LinkWireTests testRejectsUnknownKind]' passed (0.007 seconds).
+Test Suite 'LinkWireTests' passed at 2026-11-01 00:06:55.672.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.039 (0.040) seconds
+Test Suite 'LocalizationProtocolTests' started at 2026-11-01 00:06:55.675.
+Test Case '-[iMicLinkTests.LocalizationProtocolTests testClearCodeRoundTripAndLegacyFallback]' started.
+Test Case '-[iMicLinkTests.LocalizationProtocolTests testClearCodeRoundTripAndLegacyFallback]' passed (0.007 seconds).
+Test Case '-[iMicLinkTests.LocalizationProtocolTests testFirstLanguagePolicyIncludesAllChineseVariantsAndEnglishFallback]' started.
+Test Case '-[iMicLinkTests.LocalizationProtocolTests testFirstLanguagePolicyIncludesAllChineseVariantsAndEnglishFallback]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.LocalizationProtocolTests testReceiverCanChooseLanguageIndependentlyAndMissingChineseFallsBackToEnglish]' started.
+Test Case '-[iMicLinkTests.LocalizationProtocolTests testReceiverCanChooseLanguageIndependentlyAndMissingChineseFallsBackToEnglish]' passed (0.046 seconds).
+Test Suite 'LocalizationProtocolTests' passed at 2026-11-01 00:06:55.729.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.053 (0.054) seconds
+Test Suite 'MacSelectionTests' started at 2026-11-01 00:06:55.729.
+Test Case '-[iMicLinkTests.MacSelectionTests testAnyOfflinePairingPreventsAutomaticPairingOfStranger]' started.
+Test Case '-[iMicLinkTests.MacSelectionTests testAnyOfflinePairingPreventsAutomaticPairingOfStranger]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.MacSelectionTests testBLEAllowlistContainsOnlyPairedMacsAndUsesSamePriority]' started.
+Test Case '-[iMicLinkTests.MacSelectionTests testBLEAllowlistContainsOnlyPairedMacsAndUsesSamePriority]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.MacSelectionTests testExpiredGraceUsesMostRecentlyAuthenticatedMac]' started.
+Test Case '-[iMicLinkTests.MacSelectionTests testExpiredGraceUsesMostRecentlyAuthenticatedMac]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.MacSelectionTests testFailedTargetsAreSkippedWithinRound]' started.
+Test Case '-[iMicLinkTests.MacSelectionTests testFailedTargetsAreSkippedWithinRound]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.MacSelectionTests testFirstInstallConnectsOnlySingleDiscovery]' started.
+Test Case '-[iMicLinkTests.MacSelectionTests testFirstInstallConnectsOnlySingleDiscovery]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.MacSelectionTests testManualSelectionNeverFallsBack]' started.
+Test Case '-[iMicLinkTests.MacSelectionTests testManualSelectionNeverFallsBack]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.MacSelectionTests testMissingOrEqualTimestampsHaveStableOrder]' started.
+Test Case '-[iMicLinkTests.MacSelectionTests testMissingOrEqualTimestampsHaveStableOrder]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.MacSelectionTests testNoPreferredDoesNotWait]' started.
+Test Case '-[iMicLinkTests.MacSelectionTests testNoPreferredDoesNotWait]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.MacSelectionTests testOfflinePreferredWaitsForGrace]' started.
+Test Case '-[iMicLinkTests.MacSelectionTests testOfflinePreferredWaitsForGrace]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.MacSelectionTests testPreferredPairedMacWinsBeforeGraceExpires]' started.
+Test Case '-[iMicLinkTests.MacSelectionTests testPreferredPairedMacWinsBeforeGraceExpires]' passed (0.002 seconds).
+Test Case '-[iMicLinkTests.MacSelectionTests testUnpairedPreferredDoesNotDelayPairedFallback]' started.
+Test Case '-[iMicLinkTests.MacSelectionTests testUnpairedPreferredDoesNotDelayPairedFallback]' passed (0.002 seconds).
+Test Suite 'MacSelectionTests' passed at 2026-11-01 00:06:55.740.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.009 (0.011) seconds
+Test Suite 'OnboardingPolicyTests' started at 2026-11-01 00:06:55.740.
+Test Case '-[iMicLinkTests.OnboardingPolicyTests testCompletedAndFutureVersions]' started.
+Test Case '-[iMicLinkTests.OnboardingPolicyTests testCompletedAndFutureVersions]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.OnboardingPolicyTests testEveryStepResumesEvenAfterPairing]' started.
+Test Case '-[iMicLinkTests.OnboardingPolicyTests testEveryStepResumesEvenAfterPairing]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.OnboardingPolicyTests testExistingPairedUser]' started.
+Test Case '-[iMicLinkTests.OnboardingPolicyTests testExistingPairedUser]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.OnboardingPolicyTests testNewInstall]' started.
+Test Case '-[iMicLinkTests.OnboardingPolicyTests testNewInstall]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.OnboardingPolicyTests testOlderVersion]' started.
+Test Case '-[iMicLinkTests.OnboardingPolicyTests testOlderVersion]' passed (0.000 seconds).
+Test Suite 'OnboardingPolicyTests' passed at 2026-11-01 00:06:55.742.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'PolishOutputTests' started at 2026-11-01 00:06:55.742.
+Test Case '-[iMicLinkTests.PolishOutputTests testAtLeastFourLanguagesIncludingChineseAndEnglish]' started.
+Test Case '-[iMicLinkTests.PolishOutputTests testAtLeastFourLanguagesIncludingChineseAndEnglish]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.PolishOutputTests testCommandFallbackIsAHarmlessComment]' started.
+Test Case '-[iMicLinkTests.PolishOutputTests testCommandFallbackIsAHarmlessComment]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.PolishOutputTests testCommandPolicyRequiresOneSafeLine]' started.
+Test Case '-[iMicLinkTests.PolishOutputTests testCommandPolicyRequiresOneSafeLine]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.PolishOutputTests testCommandPromptIsSingleLineAndRefusesDestructiveAdditions]' started.
+Test Case '-[iMicLinkTests.PolishOutputTests testCommandPromptIsSingleLineAndRefusesDestructiveAdditions]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.PolishOutputTests testTranslationPolicyAllowsScriptChangesButRejectsAnswers]' started.
+Test Case '-[iMicLinkTests.PolishOutputTests testTranslationPolicyAllowsScriptChangesButRejectsAnswers]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.PolishOutputTests testTranslationPromptKeepsTranscriptSafetyRules]' started.
+Test Case '-[iMicLinkTests.PolishOutputTests testTranslationPromptKeepsTranscriptSafetyRules]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.PolishOutputTests testTranslationPromptUsesSelectedToneForRegister]' started.
+Test Case '-[iMicLinkTests.PolishOutputTests testTranslationPromptUsesSelectedToneForRegister]' passed (0.000 seconds).
+Test Suite 'PolishOutputTests' passed at 2026-11-01 00:06:55.749.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
+Test Suite 'PolishPresetTests' started at 2026-11-01 00:06:55.749.
+Test Case '-[iMicLinkTests.PolishPresetTests testClassicalCompressionAndQuestionsAreNotRejectedAsSummaries]' started.
+Test Case '-[iMicLinkTests.PolishPresetTests testClassicalCompressionAndQuestionsAreNotRejectedAsSummaries]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.PolishPresetTests testLegacyCommandMigratesAndLanguageDefaultsToChinese]' started.
+Test Case '-[iMicLinkTests.PolishPresetTests testLegacyCommandMigratesAndLanguageDefaultsToChinese]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.PolishPresetTests testLegacyPhoneOnlyChangesEnabledAndKeepsAllNewSelections]' started.
+Test Case '-[iMicLinkTests.PolishPresetTests testLegacyPhoneOnlyChangesEnabledAndKeepsAllNewSelections]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.PolishPresetTests testNewCapabilityRequiresCompleteStrictPreset]' started.
+Test Case '-[iMicLinkTests.PolishPresetTests testNewCapabilityRequiresCompleteStrictPreset]' passed (0.006 seconds).
+Test Case '-[iMicLinkTests.PolishPresetTests testOrdinaryAgentRetainsBaselineScopeAndOriginalVoice]' started.
+Test Case '-[iMicLinkTests.PolishPresetTests testOrdinaryAgentRetainsBaselineScopeAndOriginalVoice]' passed (0.003 seconds).
+Test Case '-[iMicLinkTests.PolishPresetTests testPresetRoundTripAcrossEveryCombination]' started.
+Test Case '-[iMicLinkTests.PolishPresetTests testPresetRoundTripAcrossEveryCombination]' passed (0.114 seconds).
+Test Case '-[iMicLinkTests.PolishPresetTests testStrongTonesAreDistinctAndOldStrengthHasNoEffect]' started.
+Test Case '-[iMicLinkTests.PolishPresetTests testStrongTonesAreDistinctAndOldStrengthHasNoEffect]' passed (0.002 seconds).
+Test Suite 'PolishPresetTests' passed at 2026-11-01 00:06:55.875.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.125 (0.126) seconds
+Test Suite 'PromptLocalizationRegressionTests' started at 2026-11-01 00:06:55.875.
+Test Case '-[iMicLinkTests.PromptLocalizationRegressionTests testAllEightyPromptsMatchPreLocalizationBaselineByteForByte]' started.
+Test Case '-[iMicLinkTests.PromptLocalizationRegressionTests testAllEightyPromptsMatchPreLocalizationBaselineByteForByte]' passed (0.002 seconds).
+Test Suite 'PromptLocalizationRegressionTests' passed at 2026-11-01 00:06:55.877.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'TextRevisionTests' started at 2026-11-01 00:06:55.877.
+Test Case '-[iMicLinkTests.TextRevisionTests testControlCharactersAreDroppedInEveryTarget]' started.
+Test Case '-[iMicLinkTests.TextRevisionTests testControlCharactersAreDroppedInEveryTarget]' passed (0.003 seconds).
+Test Case '-[iMicLinkTests.TextRevisionTests testCorrectionReplacesOnlyChangedTail]' started.
+Test Case '-[iMicLinkTests.TextRevisionTests testCorrectionReplacesOnlyChangedTail]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.TextRevisionTests testDeletionCountsComposedCharactersNotUTF16Units]' started.
+Test Case '-[iMicLinkTests.TextRevisionTests testDeletionCountsComposedCharactersNotUTF16Units]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.TextRevisionTests testShorterFinalAndRepeatedFinalDoNotDuplicateText]' started.
+Test Case '-[iMicLinkTests.TextRevisionTests testShorterFinalAndRepeatedFinalDoNotDuplicateText]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.TextRevisionTests testStreamingTailAndFinalCorrectionPreserveTypedPrefix]' started.
+Test Case '-[iMicLinkTests.TextRevisionTests testStreamingTailAndFinalCorrectionPreserveTypedPrefix]' passed (0.000 seconds).
+Test Case '-[iMicLinkTests.TextRevisionTests testTerminalDetectionByBundleOrFocusedControl]' started.
+Test Case '-[iMicLinkTests.TextRevisionTests testTerminalDetectionByBundleOrFocusedControl]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.TextRevisionTests testTerminalTextNeverContainsReturnOrTab]' started.
+Test Case '-[iMicLinkTests.TextRevisionTests testTerminalTextNeverContainsReturnOrTab]' passed (0.001 seconds).
+Test Case '-[iMicLinkTests.TextRevisionTests testWideCharacterDetectionForTerminalGeometry]' started.
+Test Case '-[iMicLinkTests.TextRevisionTests testWideCharacterDetectionForTerminalGeometry]' passed (0.001 seconds).
+Test Suite 'TextRevisionTests' passed at 2026-11-01 00:06:55.884.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.006 (0.007) seconds
+Test Suite 'iMicLinkTests.xctest' passed at 2026-11-01 00:06:55.884.
+	 Executed 74 tests, with 0 failures (0 unexpected) in 0.315 (0.334) seconds
+Test Suite 'All tests' passed at 2026-11-01 00:06:55.884.
+	 Executed 74 tests, with 0 failures (0 unexpected) in 0.315 (0.347) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

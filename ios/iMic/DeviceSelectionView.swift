@@ -17,7 +17,7 @@ struct DeviceSelectionView: View {
             VStack(alignment: .leading, spacing: 30) {
                 VStack(alignment: .leading, spacing: 10) {
                     PixelText(text: "LINK", cell: 5, color: Theme.ivory, tracking: 3)
-                    Text("选择接收语音的 Mac")
+                    Text(L10n.text("Choose the Mac that receives your voice"))
                         .font(.system(size: 14))
                         .foregroundStyle(Theme.muted)
                 }
@@ -27,9 +27,9 @@ struct DeviceSelectionView: View {
                         .id(link.selectedMacID)
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    sectionTitle("附近的 Mac", suffix: "\(link.macs.count)")
+                    sectionTitle(L10n.text("Nearby Macs"), suffix: "\(link.macs.count)")
                     if link.macs.isEmpty {
-                        Text("尚未发现 Mac。请打开电脑上的 iMic；同一 Wi-Fi 或附近蓝牙均可连接。")
+                        Text(L10n.text("No Mac found. Open iMic on your computer. Connect over the same Wi-Fi or nearby Bluetooth."))
                             .font(.system(size: 13))
                             .foregroundStyle(Theme.muted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -42,13 +42,13 @@ struct DeviceSelectionView: View {
                 }
                 if !otherRemembered.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        sectionTitle("已记住的 Mac", suffix: "未在局域网发现")
+                        sectionTitle(L10n.text("Remembered Macs"), suffix: L10n.text("Not found on the local network"))
                         ForEach(otherRemembered) { mac in
                             deviceRow(id: mac.id, name: mac.name, nearby: false)
                         }
                     }
                 }
-                Text("切换不会删除配对。选定后，iMic 只会重连这台 Mac，不会自动转到其他电脑。")
+                Text(L10n.text("Switching keeps your pairings. iMic will reconnect only to the selected Mac and will not switch to another computer automatically."))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -60,17 +60,17 @@ struct DeviceSelectionView: View {
         }
         .background(Theme.ink.ignoresSafeArea())
         .modifier(PhosphorNativeGlass())
-        .navigationTitle("连接电脑")
+        .navigationTitle(L10n.text("Connect to a computer"))
         .navigationBarTitleDisplayMode(.inline)
         .tint(Theme.orange)
-        .confirmationDialog("取消当前语音并切换 Mac？", isPresented: $confirmSwitch, titleVisibility: .visible) {
-            Button("取消语音并切换", role: .destructive) {
+        .confirmationDialog(L10n.text("Cancel this voice session and switch Macs?"), isPresented: $confirmSwitch, titleVisibility: .visible) {
+            Button(L10n.text("Cancel session and switch"), role: .destructive) {
                 if let mac = pendingSelection { performSelection(mac) }
                 pendingSelection = nil
             }
-            Button("继续当前语音", role: .cancel) { pendingSelection = nil }
+            Button(L10n.text("Continue this session"), role: .cancel) { pendingSelection = nil }
         } message: {
-            Text("当前录音或识别会停止，不会把尚未发送的内容交给另一台 Mac。已完成的识别结果会保留。")
+            Text(L10n.text("Recording or recognition will stop. Unsent audio will not go to another Mac. Completed results will be kept."))
         }
     }
 
@@ -81,12 +81,12 @@ struct DeviceSelectionView: View {
 
     private var currentTarget: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionTitle("当前目标", suffix: link.phase.isReady
-                         ? (link.transport == .bluetooth ? "蓝牙 · 加密" : "局域网 · 加密") : "")
+            sectionTitle(L10n.text("Current target"), suffix: link.phase.isReady
+                         ? (link.transport == .bluetooth ? L10n.text("Bluetooth · Encrypted") : L10n.text("Local network · Encrypted")) : "")
             HStack(alignment: .top, spacing: 12) {
                 Rectangle().fill(Theme.orange).frame(width: 3, height: 38)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(link.selectedMacName ?? link.phase.macName ?? "尚未选择 Mac")
+                    Text(link.selectedMacName ?? link.phase.macName ?? L10n.text("No Mac selected"))
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(Theme.ivory)
                         .lineLimit(2)
@@ -102,7 +102,7 @@ struct DeviceSelectionView: View {
                 }
             }
             if !link.phase.isReady && !needsPairing {
-                Button("重新连接 / 搜索") {
+                Button(L10n.text("Reconnect / Search")) {
                     Haptics.shared.play(.tap)
                     link.retry()
                 }
@@ -112,7 +112,7 @@ struct DeviceSelectionView: View {
             }
             if link.phase.isReady, link.transport == .bluetooth,
                session.phase != .listening, session.phase != .transcribing {
-                Button("改用局域网") {
+                Button(L10n.text("Use local network")) {
                     Haptics.shared.play(.tap)
                     link.reconnectUsingNetwork()
                 }
@@ -128,14 +128,14 @@ struct DeviceSelectionView: View {
         switch link.phase {
         case .ready:
             return link.transport == .bluetooth
-                ? "蓝牙带宽有限，长录音松手后仍需补传。建议在同一 Wi-Fi 下改用局域网。"
-                : "语音和按键通过局域网发送到这台 Mac"
-        case .connecting: return "正在连接所选 Mac，可稍后重试或选择其他电脑"
-        case .needsCode: return "首次连接需要输入 Mac 窗口中的 6 位配对码"
+                ? L10n.text("Bluetooth has limited bandwidth. Long recordings may keep uploading after release. Use the local network on the same Wi-Fi for faster transfers.")
+                : L10n.text("Voice and keystrokes go to this Mac over the local network")
+        case .connecting: return L10n.text("Connecting to the selected Mac. Retry later or choose another computer.")
+        case .needsCode: return L10n.text("For your first connection, enter the 6-digit pairing code shown on your Mac")
         case .failed(let message): return message
         case .searching, .idle:
-            if link.isManualSelection { return "所选 Mac 离线或尚未发现，正在等待连接" }
-            return link.pairedMacIDs.isEmpty ? "正在搜索 Mac，可从下方选择电脑" : "正在寻找已配对的 Mac"
+            if link.isManualSelection { return L10n.text("The selected Mac is offline or not yet found. Waiting to connect.") }
+            return link.pairedMacIDs.isEmpty ? L10n.text("Searching for Macs. Choose a computer below.") : L10n.text("Looking for your paired Mac")
         }
     }
 
@@ -171,7 +171,7 @@ struct DeviceSelectionView: View {
                         .foregroundStyle(Theme.ivory)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Text("\(link.pairedMacIDs.contains(id) ? "已配对" : "需要配对") · \(nearby ? "局域网可用" : "等待 Wi-Fi / 蓝牙")")
+                    Text(L10n.text("%@ · %@", L10n.argument(link.pairedMacIDs.contains(id) ? L10n.text("Paired") : L10n.text("Pairing required")), L10n.argument(nearby ? L10n.text("Local network available") : L10n.text("Waiting for Wi-Fi / Bluetooth"))))
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.muted)
                         .lineLimit(2)
@@ -186,7 +186,7 @@ struct DeviceSelectionView: View {
             .overlay(alignment: .bottom) { Hairline() }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(name)，\(selected ? "当前目标" : "切换到这台 Mac")，\(link.pairedMacIDs.contains(id) ? "已配对" : "需要配对")")
+        .accessibilityLabel(L10n.text("%@, %@, %@", L10n.argument(name), L10n.argument(selected ? L10n.text("Current target") : L10n.text("Switch to this Mac")), L10n.argument(link.pairedMacIDs.contains(id) ? L10n.text("Paired") : L10n.text("Pairing required"))))
     }
 
     private func performSelection(_ mac: RememberedMac) {

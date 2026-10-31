@@ -5,23 +5,41 @@ enum BailianIssue: Error, Equatable {
     case invalidKey, plan, permission, ip, billing, activation, quota, inspection, workspace
     case network, ambiguous, address, service(Int), unsupported(String)
 
+    var linkCode: String {
+        switch self {
+        case .invalidKey: return "cloud_invalidKey"
+        case .plan: return "cloud_plan"
+        case .permission: return "cloud_permission"
+        case .ip: return "cloud_ip"
+        case .billing: return "cloud_billing"
+        case .activation: return "cloud_activation"
+        case .quota: return "cloud_quota"
+        case .inspection: return "cloud_inspection"
+        case .workspace: return "cloud_workspace"
+        case .network: return "cloud_network"
+        case .ambiguous: return "cloud_ambiguous"
+        case .address: return "cloud_address"
+        case .service: return "cloud_service"
+        case .unsupported: return "cloud_unsupported"
+        }
+    }
     var message: String {
         switch self {
-        case .invalidKey: return "Key 无效、已被删除或复制不完整。请重新复制；若使用子业务空间，请在「高级选项」粘贴控制台给出的 Base URL。"
-        case .plan: return "这看起来是 Token Plan 或 Coding Plan 套餐的 Key。套餐 Key 只能用于 Claude Code 等编程工具，iMic 需要按量付费的 API Key。请在百炼控制台的「API Key」页面创建一个新的 Key。"
-        case .permission: return "Key 或业务空间没有模型权限。请在百炼控制台将 Key 权限改为「全部」，或勾选 qwen-audio-3.1-asr-flash-message 和 deepseek-v4.1-flash，并开通语音模型权限。"
-        case .ip: return "Key 的 IP 白名单拒绝了当前网络。请在百炼控制台关闭 IP 限制，或加入当前网络的出口 IP。"
-        case .billing: return "账号欠费或免费额度已用完。新人免费额度只在北京地域提供；请完成实名认证并充值，检查「免费额度用完即停」与预算设置后重试。"
-        case .activation: return "账号尚未开通百炼服务。请在百炼控制台完成实名认证、同意服务协议，并开通所需语音模型后重试。"
-        case .quota: return "请求触发百炼限流。请稍后重试，或在控制台检查并发与用量限制。"
-        case .inspection: return "百炼内容检查未通过。请调整识别内容后重新录音。"
-        case .workspace: return "Key 与业务空间地址不匹配或没有该空间权限。请在「高级选项」粘贴控制台给出的 Base URL，并使用该空间自己的 Key。"
-        case .network: return "无法连接百炼。请检查网络；公司网络可能拦截了阿里云域名。恢复网络后重试。"
-        case .ambiguous: return "多个地域接受了这个 Key，无法唯一识别。请在「高级选项」粘贴百炼控制台给出的 Base URL。"
-        case .address: return "服务地址不受支持。请粘贴百炼官方按量付费 Base URL（HTTPS、443 端口、/compatible-mode/v1），不要填写套餐地址或其他主机。"
-        case .unsupported(let region): return "这个 Key 属于\(region)地域，该地域暂不支持 iMic 使用的语音识别模型。请在百炼控制台右上角切换到「华北2（北京）」，重新创建一个 Key。"
-        case .service(200): return "百炼返回的模型列表无法解析。请稍后重试，或在「高级选项」检查控制台给出的 Base URL。"
-        case .service(let status): return "百炼暂时无法完成验证（HTTP \(status)）。请稍后重试，或在「高级选项」检查控制台给出的 Base URL。"
+        case .invalidKey: return L10n.text("The Key is invalid, deleted, or incomplete. Copy it again. For a sub-workspace, paste the console's Base URL under Advanced options.")
+        case .plan: return L10n.text("This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. iMic needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page.")
+        case .permission: return L10n.text("This Key or workspace lacks model access. Set Key permissions to All in Model Studio, or select qwen-audio-3.1-asr-flash-message and deepseek-v4.1-flash, and activate the speech model.")
+        case .ip: return L10n.text("The Key's IP allowlist blocked this network. Disable IP restrictions in Model Studio or add your network's public IP address.")
+        case .billing: return L10n.text("Your account has overdue charges or no free quota remaining. International new-user quota is offered for eligible Singapore models. Complete your account information, add funds, and check Free Quota Only and budget settings before retrying.")
+        case .activation: return L10n.text("Model Studio is not activated. Complete your account information, accept the service agreement, and activate the required speech model in the console, then retry.")
+        case .quota: return L10n.text("Model Studio rate limit reached. Retry later or check concurrency and usage limits in the console.")
+        case .inspection: return L10n.text("Model Studio's content check rejected this input. Adjust the content and record again.")
+        case .workspace: return L10n.text("The Key does not match this workspace address or lacks access. Paste the console's Base URL under Advanced options and use that workspace's own Key.")
+        case .network: return L10n.text("Cannot connect to Model Studio. Check your network. Office networks may block Alibaba Cloud domains. Retry once connected.")
+        case .ambiguous: return L10n.text("Multiple regions accepted this Key, so its region could not be uniquely identified. Paste the console's Base URL under Advanced options.")
+        case .address: return L10n.text("Unsupported service address. Paste the official Model Studio pay-as-you-go Base URL (HTTPS, port 443, /compatible-mode/v1). Plan endpoints and other hosts are not supported.")
+        case .unsupported(let region): return L10n.text("This Key belongs to %@, which does not currently support iMic's speech model. Select Singapore in Model Studio and create a new Key.", L10n.argument(region))
+        case .service(200): return L10n.text("Could not read Model Studio's model list. Retry later or check the console's Base URL under Advanced options.")
+        case .service(let status): return L10n.text("Model Studio could not verify your Key (HTTP %@). Retry later or check the console's Base URL under Advanced options.", L10n.argument(status))
         }
     }
     var needsConsole: Bool {
@@ -67,7 +85,7 @@ enum BailianAddress {
         return host.split(separator: ".").dropFirst().first.map(String.init) ?? ""
     }
     static func title(_ region: String) -> String {
-        ["cn-beijing": "华北2（北京）", "ap-southeast-1": "新加坡", "cn-hongkong": "中国香港", "us-east-1": "美国（弗吉尼亚）", "ap-northeast-1": "日本（东京）", "eu-central-1": "德国（法兰克福）"][region] ?? region
+        ["cn-beijing": L10n.text("China (Beijing)"), "ap-southeast-1": L10n.text("Singapore"), "cn-hongkong": L10n.text("China (Hong Kong)"), "us-east-1": L10n.text("US (Virginia)"), "ap-northeast-1": L10n.text("Japan (Tokyo)"), "eu-central-1": L10n.text("Germany (Frankfurt)")][region] ?? region
     }
     static func supportsASR(_ host: String) -> Bool { ["cn-beijing", "ap-southeast-1"].contains(region(host)) }
     static func isPlan(_ value: String) -> Bool {
@@ -114,15 +132,24 @@ enum CloudFailure: Equatable {
         default: return .bailian(issue)
         }
     }
+    var linkCode: String {
+        switch self {
+        case .key: return "cloud_invalidKey"
+        case .network: return "cloud_network"
+        case .address: return "cloud_address"
+        case .service: return "cloud_service"
+        case .bailian(let issue): return issue.linkCode
+        }
+    }
     var needsConsole: Bool {
         switch self { case .key: return true; case .bailian(let issue): return issue.needsConsole; default: return false }
     }
     func title(service: String) -> String {
         switch self {
-        case .key: return service == "百炼" ? BailianIssue.invalidKey.message : "\(service)拒绝了 Key，请重新复制有效的 API Key。"
-        case .network: return service == "百炼" ? BailianIssue.network.message : "无法连接\(service)，请检查网络后重试。"
+        case .key: return service == L10n.text("Model Studio") ? BailianIssue.invalidKey.message : L10n.text("%@ rejected the Key. Copy a valid API Key again.", L10n.argument(service))
+        case .network: return service == L10n.text("Model Studio") ? BailianIssue.network.message : L10n.text("Cannot connect to %@. Check your network and retry.", L10n.argument(service))
         case .address: return BailianIssue.address.message
-        case .service: return "\(service)暂时无法完成请求，请稍后重试。"
+        case .service: return L10n.text("%@ could not complete the request. Please retry later.", L10n.argument(service))
         case .bailian(let issue): return issue.message
         }
     }

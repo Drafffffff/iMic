@@ -22,14 +22,14 @@ struct PolishPreferencesSection: View {
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 8) {
                         PixelText(text: "POLISH", cell: 2.1, color: Theme.ivory, tracking: 1.5)
-                        Text("AI 润色与转换")
+                        Text(L10n.text("AI polish and conversion"))
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(Theme.ivory)
                             .accessibilityAddTraits(.isHeader)
                     }
                     Spacer(minLength: 8)
                     if displayedPreferences != nil {
-                        Toggle("启用 AI 润色", isOn: Binding(
+                        Toggle(L10n.text("Enable AI polish"), isOn: Binding(
                             get: { displayedPreferences?.enabled ?? false },
                             set: { enabled in update { $0.enabled = enabled } }
                         ))
@@ -42,7 +42,7 @@ struct PolishPreferencesSection: View {
                         .frame(minWidth: 76, minHeight: 44, alignment: .trailing)
                         .tint(Theme.orange)
                         .disabled(!isAvailable || link.polishPreferencesSaving)
-                        .accessibilityHint("保存到当前连接的 Mac，等待 Mac 确认后生效")
+                        .accessibilityHint(L10n.text("Saved to your connected Mac. Takes effect after your Mac confirms."))
                     }
                 }
 
@@ -54,7 +54,7 @@ struct PolishPreferencesSection: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.orange)
                     .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityLabel("更改未获确认，\(error)")
+                    .accessibilityLabel(L10n.text("Change not confirmed, %@", L10n.argument(error)))
             }
 
             if let preferences = displayedPreferences {
@@ -63,7 +63,7 @@ struct PolishPreferencesSection: View {
                     .opacity(isAvailable ? 1 : 0.6)
             }
 
-            Text("转换服务、API Key 与模型请在 Mac 配置。")
+            Text(L10n.text("Configure the service, API Key, and model on your Mac."))
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -118,24 +118,24 @@ struct PolishPreferencesSection: View {
     private func preferencesEditor(_ preferences: LinkPolishPreferences) -> some View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 10) {
-                sectionHeading("MODE", title: "转换模式")
+                sectionHeading("MODE", title: L10n.text("Conversion mode"))
                 optionsGrid(PolishMode.allCases, selected: preferences.options.mode, title: { $0.title }) { mode in
                     update { $0.options.mode = mode }
                 }
                 optionDetail(preferences.options.mode.detail)
             }
             VStack(alignment: .leading, spacing: 10) {
-                sectionHeading("TONE", title: "表达语气")
+                sectionHeading("TONE", title: L10n.text("Tone"))
                 optionsGrid(PolishTone.allCases, selected: preferences.options.tone, title: { $0.title }) { tone in
                     update { $0.options.tone = tone }
                 }
                 .disabled(preferences.options.isCommand)
                 .opacity(preferences.options.isCommand ? 0.45 : 1)
                 if preferences.options.isCommand {
-                    optionDetail("终端命令专注操作，不叠加语气；切回文字模式后恢复选择。")
+                    optionDetail(L10n.text("Terminal commands focus on actions and ignore tone. Your choice is kept for text modes."))
                 } else {
                     optionDetail(preferences.options.tone.detail)
-                    Text("例如：\(preferences.options.tone.example)")
+                    Text(L10n.text("Example: %@", L10n.argument(preferences.options.tone.example)))
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.ivory)
                         .fixedSize(horizontal: false, vertical: true)
@@ -146,18 +146,18 @@ struct PolishPreferencesSection: View {
                 }
             }
             VStack(alignment: .leading, spacing: 10) {
-                sectionHeading("LANGUAGE", title: "输出语言")
+                sectionHeading("LANGUAGE", title: L10n.text("Output language"))
                 optionsGrid(PolishOutput.languages, selected: preferences.options.output, title: { $0.title }) { output in
                     update { $0.options.output = output }
                 }
                 .disabled(preferences.options.isCommand)
                 .opacity(preferences.options.isCommand ? 0.45 : 1)
                 optionDetail(preferences.options.isCommand
-                    ? "命令语法固定为 zsh，不受输出语言影响；语言选择会保留。"
-                    : "用所选语言呈现模式和语气，原文已是该语言也会转换。")
+                    ? L10n.text("Commands always use zsh syntax, regardless of output language. Your language choice is kept.")
+                    : L10n.text("Apply the mode and tone in your selected language, even if the source is already in that language."))
             }
-            Text(link.polishPreferencesSaving ? "正在提交以上选择，等待 Mac 确认后生效。"
-                 : (preferences.enabled ? preferences.options.summary : "当前未启用；模式、语气与语言已保存在 Mac。"))
+            Text(link.polishPreferencesSaving ? L10n.text("Submitting these choices. They take effect after your Mac confirms.")
+                 : (preferences.enabled ? preferences.options.summary : L10n.text("Currently disabled. Your mode, tone, and language are saved on your Mac.")))
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -175,7 +175,7 @@ struct PolishPreferencesSection: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(title(value))
-                .accessibilityValue(selected == value ? "已选择" : "未选择")
+                .accessibilityValue(selected == value ? L10n.text("Selected") : L10n.text("Not selected"))
                 .accessibilityAddTraits(selected == value ? .isSelected : [])
             }
         }
@@ -231,27 +231,27 @@ struct PolishPreferencesSection: View {
         guard link.phase.isReady else {
             switch link.phase {
             case .connecting:
-                return ("正在连接 Mac", "连接完成后会读取 Mac 的真实偏好。离线时不会保存更改。")
+                return (L10n.text("Connecting to your Mac"), L10n.text("Your Mac's actual preferences will load once connected. Offline changes are not saved."))
             case .needsCode:
-                return ("请先完成配对", "在上方输入 Mac 上显示的六位配对码。")
+                return (L10n.text("Complete pairing first"), L10n.text("Enter the six-digit pairing code shown on your Mac above."))
             default:
-                return ("尚未连接 Mac", "请先在上方连接 Mac；上次确认的偏好仅供查看。")
+                return (L10n.text("No Mac connected"), L10n.text("Connect to your Mac above. Previously confirmed preferences are shown for reference."))
             }
         }
         guard link.polishPreferencesSupported else {
-            return ("这台 Mac 暂不支持手机设置", "请更新 Mac 端 iMic，以支持模式、语气和输出语言设置。")
+            return (L10n.text("This Mac does not support phone settings yet"), L10n.text("Update iMic on your Mac to set mode, tone, and output language from your phone."))
         }
         if link.polishPreferencesSaving {
-            return ("等待 Mac 确认 · 尚未保存", "")
+            return (L10n.text("Waiting for your Mac · Not saved yet"), "")
         }
         guard link.polishPreferences != nil else {
-            return (link.polishPreferencesError == nil ? "正在读取 Mac 偏好" : "尚未获取 Mac 偏好",
-                    "读取成功前不可修改；这里不会用手机默认值代替 Mac 的设置。")
+            return (link.polishPreferencesError == nil ? L10n.text("Reading Mac preferences") : L10n.text("Mac preferences not loaded"),
+                    L10n.text("Changes are unavailable until preferences load. Phone defaults never replace your Mac's settings here."))
         }
         if link.polishPreferencesError != nil {
-            return ("本次更改未获确认", "下方是 Mac 上次确认的偏好，而非未保存的更改。")
+            return (L10n.text("This change was not confirmed"), L10n.text("Below are the last preferences confirmed by your Mac, rather than the unsaved changes."))
         }
-        return ("已由 Mac 确认", "下方为当前 Mac 已保存的偏好。每次调整后，请等待新的确认。")
+        return (L10n.text("Confirmed by your Mac"), L10n.text("Below are your Mac's saved preferences. Wait for a new confirmation after each change."))
     }
 
     private func update(_ change: (inout LinkPolishPreferences) -> Void) {

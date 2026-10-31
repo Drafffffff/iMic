@@ -7,11 +7,11 @@ struct MicStatusBarPresentation: Equatable {
 
     var label: String {
         switch phase {
-        case .offline: return "iMic 未连接"
-        case .pairing: return "iMic 等待配对"
-        case .ready: return "iMic 已连接"
-        case .listening: return "iMic 正在听"
-        case .processing: return "iMic 正在识别"
+        case .offline: return L10n.text("iMic disconnected")
+        case .pairing: return L10n.text("iMic awaiting pairing")
+        case .ready: return L10n.text("iMic connected")
+        case .listening: return L10n.text("iMic listening")
+        case .processing: return L10n.text("iMic recognizing")
         }
     }
 

@@ -6,9 +6,9 @@ struct InputPermissionState {
     let posting:Bool
     var allowed:Bool {accessibility && posting}
     var message:String {
-        if allowed{return "已允许 · 可以自动输入"}
-        if accessibility{return "辅助功能已开启 · 输入授权尚未生效"}
-        return "尚未授权 · 添加应用后，请开启旁边的开关"
+        if allowed{return L10n.text("Allowed · Automatic typing available")}
+        if accessibility{return L10n.text("Accessibility enabled · Typing permission has not taken effect")}
+        return L10n.text("Not authorized · Add the app, then enable its switch")
     }
 }
 

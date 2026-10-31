@@ -142,9 +142,9 @@ final class SessionModel: ObservableObject {
                     self.liveTranscript = ""
                     self.phase = .idle
                     self.clearGeneration += 1
-                    self.showGestureNotice("已清空当前输入框")
+                    self.showGestureNotice(L10n.text("Text field cleared"))
                 } else {
-                    self.showGestureNotice(result.message ?? "当前输入框无法安全清空")
+                    self.showGestureNotice(LinkStatusText.text(code: result.code, message: result.message, fallback: L10n.text("This text field cannot be safely cleared")))
                     Haptics.shared.play(.error)
                 }
             }
@@ -220,7 +220,7 @@ final class SessionModel: ObservableObject {
                     guard let self, self.audioGeneration == generation else { return }
                     if error != nil {
                         self.audioGeneration &+= 1
-                        self.handleAudioFailure("麦克风启动失败")
+                        self.handleAudioFailure(L10n.text("Microphone failed to start"))
                         return
                     }
                     // 重启触感引擎，但不更改已运行的 playAndRecord 音频会话。
@@ -335,7 +335,7 @@ final class SessionModel: ObservableObject {
         guard link.phase.isReady || link.hasPairedMac else {
             Haptics.shared.play(.pairingRequired)
             phase = .error
-            message = "先连接 Mac，再开始说话"
+            message = L10n.text("Connect to your Mac before speaking")
             return
         }
 
@@ -348,7 +348,7 @@ final class SessionModel: ObservableObject {
             guard startAudioEngine() else {
                 wantsRecording = false
                 phase = .error
-                message = "麦克风启动失败"
+                message = L10n.text("Microphone failed to start")
                 Haptics.shared.play(.error)
                 return
             }
@@ -361,7 +361,7 @@ final class SessionModel: ObservableObject {
                     wantsRecording = false
                     micDenied = true
                     phase = .error
-                    message = "麦克风权限未开启"
+                    message = L10n.text("Microphone access is off")
                     Haptics.shared.play(.error)
                     return
                 }
@@ -369,7 +369,7 @@ final class SessionModel: ObservableObject {
                 guard startAudioEngine() else {
                     wantsRecording = false
                     phase = .error
-                    message = "麦克风启动失败"
+                    message = L10n.text("Microphone failed to start")
                     Haptics.shared.play(.error)
                     return
                 }
@@ -609,7 +609,7 @@ final class SessionModel: ObservableObject {
             stopVisualInput(reset: true)
             preRoll.removeAll()
             stopLivePreview()
-            showNotice(cancelled ? "已取消" : "录音太短，再说一次")
+            showNotice(cancelled ? L10n.text("Canceled") : L10n.text("Recording too short. Please try again."))
             Haptics.shared.play(cancelled ? .cancelled : .tooShort)
             return
         }
@@ -618,8 +618,8 @@ final class SessionModel: ObservableObject {
         phase = .transcribing
         isUploading = true
         message = link.transport == .bluetooth
-            ? "正在通过蓝牙补传音频，同一 Wi-Fi 下会更快…"
-            : "正在发送剩余音频…"
+            ? L10n.text("Finishing audio upload over Bluetooth. The same Wi-Fi is faster…")
+            : L10n.text("Sending remaining audio…")
         stopVisualInput()
         waveformTrace.finish()
         finishLivePreview()
@@ -660,7 +660,7 @@ final class SessionModel: ObservableObject {
     private func submitAtRecordingLimit() {
         guard phase == .listening else { return }
         endListening(cancelled: false)
-        notice = "已达到单次录音 \(IMicLink.maxSessionSeconds / 60) 分钟上限，已自动提交"
+        notice = L10n.text("The %@-minute recording limit was reached. Audio submitted automatically.", L10n.argument(IMicLink.maxSessionSeconds / 60))
         IMicLog.write("iphone.session", "recording limit auto-submit session=\(session) samples=\(samples)")
     }
 
@@ -689,7 +689,7 @@ final class SessionModel: ObservableObject {
         buffered.append(chunk)
         // 缓存与整段硬上限一致；不能丢弃开头来让计数看似仍在范围内。
         if buffered.count > maxBufferedChunks {
-            failActiveSession("录音缓存已满，本次输入已停止")
+            failActiveSession(L10n.text("Recording buffer full. This input has stopped."))
         }
     }
 
@@ -792,7 +792,7 @@ final class SessionModel: ObservableObject {
             Task { @MainActor in
                 guard let self, self.submissionGeneration == generation,
                       self.activeSession == active, self.endInFlight else { return }
-                self.failActiveSession("音频上传超时，已保留本机识别文字，可复制后重试")
+                self.failActiveSession(L10n.text("Audio upload timed out. Local recognition text is kept. Copy it and retry."))
             }
         }
         uploadTimer = timer
@@ -806,11 +806,11 @@ final class SessionModel: ObservableObject {
             self.uploadTimer?.invalidate()
             self.uploadTimer = nil
             guard sent else {
-                self.failActiveSession("音频未能完整送达 Mac，已保留本机识别文字")
+                self.failActiveSession(L10n.text("Audio did not fully reach your Mac. Local recognition text is kept."))
                 return
             }
             IMicLog.write("iphone.session", "audio.end drained session=\(active) samples=\(self.samples) frames=\(self.frames)")
-            self.message = "正在识别…"
+            self.message = L10n.text("Recognizing…")
             self.startResultTimeout()
         }
     }
@@ -831,7 +831,7 @@ final class SessionModel: ObservableObject {
     }
 
     private func abortForConnection() {
-        failActiveSession("无法连接 Mac，请确认 Mac 上的 iMic 已打开")
+        failActiveSession(L10n.text("Cannot connect to your Mac. Make sure iMic is open on your Mac."))
     }
 
     /// 失败只保留可复制文字，绝不把本机临时识别自动投递到其它设备。
@@ -894,7 +894,7 @@ final class SessionModel: ObservableObject {
             guard let self = self else { return }
             guard let data = data else {
                 self.phase = .error
-                self.message = "测试语音生成失败"
+                self.message = L10n.text("Test speech generation failed")
                 return
             }
             self.beginSynthetic(data)
@@ -926,7 +926,7 @@ final class SessionModel: ObservableObject {
             guard let self = self else { return }
             guard let data = data else {
                 self.phase = .error
-                self.message = "测试语音生成失败"
+                self.message = L10n.text("Test speech generation failed")
                 return
             }
             self.beginSynthetic(data, requireReady: false)
@@ -999,7 +999,7 @@ final class SessionModel: ObservableObject {
             pendingEnd = true
             phase = .transcribing
             isUploading = true
-            message = "正在上传音频…"
+            message = L10n.text("Uploading audio…")
             stopVisualInput()
             waveformTrace.finish()
             if streaming {
@@ -1074,7 +1074,7 @@ final class SessionModel: ObservableObject {
             stopLivePreview()
             phase = .error
             if !liveTranscript.isEmpty { transcript = liveTranscript }
-            self.message = message.message ?? "识别失败，请重试"
+            self.message = LinkStatusText.text(code: message.code, message: message.message, fallback: L10n.text("Recognition failed. Please retry."))
             Haptics.shared.play(.error)
             return
         }
@@ -1083,7 +1083,7 @@ final class SessionModel: ObservableObject {
             stopLivePreview()
             phase = .error
             if !liveTranscript.isEmpty { transcript = liveTranscript }
-            self.message = "没有听清，再试一次"
+            self.message = L10n.text("Couldn't hear clearly. Please try again.")
             Haptics.shared.play(.warning)
             return
         }
@@ -1098,12 +1098,12 @@ final class SessionModel: ObservableObject {
 
     private func handleLinkLost() {
         guard phase == .listening || phase == .transcribing else { return }
-        failActiveSession("与 Mac 的连接已断开，已保留本机识别文字", cancelRemote: false)
+        failActiveSession(L10n.text("Disconnected from your Mac. Local recognition text is kept."), cancelRemote: false)
     }
 
     private func timeout() {
         guard phase == .transcribing else { return }
-        failActiveSession("识别超时，已保留本机识别文字，可复制后重试")
+        failActiveSession(L10n.text("Recognition timed out. Local text is kept. Copy it and retry."))
     }
 
     func cancelForDeviceSwitch() {
@@ -1112,10 +1112,10 @@ final class SessionModel: ObservableObject {
             stopLivePreview()
             return
         }
-        failActiveSession("已取消旧 Mac 的语音会话")
+        failActiveSession(L10n.text("Canceled the voice session on your previous Mac"))
         phase = .idle
         message = nil
-        notice = "已保留本机识别文字"
+        notice = L10n.text("Local recognition text is kept")
     }
 
     // MARK: - Actions
@@ -1241,14 +1241,17 @@ final class SessionModel: ObservableObject {
             spectrumStore.reset()
         case "result":
             phase = .result
-            transcript = "把今天讨论的交互细节整理成一页说明，重点保留按住说话、松开即输入的节奏。"
+            transcript = L10n.text("Turn today's discussion about interaction details into a one-page brief. Keep the rhythm of hold to speak, release to type.##b37bdbc1")
             pasted = true
             target = "Craft"
             elapsed = 2.3
             spectrumStore.reset()
+        case "error-network":
+            phase = .error
+            message = LinkStatusText.text(code: "cloud_network", message: "remote fallback", fallback: "")
         case "error":
             phase = .error
-            message = "没有听清，再试一次"
+            message = L10n.text("Couldn't hear clearly. Please try again.")
         default:
             phase = .idle
         }

@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleLocalizations</key>
+	<array><string>en</string><string>zh-Hans</string></array>
 	<key>CFBundleDisplayName</key>
 	<string>iMic</string>
 	<key>CFBundleExecutable</key>
@@ -29,15 +31,15 @@
 		<string>_imic._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>iMic 在你的局域网内寻找并连接你的 Mac。</string>
+	<string>iMic finds and connects to your Mac on your local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>iMic 需要使用麦克风，把你说的话实时发送到你的 Mac 转成文字。</string>
+	<string>iMic uses your microphone to send your voice to your Mac for recognition in real time.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>iMic 使用 Apple Speech 生成临时预览文字，最终结果仍由 Mac 上的模型校准。</string>
+	<string>iMic uses Apple Speech for temporary live preview text. The model on your Mac still corrects the final result.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>iMic 在局域网不可用时通过蓝牙连接你的 Mac。</string>
+	<string>iMic connects to your Mac over Bluetooth when the local network is unavailable.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>iMic 通过蓝牙与你的 Mac 建立本地语音链路。</string>
+	<string>iMic establishes a local voice link with your Mac over Bluetooth.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

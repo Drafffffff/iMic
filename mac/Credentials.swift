@@ -230,7 +230,7 @@ enum BailianKeyCheck {
         switch status {
         case 200..<300:return .valid
         case 401,403:return .rejected
-        default:return .unreachable("百炼返回 HTTP \(status)")
+        default:return .unreachable(L10n.text("Model Studio returned HTTP %@", L10n.argument(status)))
         }
     }
     @discardableResult

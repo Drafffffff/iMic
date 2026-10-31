@@ -85,8 +85,8 @@ enum SetupLaunchPolicy {
 }
 
 enum SetupLinks {
-    static let website = URL(string: "https://drafffffff.github.io/iMic/")!
-    static let bailianKeys = URL(string: "https://bailian.console.aliyun.com/?tab=model#/api-key")!
+    static var website: URL { URL(string: "https://drafffffff.github.io/iMic/" + (L10n.isChinese ? "" : "en/"))! }
+    static var bailianKeys: URL { URL(string: L10n.isChinese ? "https://bailian.console.aliyun.com/?tab=model#/api-key" : "https://modelstudio.console.alibabacloud.com/ap-southeast-1/model/settings/api-key")! }
     static let accessibility = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
     static let screenCapture = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!
 }
@@ -143,9 +143,9 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     private var selection: BailianDiscovery.Selection?
     private let baseField = NSTextField()
     private let advanced = NSStackView()
-    private let consoleHelp = NSButton(title: "打开百炼控制台 ↗", target: nil, action: nil)
+    private let consoleHelp = NSButton(title: L10n.text("Open Model Studio Console ↗"), target: nil, action: nil)
     private var checkedKey = ""
-    private let polishCheck = NSButton(checkboxWithTitle: "同时启用 AI 润色（推荐）", target: nil, action: nil)
+    private let polishCheck = NSButton(checkboxWithTitle: L10n.text("Also enable AI polish (recommended)"), target: nil, action: nil)
 
     init(host: SetupWizardHost) {
         self.host = host
@@ -154,7 +154,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 420),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered, defer: false)
-        window.title = "设置 iMic"
+        window.title = L10n.text("Set up iMic")
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true
@@ -320,26 +320,26 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     // MARK: - 02 Permissions
 
     private func buildPermissions() -> NSView {
-        var items: [NSView] = [Self.title("允许 iMic 输入文字")]
+        var items: [NSView] = [Self.title(L10n.text("Allow iMic to type"))]
         if snapshot.location == .translocated {
-            let note = Self.text("请先把 iMic 拖到「应用程序」文件夹，再从那里打开，否则授权在下次打开时会失效。")
+            let note = Self.text(L10n.text("Drag iMic to Applications and open it from there first. Otherwise, permission will be lost the next time you open it."))
             note.textColor = .imicIvory
-            items += [note, Self.link("在 Finder 中显示 iMic", self, #selector(revealApp))]
+            items += [note, Self.link(L10n.text("Show iMic in Finder"), self, #selector(revealApp))]
             let view = Self.column(items, spacing: 16)
             note.widthAnchor.constraint(equalTo: view.widthAnchor).isActive = true
             return view
         }
         let accessibility = PermissionRow(
-            name: "辅助功能", detail: "把识别好的文字输入到当前应用",
-            action: "去开启", target: self, selector: #selector(requestAccessibility))
+            name: L10n.text("Accessibility"), detail: L10n.text("Type recognized text into the active app"),
+            action: L10n.text("Open Settings##07c3e915"), target: self, selector: #selector(requestAccessibility))
         let screen = PermissionRow(
-            name: "屏幕录制", detail: "可选 · 润色扫光。开启后系统可能要求重新打开 iMic，向导会回到这一步",
-            action: "去开启", target: self, selector: #selector(requestScreenCapture))
+            name: L10n.text("Screen Recording"), detail: L10n.text("Optional · Polish highlight. macOS may ask you to reopen iMic. Setup will return to this step."),
+            action: L10n.text("Open Settings##07c3e915"), target: self, selector: #selector(requestScreenCapture))
         accessibilityRow = accessibility
         screenRow = screen
 
-        let toggle = Self.link("已经打开开关，仍未生效？", self, #selector(toggleStale))
-        let help = Self.text("在系统设置的列表里选中 iMic，点「−」删除，再回到这里点「去开启」。重新安装或更新后常会遇到。", size: 11)
+        let toggle = Self.link(L10n.text("Enabled the switch but it still doesn't work?"), self, #selector(toggleStale))
+        let help = Self.text(L10n.text("Select iMic in System Settings and click − to remove it. Then return here and click Open Settings. This is common after reinstalling or updating."), size: 11)
         help.isHidden = true
         staleHelp = help
         staleToggle = toggle
@@ -363,7 +363,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         if allowed { staleHelp?.isHidden = true }
         if !allowed, let asked = requestedAt, Date().timeIntervalSince(asked) > 15 { staleHelp?.isHidden = false }
         // Accessibility stays optional: without it text is kept in the window for copying.
-        footer(primary: allowed ? "完成" : "跳过并完成", enabled: true, secondary: "上一步")
+        footer(primary: allowed ? L10n.text("Done") : L10n.text("Skip and finish"), enabled: true, secondary: L10n.text("Back##da336fdc"))
     }
 
     @objc private func requestAccessibility() {
@@ -396,10 +396,10 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     private var keyIsActive: Bool { !enteredKey.isEmpty && snapshot.key?.key == enteredKey }
 
     private func buildKey() -> NSView {
-        let intro = Self.text("1. 打开百炼控制台，用阿里云账号登录；没有账号请先注册并完成实名认证。")
-        let step2 = Self.text("2. 右上角选择「华北2（北京）」（新人免费额度仅此地域提供），创建 API Key，权限选「全部」。")
-        let step3 = Self.text("3. 复制 Key，粘贴到下面。")
-        let get = NSButton(title: "获取百炼 API Key ↗", target: self, action: #selector(openConsole))
+        let intro = Self.text(L10n.text("1. Open Model Studio (Bailian) on Alibaba Cloud's international site. Sign in with your own account and complete the required account information."))
+        let step2 = Self.text(L10n.text("2. Select Singapore at the top right. Create a pay-as-you-go API Key with permissions set to All. Eligible international models have a new-user quota."))
+        let step3 = Self.text(L10n.text("3. Copy the Key and paste it below."))
+        let get = NSButton(title: L10n.text("Get a Model Studio API Key ↗"), target: self, action: #selector(openConsole))
         get.setAccessibilityLabel(get.title)
         get.bezelStyle = .rounded
         get.controlSize = .large
@@ -408,11 +408,11 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         keyField.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
         keyField.bezelStyle = .roundedBezel
         keyField.delegate = self
-        keyField.setAccessibilityLabel("百炼 API Key")
+        keyField.setAccessibilityLabel(L10n.text("Model Studio API Key"))
         keyField.heightAnchor.constraint(equalToConstant: 32).isActive = true
         keyField.setContentHuggingPriority(.init(1), for: .horizontal)
         keyField.stringValue = snapshot.key?.key ?? ""
-        let paste = NSButton(title: "粘贴", target: self, action: #selector(pasteKey))
+        let paste = NSButton(title: L10n.text("Paste"), target: self, action: #selector(pasteKey))
         paste.setAccessibilityLabel(paste.title)
         paste.bezelStyle = .rounded
         paste.controlSize = .large
@@ -422,22 +422,22 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         keyMessage.maximumNumberOfLines = 0
         consoleHelp.target = self; consoleHelp.action = #selector(openConsole)
         consoleHelp.bezelStyle = .rounded; consoleHelp.isHidden = true
-        let toggle = Self.link("高级选项 · 手动填写服务地址", self, #selector(toggleAdvanced))
-        baseField.placeholderString = "https://业务空间.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+        let toggle = Self.link(L10n.text("Advanced options · Set service address manually"), self, #selector(toggleAdvanced))
+        baseField.placeholderString = L10n.text("https://workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1")
         baseField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        baseField.delegate = self; baseField.setAccessibilityLabel("百炼 Base URL")
+        baseField.delegate = self; baseField.setAccessibilityLabel(L10n.text("Model Studio Base URL"))
         advanced.arrangedSubviews.forEach { advanced.removeArrangedSubview($0); $0.removeFromSuperview() }
         advanced.orientation = .vertical; advanced.alignment = .leading
-        advanced.addArrangedSubview(Self.text("粘贴控制台提供的按量付费 Base URL；留空自动识别。", size: 11))
+        advanced.addArrangedSubview(Self.text(L10n.text("Paste the pay-as-you-go Base URL from the console. Leave blank to detect automatically."), size: 11))
         advanced.addArrangedSubview(baseField)
         baseField.widthAnchor.constraint(equalTo: advanced.widthAnchor).isActive = true
         advanced.isHidden = true
 
-        polishCheck.setAccessibilityLabel("同时启用 AI 润色（推荐）")
-        let polishHint = Self.text("识别和润色按百炼用量计费，新用户在北京地域有免费额度。", size: 11)
+        polishCheck.setAccessibilityLabel(L10n.text("Also enable AI polish (recommended)"))
+        let polishHint = Self.text(L10n.text("Recognition and polish are billed by Model Studio usage. Eligible Singapore models have a new-user quota; check your console for availability and limits."), size: 11)
         let polish = Self.column([polishCheck, polishHint], spacing: 6)
         polishHint.widthAnchor.constraint(equalTo: polish.widthAnchor).isActive = true
-        let view = Self.column([Self.title("填入百炼 API Key"), intro, get, step2, step3, field, keyMessage, consoleHelp, toggle, advanced, polish], spacing: 14)
+        let view = Self.column([Self.title(L10n.text("Enter your Model Studio API Key")), intro, get, step2, step3, Self.text(L10n.text("For overseas accounts, use Alibaba Cloud’s international site and create a Key in Singapore."), size: 11), field, keyMessage, consoleHelp, toggle, advanced, polish], spacing: 14)
         view.setCustomSpacing(22, after: view.arrangedSubviews[0])
         view.setCustomSpacing(22, after: get)
         view.detachesHiddenViews = true
@@ -471,14 +471,14 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
             message = BailianIssue.network.message
             color = .systemRed
         case .format:
-            message = "百炼 API Key 以 sk- 开头，请检查是否复制完整。"
+            message = L10n.text("Model Studio API Keys start with sk-. Check that you copied the entire Key.")
             color = .systemRed
         }
         keyMessage.stringValue = message
         keyMessage.textColor = color
         let ready = keyState == .valid && keyIsActive
         polishCheck.isEnabled = ready && selection?.polishListed != false
-        footer(primary: ready ? "下一步" : keyState == .checking ? "验证中…" : "验证",
+        footer(primary: ready ? L10n.text("Next") : keyState == .checking ? L10n.text("Verifying…") : L10n.text("Verify"),
                enabled: ready || (!enteredKey.isEmpty && keyState != .checking), secondary: nil)
     }
 
@@ -524,7 +524,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         keyTask?.cancel(); debounce?.cancel()
         keyField.stringValue = key
         keyGeneration = UUID(); let generation = keyGeneration
-        keyState = .checking; validationMessage = "正在识别地域…"
+        keyState = .checking; validationMessage = L10n.text("Detecting region…")
         consoleHelp.isHidden = true
         updateKey()
         let finish: (Result<BailianDiscovery.Selection, BailianIssue>) -> Void = { [weak self] result in
@@ -566,7 +566,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         } else if !host.setupSaveKey(key) {
             keyState = .idle
             updateKey()
-            keyMessage.stringValue = "无法保存 Key，请检查磁盘权限。"
+            keyMessage.stringValue = L10n.text("Could not save the Key. Check disk permissions.")
             keyMessage.textColor = .systemRed
             return false
         }
@@ -589,15 +589,15 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         consoleHelp.isHidden = true; selection = nil
         switch name {
         case "initial": keyState = .idle
-        case "checking": keyState = .checking; validationMessage = "正在识别地域…"
-        case "models": keyState = .checking; validationMessage = "正在确认模型权限…"
+        case "checking": keyState = .checking; validationMessage = L10n.text("Detecting region…")
+        case "models": keyState = .checking; validationMessage = L10n.text("Checking model access…")
         case "success":
             let selected = BailianDiscovery.Selection(host: BailianAddress.hosts[1], asrListed: false, polishListed: true)
             snapshot.key = ResolvedCredential(key: keyField.stringValue, source: .app)
             selection = selected; keyState = .valid; validationMessage = selected.message
         default:
             let issues: [String: BailianIssue] = ["invalid": .invalidKey, "plan": .plan, "permission": .permission,
-                "ip": .ip, "billing": .billing, "network": .network, "unsupported": .unsupported("中国香港")]
+                "ip": .ip, "billing": .billing, "network": .network, "unsupported": .unsupported(L10n.text("China (Hong Kong)"))]
             let issue = issues[name] ?? .workspace
             keyState = .rejected; validationMessage = issue.message; consoleHelp.isHidden = !issue.needsConsole
         }

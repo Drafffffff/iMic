@@ -22,4 +22,12 @@ xcrun swiftc -D DEBUG -swift-version 5 -framework AppKit -framework Network -fra
   -Xlinker -rpath -Xlinker "$ROOT/build/vendor/Sparkle" \
   -framework ApplicationServices -framework Vision -framework ScreenCaptureKit -framework ServiceManagement \
   "${SOURCES[@]}" "$ROOT/tests/MacSettings/main.swift" -o "$WORK/settings-tests"
-"$WORK/settings-tests" --ui-preview=settings-external-key "$@"
+# Package the harness so Bundle.main resolves both languages just like the real app.
+APP="$WORK/SettingsTests.app"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp "$WORK/settings-tests" "$APP/Contents/MacOS/settings-tests"
+cp -R "$ROOT/mac/Resources/"*.lproj "$APP/Contents/Resources/"
+cat > "$APP/Contents/Info.plist" <<'PLIST'
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>imic.settings.tests</string><key>CFBundleExecutable</key><string>settings-tests</string><key>CFBundleDevelopmentRegion</key><string>en</string><key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string></array></dict></plist>
+PLIST
+"$APP/Contents/MacOS/settings-tests" --ui-preview=settings-external-key "$@"

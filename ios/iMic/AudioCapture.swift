@@ -7,7 +7,7 @@ final class AudioCapture {
 
         var errorDescription: String? {
             switch self {
-            case .format: return "麦克风格式不可用"
+            case .format: return L10n.text("Microphone format unavailable")
             }
         }
     }

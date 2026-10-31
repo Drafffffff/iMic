@@ -175,3 +175,13 @@ iPhone                         Mac
 - Mac 结束识别后不等待 WebSocket 关闭握手；最终文字仍需完成可选润色、扫光及输入确认后再回传并发布手势就绪。
 
 上传与识别分别计时：iPhone 在 `audio.end` 的传输完成后才开始等结果；Mac 先等待百炼上传排空，再从 `finish-task` 发出后计算 60 秒最终识别期限，不从松手一刻固定等待 45 秒。百炼开启 `heartbeat` 防持续静音超时，WebSocket 总资源期限覆盖有界录音与排空。失败或断线保留本机已识别文字供复制，不把它自动发送给另一台 Mac。
+
+### 显示语言与错误码（2026-10-31）
+
+接收方用自己的语言翻译已知 `code`，未知或缺失 code 显示 `message`，再缺失才使用本地通用提示。Mac 继续按自己的语言发送完整 message，旧 iPhone 无需更新即可显示。`input.result` 的拒绝回复现在可使用已有的可选 `code` 字段；不增加字段，不改变消息验证、帧格式、HKDF、配对规则或 AES-GCM combined + 逐帧随机 nonce。
+
+新增显示码：`clear_busy`、`clear_unsafe`、`recording_limit`、`audio_incomplete`、`audio_resend_timeout`、`audio_transfer_timeout`、`recognition_timeout`、`asr_model`、`asr_encoding`、`asr_audio`、`asr_upload_timeout`、`asr_upload`、`asr_end`、`asr_final_timeout`、`asr_event`、`asr_long`、`asr_early`，以及 `cloud_` 分类：`invalidKey`、`plan`、`permission`、`ip`、`billing`、`activation`、`quota`、`inspection`、`workspace`、`network`、`ambiguous`、`address`、`service`、`unsupported`。参数化 HTTP/地域详情保留在 Mac message，本地显示对应分类的操作建议。原有 `asr`、`busy`、`key`、握手错误码继续支持。完整映射见 `shared/LinkStatusText.swift`。
+
+兼容测试覆盖新增 clear code 编解码、旧 Mac 无 code 回复、未来未知 code、旧 iPhone 读取 message 与两种语言的独立选择。识别文本、用户设备名称保持用户数据，不翻译。
+
+握手/链路显示码进一步区分：`handshake_timeout`、`protocol_data`、`protocol_plaintext`、`protocol_key_missing`、`audio_end_invalid`、`protocol_settings_direction`、`handshake_frame`、`pair_invalid`、`pair_save_failed`、`handshake_required`、`handshake_invalid`、`connection_timeout`、`protocol_send`；占用状态区分 `clear_in_progress` 与 `input_in_progress`。影响旧客户端行为的 `auth`、`pair_code`、`pair_locked` 保持原值，确保旧 iPhone 能继续清除失效令牌并重新配对。

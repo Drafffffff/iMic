@@ -52,7 +52,7 @@ final class MacUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDeleg
 
     @objc func check() {
         guard (app?.preview == nil || Self.testing) else { return }
-        if !Self.configured { pendingMessage = "此构建尚未配置更新公钥，请等待发布者提供正式版本。" }
+        if !Self.configured { pendingMessage = L10n.text("This build has no update public key. Wait for an official build from the publisher.") }
         else { pendingCheck = true }
         start()
         drain()
@@ -68,7 +68,7 @@ final class MacUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDeleg
         }
         if let message = pendingMessage {
             pendingMessage = nil
-            let alert = NSAlert(); alert.messageText = "iMic 更新"; alert.informativeText = message
+            let alert = NSAlert(); alert.messageText = L10n.text("iMic Update"); alert.informativeText = message
             alert.runModal()
         }
         guard Self.configured else { return }
@@ -103,7 +103,7 @@ final class MacUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDeleg
     func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
         guard idle else {
             pendingCheck = true
-            throw NSError(domain: "iMic.Updater", code: 1, userInfo: [NSLocalizedDescriptionKey: "等待本轮输入和设置向导结束后检查更新。"])
+            throw NSError(domain: "iMic.Updater", code: 1, userInfo: [NSLocalizedDescriptionKey: L10n.text("Waiting for this input session and setup to finish before checking for updates.")])
         }
     }
     var supportsGentleScheduledUpdateReminders: Bool { true }

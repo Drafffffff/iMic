@@ -564,7 +564,7 @@ final class LinkClient: ObservableObject {
             switch state {
             case .failed(let error):
                 self.publish {
-                    self.phase = .failed("无法搜索 Mac · \(Self.readable(error))")
+                    self.phase = .failed(L10n.text("Cannot search for Macs · %@", L10n.argument(Self.readable(error))))
                 }
                 self.queue.asyncAfter(deadline: .now() + 2) { [weak self] in
                     guard let self = self, self.running, !self.ready else { return }
@@ -780,7 +780,7 @@ final class LinkClient: ObservableObject {
                 if isComplete || error != nil {
                     self.connectionLost(
                         generation: self.connectionGeneration,
-                        reason: error.map(Self.readable) ?? "连接已断开"
+                        reason: error.map(Self.readable) ?? L10n.text("Disconnected")
                     )
                     return
                 }
@@ -877,7 +877,7 @@ final class LinkClient: ObservableObject {
                     pairingCipher = nil
                     pendingCode = nil
                     closeConnectionLocked()
-                    fail("无法保存配对信息，请重新配对")
+                    fail(L10n.text("Could not save pairing details. Please pair again."))
                     return
                 }
                 publish { self.refreshRememberedPublished() }
@@ -959,9 +959,9 @@ final class LinkClient: ObservableObject {
                 if confirmed || !supported { self.polishPreferencesSaving = false }
                 if confirmed {
                     self.polishPreferencesError = preferences == pending
-                        ? nil : "Mac 确认的值与请求不同，已显示 Mac 当前实际保存的偏好。"
+                        ? nil : L10n.text("Your Mac confirmed different values. Showing the preferences actually saved on your Mac.")
                 } else if !supported, pending != nil {
-                    self.polishPreferencesError = "当前 Mac 不再支持手机修改润色偏好，请更新 Mac 端。"
+                    self.polishPreferencesError = L10n.text("This Mac no longer supports changing polish preferences from your phone. Update iMic on your Mac.")
                 } else if !stillSaving {
                     self.polishPreferencesError = nil
                 }
@@ -1001,15 +1001,16 @@ final class LinkClient: ObservableObject {
     }
 
     private func handleServerError(_ message: LinkMessage) {
+        // Known codes are shown in this iPhone’s language, never the Mac’s language.
         let code = message.code ?? "unknown"
-        let text = message.message ?? "链路错误"
+        let text = LinkStatusText.text(code: message.code, message: message.message, fallback: L10n.text("Connection error"))
         if code == "pair_code" || code == "pair_locked" {
             // 清掉已被拒绝的码：握手超时重连后不能自动重复提交，否则一次输错会持续消耗 Mac 的全局尝试次数。
             pendingCode = nil
             pairingCipher = nil
             pendingToken = nil
             let name = currentMacName ?? "Mac"
-            let error = code == "pair_locked" ? text : "配对码不正确，请重试"
+            let error = code == "pair_locked" ? text : L10n.text("Incorrect pairing code. Please retry.")
             publish {
                 self.pairing = true
                 self.pairingError = error
@@ -1126,7 +1127,7 @@ final class LinkClient: ObservableObject {
         let accepted = MacSelection.orderedPaired(candidates, preferredID: preferredMacID)
             .filter { UUID(uuidString: $0) != nil }
         guard !accepted.isEmpty else {
-            if forceBLE { publish { self.phase = .failed("请先在同一 Wi-Fi 下配对 Mac，再使用蓝牙连接") } }
+            if forceBLE { publish { self.phase = .failed(L10n.text("Pair with your Mac on the same Wi-Fi before using Bluetooth")) } }
             return
         }
         bleFallbackWork?.cancel()
@@ -1162,7 +1163,7 @@ final class LinkClient: ObservableObject {
             self.queue.async { [weak self] in self?.bleLost(ble) }
         }
         IMicLog.write("iphone.link", "start BLE fallback")
-        let name = currentMacName ?? "蓝牙 Mac"
+        let name = currentMacName ?? L10n.text("Bluetooth Mac")
         publish { self.phase = .connecting(name); self.transport = nil }
         ble.start(acceptedMacIDs: accepted)
     }
@@ -1307,7 +1308,7 @@ final class LinkClient: ObservableObject {
     func submitCode(_ raw: String) {
         let code = PairingCode.normalize(raw)
         guard code.count == 6 else {
-            publish { self.pairingError = "请输入 6 位配对码" }
+            publish { self.pairingError = L10n.text("Enter the 6-digit pairing code") }
             return
         }
         queue.async {
@@ -1344,7 +1345,7 @@ final class LinkClient: ObservableObject {
                 token: token.base64EncodedString()
             ))
         } catch {
-            publish { self.pairingError = "配对码格式错误" }
+            publish { self.pairingError = L10n.text("Invalid pairing code format") }
         }
     }
 
@@ -1434,7 +1435,7 @@ final class LinkClient: ObservableObject {
         guard permitsSend("polish.settings") else { return false }
         guard phase.isReady, polishPreferencesSupported, polishPreferences != nil,
               !polishPreferencesSaving else {
-            polishPreferencesError = "请先连接支持润色偏好设置的 Mac，并等待当前保存完成。"
+            polishPreferencesError = L10n.text("Connect to a Mac that supports polish preferences and wait for the current save to finish.")
             return false
         }
         let epoch = currentEpoch()
@@ -1448,7 +1449,7 @@ final class LinkClient: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self, epoch == self.currentEpoch() else { return }
                 if arguments.contains("--debug-polish-save-failure") {
-                    self.polishPreferencesError = "预览：Mac 未确认，本次选择未保存。"
+                    self.polishPreferencesError = L10n.text("Preview: Your Mac did not confirm. This selection was not saved.")
                 } else {
                     self.polishPreferences = preferences
                 }
@@ -1461,7 +1462,7 @@ final class LinkClient: ObservableObject {
             guard epoch == self.currentEpoch(), self.ready, self.supportsPolishPreferences else {
                 self.publish {
                     self.polishPreferencesSaving = false
-                    self.polishPreferencesError = "连接已变化，保存状态待重新连接确认。"
+                    self.polishPreferencesError = L10n.text("Connection changed. Reconnect to confirm whether changes were saved.")
                 }
                 return
             }
@@ -1474,7 +1475,7 @@ final class LinkClient: ObservableObject {
                 self.pendingPolishPreferences = nil
                 self.publish {
                     self.polishPreferencesSaving = false
-                    self.polishPreferencesError = "发送未完成，保存状态待重新连接确认。"
+                    self.polishPreferencesError = L10n.text("Send incomplete. Reconnect to confirm whether changes were saved.")
                 }
             }
         }
@@ -1489,7 +1490,7 @@ final class LinkClient: ObservableObject {
                 completion?(false)
                 if message.t == "input", message.action == "clear", let revision = message.seq {
                     self.publish { self.clearPending = false }
-                    self.deliver { self.onInputResult?(.inputResult(revision: revision, applied: false, message: "连接已变化，清空未执行")) }
+                    self.deliver { self.onInputResult?(.inputResult(revision: revision, applied: false, message: L10n.text("Connection changed. The text field was not cleared."))) }
                 }
                 return
             }
@@ -1498,7 +1499,7 @@ final class LinkClient: ObservableObject {
                       self.activeLinkSession == nil else {
                     if message.action == "clear", let revision = message.seq {
                         self.publish { self.clearPending = false }
-                        self.deliver { self.onInputResult?(.inputResult(revision: revision, applied: false, message: "Mac 仍在处理中，请稍后重试")) }
+                        self.deliver { self.onInputResult?(.inputResult(revision: revision, applied: false, message: L10n.text("Your Mac is still processing. Please retry shortly."))) }
                     }
                     return
                 }
@@ -1592,7 +1593,7 @@ final class LinkClient: ObservableObject {
             self.polishPreferencesSupported = false
             self.polishOutputSupported = false
             self.polishPreferencesSaving = false
-            self.polishPreferencesError = hadPendingSave ? "连接已断开，保存状态待重新连接确认。" : nil
+            self.polishPreferencesError = hadPendingSave ? L10n.text("Disconnected. Reconnect to confirm whether changes were saved.") : nil
         }
     }
 
@@ -1640,14 +1641,14 @@ final class LinkClient: ObservableObject {
         switch error {
         case .posix(let code):
             switch code {
-            case .ECONNREFUSED: return "Mac 拒绝连接"
-            case .ENETUNREACH, .EHOSTUNREACH: return "网络不可达"
-            case .ETIMEDOUT: return "连接超时"
-            default: return "网络错误"
+            case .ECONNREFUSED: return L10n.text("Your Mac refused the connection")
+            case .ENETUNREACH, .EHOSTUNREACH: return L10n.text("Network unreachable")
+            case .ETIMEDOUT: return L10n.text("Connection timed out")
+            default: return L10n.text("Network error")
             }
-        case .dns: return "无法解析 Mac 地址"
-        case .tls: return "加密握手失败"
-        default: return "连接失败"
+        case .dns: return L10n.text("Cannot resolve your Mac's address")
+        case .tls: return L10n.text("Encrypted handshake failed")
+        default: return L10n.text("Connection failed")
         }
     }
 }

@@ -39,40 +39,40 @@ struct MacDownloadView: View {
     var practice: (() -> Void)? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Mac 上装好 iMic 了吗？").font(.title3.weight(.semibold))
-            Text("iMic 需要电脑端配合。Mac 端负责识别和把文字输入到当前应用。")
-            if let installed, !expanded { GuideButton(title: "已经装好了", action: installed) }
+            Text(L10n.text("Is iMic installed on your Mac?")).font(.title3.weight(.semibold))
+            Text(L10n.text("iMic needs its Mac companion. Your Mac handles recognition and types text into the active app."))
+            if let installed, !expanded { GuideButton(title: L10n.text("It's installed"), action: installed) }
             if !expanded {
-                GuideButton(title: "还没有，发送到我的 Mac") { expanded = true }
+                GuideButton(title: L10n.text("Send the download link to my Mac")) { expanded = true }
             } else {
                 MetaLabel(text: "01 / HANDOFF", color: Theme.orange)
-                Text("如果 Mac 和 iPhone 登录同一 Apple ID，Mac 程序坞左侧会出现一个 Safari 图标，点它即可打开下载页。")
+                Text(L10n.text("If your Mac and iPhone use the same Apple ID, a Safari icon will appear on the left of your Mac's Dock. Click it to open the download page."))
                 ShareLink(item: OnboardingLinks.download) {
-                    Label("共享链接", systemImage: "square.and.arrow.up").frame(minHeight: 44)
+                    Label(L10n.text("Share link"), systemImage: "square.and.arrow.up").frame(minHeight: 44)
                 }
                 Button {
                     UIPasteboard.general.url = OnboardingLinks.download
                     copied = true
                     Haptics.shared.play(.copy)
                 } label: {
-                    Label("复制链接", systemImage: "doc.on.doc").frame(minHeight: 44)
+                    Label(L10n.text("Copy link"), systemImage: "doc.on.doc").frame(minHeight: 44)
                 }
                 if copied {
-                    Text("已复制，可在 Mac 上直接粘贴（需开启通用剪贴板）")
+                    Text(L10n.text("Copied. Paste on your Mac with Universal Clipboard enabled."))
                         .foregroundStyle(Theme.orange).accessibilityIdentifier("download.copied")
                 }
                 Hairline()
-                Text("1. 在 Mac 上下载并打开 iMic（macOS 13 及以上）\n\n2. 按 Mac 上的设置向导填入百炼 API Key\n\n3. 回到这里继续")
-                Text("百炼 API Key 由你自己在阿里云申请，识别会产生少量费用。")
+                Text(L10n.text("1. Download and open iMic on your Mac (macOS 13 or later)\n\n2. Follow the Mac setup guide to enter your Model Studio (Bailian) API Key\n\n3. Return here to continue"))
+                Text(L10n.text("Create your own Alibaba Cloud API Key. Recognition incurs a small usage fee."))
                     .font(.footnote).foregroundStyle(Theme.muted)
-                if let installed { GuideButton(title: "Mac 上装好了，继续", action: installed) }
+                if let installed { GuideButton(title: L10n.text("It's installed on my Mac. Continue"), action: installed) }
             }
-            if let practice { Button("先看看怎么用", action: practice).frame(minHeight: 44) }
+            if let practice { Button(L10n.text("Explore how it works"), action: practice).frame(minHeight: 44) }
         }
         .onAppear {
             let next = NSUserActivity(activityType: NSUserActivityTypeBrowsingWeb)
             next.webpageURL = OnboardingLinks.download
-            next.title = "获取 iMic Mac 版"
+            next.title = L10n.text("Get iMic for Mac")
             next.isEligibleForHandoff = true
             next.becomeCurrent()
             activity = next
@@ -103,7 +103,7 @@ struct OnboardingView: View {
                 HStack {
                     if onboarding.step != .welcome {
                         Button { back() } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
-                            .accessibilityLabel("返回")
+                            .accessibilityLabel(L10n.text("Back"))
                     }
                     Spacer()
                     MetaLabel(text: "IMIC / FIRST CONNECTION")
@@ -112,7 +112,7 @@ struct OnboardingView: View {
                     ForEach(OnboardingStep.allCases, id: \.rawValue) { step in
                         Rectangle().fill(step == onboarding.step ? Theme.orange : Theme.line).frame(height: 2)
                     }
-                }.accessibilityLabel("设置进度，第 \(onboarding.step.rawValue + 1) 步，共 6 步")
+                }.accessibilityLabel(L10n.text("Setup progress, step %@ of 6", L10n.argument(onboarding.step.rawValue + 1)))
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         GuideTitle(text: label, cell: 2.8, color: Theme.orange)
@@ -157,54 +157,54 @@ struct OnboardingView: View {
         switch onboarding.step {
         case .welcome:
             GuideTitle(text: "iMic", cell: 5, color: Theme.ivory).accessibilityLabel("iMic")
-            Text("iPhone 当麦克风，说完松手，文字直接打进 Mac。")
+            Text(L10n.text("Use your iPhone as a microphone. Release when done to type straight into your Mac."))
             WelcomeWaveform().frame(height: 210)
-            Label("按住说话，松手即输入", systemImage: "mic")
-            Label("弦手势：回车、删除、移动光标", systemImage: "waveform")
-            Label("局域网加密直连，Key 只存在你的 Mac", systemImage: "lock")
-            GuideButton(title: "开始") { onboarding.go(.mac) }
+            Label(L10n.text("Hold to speak, release to type"), systemImage: "mic")
+            Label(L10n.text("String gestures: Return, delete, move cursor"), systemImage: "waveform")
+            Label(L10n.text("Direct encrypted connection. Your Key stays on your Mac."), systemImage: "lock")
+            GuideButton(title: L10n.text("Get started")) { onboarding.go(.mac) }
         case .mac:
             MacDownloadView(expanded: onboarding.preview == "mac-download",
                 installed: { onboarding.go(.link) }, practice: { onboarding.practiceFromMac() })
         case .link:
             if link.localNetworkDenied {
                 GuideTitle(text: "LOCAL NETWORK OFF", cell: 1.65, color: Theme.orange)
-                Text("本地网络权限已关闭，iMic 无法找到 Mac。请在「设置 → iMic」中打开「本地网络」。")
-                GuideButton(title: "打开设置", action: settings)
+                Text(L10n.text("Local Network access is off, so iMic cannot find your Mac. Enable Local Network in Settings → iMic."))
+                GuideButton(title: L10n.text("Open Settings"), action: settings)
             } else if searching {
-                ProgressView().tint(Theme.orange).accessibilityLabel("正在寻找 Mac")
-                Text("正在寻找… 请保持 Mac 上的 iMic 打开。")
+                ProgressView().tint(Theme.orange).accessibilityLabel(L10n.text("Looking for a Mac"))
+                Text(L10n.text("Searching… Keep iMic open on your Mac."))
             } else {
-                Text("接下来 iMic 会在同一 Wi-Fi 中寻找你的 Mac，系统会询问是否允许访问本地网络，请选择「允许」。")
+                Text(L10n.text("iMic will look for your Mac on the same Wi-Fi. Choose Allow when asked for Local Network access."))
                 VStack(spacing: 18) {
                     GuideTitle(text: "LOCAL NETWORK", cell: 1.7, color: Theme.ivory)
-                    Text("允许 iMic 寻找并连接\n本地网络上的设备？").multilineTextAlignment(.center)
-                    HStack { Text("不允许").foregroundStyle(Theme.muted); Spacer(); Text("允许").foregroundStyle(Theme.orange) }
+                    Text(L10n.text("Allow iMic to find and connect to\ndevices on your local network?")).multilineTextAlignment(.center)
+                    HStack { Text(L10n.text("Don't Allow")).foregroundStyle(Theme.muted); Spacer(); Text(L10n.text("Allow")).foregroundStyle(Theme.orange) }
                     MetaLabel(text: "PERMISSION / ILLUSTRATION")
                 }.padding(24).background(Theme.panel).overlay(Rectangle().stroke(Theme.line))
-                    .accessibilityLabel("权限示意图：请在系统弹窗选择允许")
-                GuideButton(title: "开始寻找 Mac") { startSearch() }
+                    .accessibilityLabel(L10n.text("Permission illustration: choose Allow in the system dialog"))
+                GuideButton(title: L10n.text("Find my Mac")) { startSearch() }
             }
             if timedOut { troubleshooting }
-            Button("稍后再连接") { onboarding.presented = false }.frame(minHeight: 44)
+            Button(L10n.text("Connect later")) { onboarding.presented = false }.frame(minHeight: 44)
         case .pair:
             if let connectedName {
-                Text("✓ 已连接 \(connectedName)").foregroundStyle(Theme.orange)
+                Text(L10n.text("✓ Connected to %@", L10n.argument(connectedName))).foregroundStyle(Theme.orange)
             } else {
                 if link.macs.count > 1 {
-                    Text("选择你要配对的 Mac")
+                    Text(L10n.text("Choose the Mac to pair with"))
                 }
                 PairingSheet(embedded: true)
-                if link.macs.isEmpty { Text("正在寻找 Mac…"); if timedOut { troubleshooting } }
-                Button("稍后再连接") { onboarding.presented = false }.frame(minHeight: 44)
+                if link.macs.isEmpty { Text(L10n.text("Looking for a Mac…")); if timedOut { troubleshooting } }
+                Button(L10n.text("Connect later")) { onboarding.presented = false }.frame(minHeight: 44)
             }
         case .practice:
             PracticeView(preview: onboarding.preview, onInteractionChanged: { practiceInteracting = $0 }) { onboarding.finishPractice() }
         case .ready:
-            Text("在 Mac 上点一下任意输入框（比如备忘录），然后按住下面的横条说一句话。")
-            Text("点「开始使用」后，系统会依次请求麦克风权限（必需）和语音识别权限（用于手机上的实时预览，可以拒绝）。")
+            Text(L10n.text("Click any text field on your Mac, such as Notes. Then hold the bar below and say something."))
+            Text(L10n.text("Tap Start using iMic to request Microphone access (required), then Speech Recognition access (optional, for live preview on your phone)."))
                 .font(.footnote).foregroundStyle(Theme.muted)
-            GuideButton(title: "开始使用") {
+            GuideButton(title: L10n.text("Start using iMic")) {
                 guard !requestingPermissions else { return }
                 requestingPermissions = true
                 Task {
@@ -215,19 +215,19 @@ struct OnboardingView: View {
                     requestingPermissions = false
                 }
             }.disabled(requestingPermissions)
-            Button("在 Mac 上使用时遇到问题？") { openURL(OnboardingLinks.home) }.frame(minHeight: 44)
+            Button(L10n.text("Having trouble on your Mac?")) { openURL(OnboardingLinks.home) }.frame(minHeight: 44)
         }
     }
     private var troubleshooting: some View {
         VStack(alignment: .leading, spacing: 16) {
             MetaLabel(text: "CHECK CONNECTION", color: Theme.orange)
-            Text("1. Mac 上的 iMic 是否已打开？菜单栏能看到麦克风图标。")
-            Text("2. iPhone 和 Mac 是否在同一个 Wi-Fi？")
-            Text("3. 访客、公司或酒店网络常禁止设备互相访问，可以改用手机热点试试。")
-            Text("4. 是否开着 VPN 或代理？")
-            Text("5. Mac 的防火墙是否阻止了 iMic 的传入连接？")
-            Text("6.「本地网络」权限是否已允许？")
-            Button("打开设置", action: settings).frame(minHeight: 44)
+            Text(L10n.text("1. Is iMic open on your Mac? Look for the microphone icon in the menu bar."))
+            Text(L10n.text("2. Are your iPhone and Mac on the same Wi-Fi?"))
+            Text(L10n.text("3. Guest, office, and hotel networks often block connections between devices. Try a personal hotspot."))
+            Text(L10n.text("4. Is a VPN or proxy enabled?"))
+            Text(L10n.text("5. Is your Mac's firewall blocking incoming connections to iMic?"))
+            Text(L10n.text("6. Have you allowed Local Network access?"))
+            Button(L10n.text("Open Settings"), action: settings).frame(minHeight: 44)
         }.font(.callout).accessibilityIdentifier("onboarding.troubleshooting")
     }
     private func settings() {
@@ -275,7 +275,7 @@ private struct WelcomeWaveform: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         TorusView(store: spectrum, instrumentHUD: true, channelLabel: "PREVIEW")
-            .accessibilityLabel("iMic 荧光波形演示")
+            .accessibilityLabel(L10n.text("iMic phosphor waveform demo"))
             .onAppear { spectrum.configureAmbientMotion(enabled: true, reducedMotion: reduceMotion); spectrum.setVisible(true) }
             .onDisappear { spectrum.setVisible(false) }
             .onChange(of: reduceMotion) { _, value in spectrum.configureAmbientMotion(enabled: true, reducedMotion: value) }
@@ -289,10 +289,10 @@ struct GuideSettingsSection: View {
     private enum Destination: String, Identifiable { case practice, download; var id: String { rawValue } }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            GuideTitle(text: "GUIDE", cell: 1.6, color: Theme.orange).accessibilityLabel("使用教程")
-            Text("使用教程").font(.headline)
-            Button("重新练习手势") { destination = .practice }.frame(minHeight: 44)
-            Button("获取 Mac 版") { destination = .download }.frame(minHeight: 44)
+            GuideTitle(text: "GUIDE", cell: 1.6, color: Theme.orange).accessibilityLabel(L10n.text("How to use iMic"))
+            Text(L10n.text("How to use iMic")).font(.headline)
+            Button(L10n.text("Practice gestures again")) { destination = .practice }.frame(minHeight: 44)
+            Button(L10n.text("Get the Mac app")) { destination = .download }.frame(minHeight: 44)
         }
         .onChange(of: destination) { _, value in onPresentationChanged(value != nil) }
         .sheet(item: $destination) { item in
@@ -307,7 +307,7 @@ struct GuideSettingsSection: View {
                         }
                     }.padding(24)
                 }.scrollDisabled(practiceInteracting).background(Theme.ink).foregroundStyle(Theme.ivory)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("关闭") { destination = nil } } }
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Close")) { destination = nil } } }
             }.preferredColorScheme(.dark)
         }
     }

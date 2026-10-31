@@ -17,9 +17,9 @@ enum PolishProvider: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .deepseek: return "DeepSeek 官方 API"
-        case .bailian: return "百炼（推荐）"
-        case .custom: return "自定义 OpenAI 兼容服务"
+        case .deepseek: return L10n.text("DeepSeek API")
+        case .bailian: return L10n.text("Model Studio (recommended)")
+        case .custom: return L10n.text("Custom OpenAI-compatible service")
         }
     }
 
@@ -88,13 +88,18 @@ enum DeepSeekConfiguration {
     }
 }
 
-enum PolishConfigurationError: String, LocalizedError {
-    case model = "请填写润色模型名称"
-    case endpoint = "请填写完整的 https:// 主机/路径/chat/completions 地址，不含账号、查询参数或占位符"
-    case plaintext = "远程服务必须使用 HTTPS；HTTP 仅允许 127.0.0.1 或 [::1] 本机联调"
-    case officialHost = "DeepSeek 官方来源只能使用 api.deepseek.com 的 HTTPS 地址"
-    case bailianHost = "百炼来源只能使用百炼 DashScope 或业务空间专属 HTTPS 地址"
-    case key = "请填写当前来源的有效 API Key"
+enum PolishConfigurationError: Error, LocalizedError {
+    case model, endpoint, plaintext, officialHost, bailianHost, key
+    var rawValue: String {
+        switch self {
+        case .model: return L10n.text("Enter a polish model name")
+        case .endpoint: return L10n.text("Enter the full https://host/path/chat/completions address without credentials, query parameters, or placeholders")
+        case .plaintext: return L10n.text("Remote services require HTTPS. HTTP is allowed only for local testing at 127.0.0.1 or [::1].")
+        case .officialHost: return L10n.text("The DeepSeek provider requires an HTTPS address on api.deepseek.com")
+        case .bailianHost: return L10n.text("The Model Studio provider requires an official DashScope or workspace-specific HTTPS address")
+        case .key: return L10n.text("Enter a valid API Key for this provider")
+        }
+    }
     var errorDescription: String? { rawValue }
 }
 

@@ -115,17 +115,17 @@ struct PairingSheet: View {
                 if utilitySheet == nil { codeFocused = true }
             }
         }
-        .confirmationDialog("断开并忘记这台 Mac？", isPresented: $showForget, titleVisibility: .visible) {
-            Button("断开并忘记", role: .destructive) {
+        .confirmationDialog(L10n.text("Disconnect and forget this Mac?"), isPresented: $showForget, titleVisibility: .visible) {
+            Button(L10n.text("Disconnect and forget"), role: .destructive) {
                 Haptics.shared.play(.tap)
                 link.forgetMac()
                 dismiss()
             }
-            Button("取消", role: .cancel) {
+            Button(L10n.text("Cancel"), role: .cancel) {
                 Haptics.shared.play(.tap)
             }
         } message: {
-            Text("下次连接需要重新输入配对码。")
+            Text(L10n.text("You'll need to enter the pairing code again next time."))
         }
         .sheet(item: $utilitySheet) { sheet in
             switch sheet {
@@ -150,7 +150,7 @@ struct PairingSheet: View {
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
-            .accessibilityLabel("关闭")
+            .accessibilityLabel(L10n.text("Close"))
         }
     }
 
@@ -173,7 +173,7 @@ struct PairingSheet: View {
     private func connected(name: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("当前连接设备")
+                Text(L10n.text("Connected device"))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.muted)
                 Spacer()
@@ -191,7 +191,7 @@ struct PairingSheet: View {
                     Haptics.shared.play(.warning)
                     showForget = true
                 } label: {
-                    Text("忘记")
+                    Text(L10n.text("Forget"))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Theme.muted)
                         .frame(minWidth: 44, minHeight: 44)
@@ -202,12 +202,12 @@ struct PairingSheet: View {
 
     private func codeEntry(name: String) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("配对到 \(name)")
+            Text(L10n.text("Pair with %@", L10n.argument(name)))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Theme.orange)
                 .lineLimit(2)
                 .truncationMode(.middle)
-            Text("在 Mac 的 iMic 窗口里找到 6 位配对码。")
+            Text(L10n.text("Find the 6-digit pairing code in the iMic window on your Mac."))
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.muted)
             ZStack {
@@ -238,7 +238,7 @@ struct PairingSheet: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
                     .opacity(0.02)
-                    .accessibilityLabel("六位配对码")
+                    .accessibilityLabel(L10n.text("Six-digit pairing code"))
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -256,12 +256,14 @@ struct PairingSheet: View {
                     MetaLabel(text: "VERIFYING", color: Theme.muted)
                 }
             } else {
-                MetaLabel(text: "输入满 6 位后自动连接", color: Theme.muted)
+                Text(L10n.text("Connects automatically after all 6 digits are entered"))
+                    .font(.system(size: 10, design: .monospaced)).tracking(0.6)
+                    .foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
             }
 
             HStack(spacing: 8) {
                 Rectangle().fill(Theme.orange.opacity(0.5)).frame(width: 3, height: 3)
-                Text("配对码每 10 分钟轮换。配对成功后，iMic 自动记住这台 Mac。")
+                Text(L10n.text("The pairing code changes every 10 minutes. Once paired, iMic remembers this Mac."))
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -274,7 +276,7 @@ struct PairingSheet: View {
         HStack(spacing: 12) {
             ProgressView().tint(Theme.orange).scaleEffect(0.8)
             VStack(alignment: .leading, spacing: 4) {
-                Text("正在连接 \(name)")
+                Text(L10n.text("Connecting to %@", L10n.argument(name)))
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Theme.ivory)
                     .lineLimit(2)
@@ -317,7 +319,7 @@ struct PairingSheet: View {
             if link.macs.isEmpty {
                 HStack(spacing: 8) {
                     ProgressView().tint(Theme.orange).scaleEffect(0.7)
-                    Text("确保 iPhone 与 Mac 在同一 Wi-Fi，且已允许「本地网络」。")
+                    Text(L10n.text("Keep your iPhone and Mac on the same Wi-Fi and allow Local Network access."))
                         .font(.system(size: 13))
                         .foregroundStyle(Theme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -327,7 +329,7 @@ struct PairingSheet: View {
                     Haptics.shared.play(.tap)
                     link.retry()
                 } label: {
-                    Text("重新搜索")
+                    Text(L10n.text("Search again"))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Theme.orange)
                 }
@@ -345,7 +347,7 @@ struct PairingSheet: View {
                                     .foregroundStyle(Theme.ivory)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
-                                MetaLabel(text: link.pairedMacIDs.contains(mac.id) ? "已配对" : "需要配对", color: Theme.muted)
+                                MetaLabel(text: link.pairedMacIDs.contains(mac.id) ? L10n.text("Paired") : L10n.text("Pairing required"), color: Theme.muted)
                             }
                             Spacer()
                             Image(systemName: "arrow.right")
@@ -356,7 +358,7 @@ struct PairingSheet: View {
                         .overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
                     }
                 }
-                Text("点击 Mac 后，按窗口里的配对码确认。")
+                Text(L10n.text("Tap a Mac, then confirm with the pairing code in its window."))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.muted)
             }
@@ -370,7 +372,7 @@ struct PairingSheet: View {
                 utilitySheet = .waveforms
             } label: {
                 HStack {
-                    Text("波形复看").font(.system(size: 13, weight: .medium))
+                    Text(L10n.text("Waveform replay")).font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Theme.ivory)
                     Spacer()
                     MetaLabel(text: "LOCAL · 24H", color: Theme.muted)
@@ -390,7 +392,7 @@ struct PairingSheet: View {
                         openURL(url)
                     }
                 } label: {
-                    Text("系统权限")
+                    Text(L10n.text("System permissions"))
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.muted)
                         .frame(minWidth: 44, minHeight: 44)

@@ -60,5 +60,5 @@ xcrun simctl launch booted art.malette.imic \
 - `MAC_BUILD` 是 Mac 构建号，每次发布都加 1，原地覆盖也不例外（macOS 默认文件系统中 `BUILD` 与 `build/` 重名，故使用 `MAC_BUILD`）。
 - `VERSION`、Mac `Info.plist`、iOS `MARKETING_VERSION` 使用同一版本号。
 - 图标由 `tools/icon.swift` 生成，Mac 与 iOS 共用同一套像素麦克风。
-- 界面语言：技术标签用英文像素字，操作说明用简体中文。
+- 界面语言：技术标签用英文像素字；操作说明支持简体中文和英文，跟随系统语言，兜底为英文。新增或修改界面文字时，必须同时提供中英文。
 - 橙色只用于状态、交互与强调，不铺大面积背景。

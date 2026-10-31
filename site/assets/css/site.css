@@ -250,3 +250,12 @@ details p { max-width: 36em; font-size: 14px; color: var(--muted); padding-top: 
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .video-toggle { display: block; }
 }
+
+/* The suggestion stays in document flow and never covers navigation. */
+.language-banner{padding:10px 24px;display:flex;justify-content:center;align-items:center;gap:20px;border-bottom:1px solid var(--line,#4a4035);font-size:14px}
+.language-banner[hidden]{display:none}.language-banner button{background:transparent;color:inherit;border:1px solid currentColor;border-radius:4px;width:28px;height:28px;cursor:pointer}
+.language-switch{white-space:nowrap}html[lang="en"] .hero h1{font-size:clamp(40px,5.5vw,76px);line-height:1.1}
+@media(max-width:600px){html[lang="en"] .header nav{gap:10px}html[lang="en"] .hero h1{font-size:42px}html[lang="en"] .field-entry{font-size:14px}}
+
+.language-choice{white-space:nowrap}.masthead .brand{flex-shrink:0}
+@media(max-width:600px){.masthead{height:auto;min-height:88px;flex-direction:column;align-items:flex-start;justify-content:center;gap:16px;padding-block:20px}.masthead nav{gap:12px;font-size:12px;line-height:1.5;justify-content:space-between;width:100%;white-space:nowrap}.masthead nav a{white-space:nowrap}.language-choice{font-size:12px}}

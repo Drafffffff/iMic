@@ -9,7 +9,7 @@ struct WaveformTrace: Codable, Identifiable, Sendable {
         case synthetic
 
         var label: String { self == .microphone ? "MICROPHONE" : "SYNTHETIC" }
-        var explanation: String { self == .microphone ? "真实麦克风" : "合成测试 · 非真实录音" }
+        var explanation: String { self == .microphone ? L10n.text("Real microphone") : L10n.text("Synthetic test · Not a real recording") }
     }
 
     struct Frame: Codable, Sendable {
@@ -157,7 +157,7 @@ final class WaveformTraceStore: ObservableObject {
     private func report(_ error: Error, epoch: UInt64) {
         guard epoch == self.epoch else { return }
         isLoading = false
-        errorMessage = "波形缓存无法读写：\(error.localizedDescription)"
+        errorMessage = L10n.text("Cannot read or write waveform cache: %@", L10n.argument(error.localizedDescription))
     }
 }
 

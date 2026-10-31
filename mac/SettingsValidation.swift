@@ -7,8 +7,8 @@ enum SettingsValidation {
             switch self {
             case .rejected: return BailianIssue.invalidKey.message
             case .bailian(let issue): return issue.message
-            case .network: return "无法连接服务，请检查网络后重试。"
-            case .http(let status): return "验证失败（HTTP \(status)），请检查服务地址与地域。"
+            case .network: return L10n.text("Cannot connect to the service. Check your network and retry.")
+            case .http(let status): return L10n.text("Verification failed (HTTP %@). Check the service address and region.", L10n.argument(status))
             }
         }
     }
@@ -83,9 +83,9 @@ final class BailianDiscovery {
         let polishListed: Bool
         var region: String { BailianAddress.title(BailianAddress.region(host)) }
         var message: String {
-            var text = "已识别：\(region)。"
-            if !asrListed { text += "模型列表未列出语音模型；权限将在首次识别时确认。" }
-            if !polishListed { text += "这个 Key 暂时不能使用润色模型，可以稍后在设置中开启。" }
+            var text = L10n.text("Detected: %@.", L10n.argument(region))
+            if !asrListed { text += L10n.text("The model list does not include the speech model. Access will be confirmed on first recognition.") }
+            if !polishListed { text += L10n.text("This Key cannot use the polish model yet. You can enable it later in Settings.") }
             return text
         }
         func apply(_ defaults: UserDefaults = MacPreferences.defaults) {
@@ -111,12 +111,12 @@ final class BailianDiscovery {
             DispatchQueue.main.async { if !operation.stopped { completion(.failure(error as? BailianIssue ?? .address)) } }
             return operation
         }
-        progress("正在识别地域…")
+        progress(L10n.text("Detecting region…"))
         let finish = {
             guard !operation.stopped else { return }
             let responses = operation.responses
             operation.cancel()
-            progress("正在确认模型权限…")
+            progress(L10n.text("Checking model access…"))
             // Complete on the next turn so both progress stages can be rendered.
             DispatchQueue.main.async {
                 let accepted = hosts.filter { responses[$0]?.0 == 200 }

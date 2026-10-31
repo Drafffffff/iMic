@@ -289,3 +289,15 @@ xcrun simctl launch --terminate-running-process booted art.malette.imic \
 ## 许可
 
 Mac 端复用 Brick Mic 的实现，沿用 GPL-3.0。协议与 iOS 端为本次新增代码，随项目整体以 GPL-3.0 分发。
+
+## 本地化
+
+界面语言由系统首选语言决定（也支持系统的单 App 语言设置）：所有 `zh-*` 变体使用简体中文，其他语言使用英文；缺失资源回退英文。技术像素标签保持英文。不要添加 App 内语言开关。
+
+- 唯一翻译源：`ios/iMic/Localizable.xcstrings`（源语言 `en`，包含 `en` / `zh-Hans`）。权限用途说明在 `InfoPlist.xcstrings`；`mac.*` 条目用于生成 Mac 同名 InfoPlist.strings key。
+- Mac：`python3 tools/generate-l10n.py` 生成 `mac/Resources/{en,zh-Hans}.lproj/*.strings`，构建脚本复制到 App。仅使用 Python 和系统 Foundation，不依赖 `xcstringstool` 或完整 Xcode。
+- 新增文案：先给 Catalog 添加中英文，再调用共享的 `L10n.text("English source")`。非 Text 的 String 也走此函数；iOS 内部使用 `String(localized:)`，Mac 内部使用 `NSLocalizedString`。带参数用 `%@` 与 `L10n.argument(value)`；数字由 NumberFormatter 按所选语言格式化。日期使用 DateFormatter 的模板或样式。相同英文但不同中文的条目用 `##语境` 后缀区分；英文兜底会去掉后缀。
+- 不要在模型提示词中使用已本地化的显示名称。`promptTitle` / `promptExample`、`instruction` 和 `languageName` 是固定中文提示词输入。
+- 跨设备错误：`shared/LinkStatusText.swift` 将稳定 `code` 映射为本地文案；新 iPhone 对未知/缺失 code 继续显示 Mac 的 message。新增 code 必须同步协议、两端和测试文档。
+- 检查：`./scripts/test-l10n.sh`；生成物需要提交。`tools/l10n-exclusions.json` 按精确字符串 SHA-256 记录保留的中文及理由，新中文不能被路径白名单自动放过。
+- 截图：先自行创建专用模拟器，再 `xcrun simctl launch <专用UDID> art.malette.imic --ui-preview=result -AppleLanguages '(en)'`。中文使用 `'(zh-Hans)'`，其他预览状态见代码。Mac 从本 worktree 的构建产物运行 `iMic --ui-preview=settings-general -AppleLanguages '(en)'`。不要安装覆盖正式 App。完成后关闭并删除自己创建的模拟器。

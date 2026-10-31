@@ -40,7 +40,7 @@ mkdir -p "$ROOT/build/tools"
 swiftc -swift-version 5 -O -target arm64-apple-macosx13.0 \
   -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
   -framework Network -framework CryptoKit \
-  "$ROOT/shared/iMicLink.swift" "$ROOT/shared/PolishOptions.swift" "$ROOT/tools/imic-client/main.swift" \
+  "$ROOT/shared/Localization.swift" "$ROOT/shared/LinkStatusText.swift" "${ROOT}/shared/iMicLink.swift" "$ROOT/shared/PolishOptions.swift" "$ROOT/tools/imic-client/main.swift" \
   -o "$CLIENT"
 
 # 避免模拟器里的 iPhone 应用自动重连并抢走测试连接。
