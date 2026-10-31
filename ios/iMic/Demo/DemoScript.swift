@@ -17,6 +17,10 @@ final class DemoScript {
     let scene: String?
     private var utterances: [Utterance] = []
     private var next = 0
+    /// 16 kHz mono PCM of each utterance, spoken by the system voice. Fed through the same
+    /// analyzer as the microphone so the waveform follows real speech.
+    private(set) var speech: [Int: Data] = [:]
+    var currentIndex: Int { min(next, max(0, utterances.count - 1)) }
     private let log: FileHandle?
 
     var active: Bool { scene != nil }
@@ -38,6 +42,7 @@ final class DemoScript {
             log = nil
         }
         record("launch", ["scene": scene ?? ""])
+        if let scene { loadSpeech(scene) }
         if scene != nil {
             LinkClient.demoInputObserver = { action in
                 Task { @MainActor in DemoScript.shared.record("input", ["action": action]) }
@@ -77,6 +82,35 @@ final class DemoScript {
         log.write(Data((line + "\n").utf8))
     }
 
+    /// Speech prepared on the Mac (tools/site-demo-speech.swift) and copied into
+    /// Documents/demo-speech by the capture script; synthesize on device only as a fallback.
+    private func loadSpeech(_ scene: String) {
+        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("demo-speech")
+        var missing = false
+        for index in utterances.indices {
+            if let data = try? Data(contentsOf: folder.appendingPathComponent("\(scene)-\(index).pcm")), data.count > 640 {
+                speech[index] = data
+                record("speech", ["index": "\(index)", "seconds": String(format: "%.2f", Double(data.count) / 32_000)])
+            } else {
+                missing = true
+            }
+        }
+        if missing { synthesize(0) }
+    }
+
+    private func synthesize(_ index: Int) {
+        guard index < utterances.count else { return }
+        DebugSpeech.shared.synthesize(utterances[index].live, rate: 0.56) { [weak self] data in
+            Task { @MainActor in
+                guard let self else { return }
+                if let data, self.speech[index] == nil { self.speech[index] = data }
+                self.record("speech", ["index": "\(index)", "seconds": String(format: "%.2f", Double(data?.count ?? 0) / 32_000)])
+                self.synthesize(index + 1)
+            }
+        }
+    }
+
     private static func script(for scene: String) -> [Utterance] {
         switch scene {
         case "hero":
@@ -93,8 +127,8 @@ final class DemoScript {
             return [Utterance(live: "我们先把首页的动效定下来然后周五之前给出两个方案",
                               final: "我们先把首页的动效定下来，然后周五之前给出两个方案。")]
         case "polish":
-            return [Utterance(live: "嗯那个就是我想说一下今天下午三点要开会然后讨论一下那个输入框动画的细节吧",
-                              final: "今天下午三点开会，讨论输入框动画细节。")]
+            return [Utterance(live: "嗯那个我想说一下下午三点开会然后讨论一下动画细节吧",
+                              final: "下午三点开会，讨论动画细节。")]
         case "sound":
             return [Utterance(live: "这是一条测试消息", final: "这是一条测试消息。")]
         default:

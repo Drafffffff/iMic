@@ -278,7 +278,10 @@ IMIC_TESTFLIGHT_DIR=build/testflight-demo.noindex ./scripts/testflight.sh check
 2. **手势由 XCUITest 在真实界面上执行**（`tests/iOSUI/DemoCaptureUITests.swift`），而不是在 App 内注入合成触点。这样手势识别、弦、发射动画都走产品原路径。App 侧只在 DEBUG 下补充"麦克风和 Mac"本该提供的内容：按住时按脚本逐字出现实时文字，松手后给出结果（`ios/iMic/Demo/`）。演示模式基于 `--ui-preview`，不连接 Mac、不录音、不发送。
 3. **对齐方式。** 模拟器 H.264 录屏的显示时间戳不可靠，但解码时间戳严格按采集顺序；HEVC 录屏又会漏掉大段 Metal 画面。因此：录 H.264 → 用 `setts=pts=DTS` 以解码时间为准 → 规整为恒定 60fps。App 和 Mac 演示窗口都在角落画一个 12 位事件计数码，逐帧读出得到每个事件在录屏中的精确时刻；这块区域在合成时被手机圆角或 Mac 窗口上沿裁掉，成片里看不到。实测 Mac 侧各事件偏差 17–34 ms（1–2 帧）。
 4. **Mac 侧**用自己的演示窗口（`tools/site-demo-mac/`），与已安装的 iMic 使用同一 Bundle ID 和 Developer ID 签名，从而复用辅助功能授权，在自己的文本框上运行真实的 `TextPolishEffect`。只录该窗口内部，避免录到屏幕上其他内容；用 `screencapture -v` 录制，而非 ScreenCaptureKit。
-5. **时长。** STRING 有 4 个节拍（11.5 秒），SOUND 有 10.3 秒，单段时长上限因此放宽到 12 秒（`tools/check-site.py`）。
+5. **时长。** STRING 有 4 个节拍（11.5 秒），SOUND 有 10.3 秒，单段时长上限因此放宽到 12 秒（真机重录后为 13 秒）（`tools/check-site.py`）。
 6. **音效**直接使用 App 首次启动时由 `SoundSynth` 渲染到缓存目录的 WAV（`iMicSounds-v11`），与产品逐字节相同；没有另写导出工具。
 7. **页面。** 首屏改为文案在上、横版视频全宽在下，保证 Mac 文字可读；亮点视频为 4:3。手机端没有单独输出竖版首屏视频，镜头推近时的关键画面在手机宽度下仍可辨认，后续如有需要再做。
 8. **可读性。** Mac 演示窗口字号 24pt；镜头在按住时推向手机、在文字落入时推向 Mac 输入框。
+9. **真机重录（第二轮）。** 模拟器实际只渲染约 18 帧/秒，发射动画显得卡顿、文字飞出不明显，因此改为在 USB 连接的 iPhone 上录制：`tools/site-demo-iphone-capture.swift` 通过 CoreMediaIO 打开 iPhone 屏幕采集，用 `AVAssetWriter` 按主机时钟写入每一帧（`AVCaptureMovieFileOutput` 会压缩静止段的时间，不能用）。它被打包成独立的 "iMic Demo Capture.app"（`scripts/site-demo-build-iphone-capture.sh`），这样 macOS 摄像头授权归属于它，只需用户批准一次。`scripts/site-demo.sh` 检测到 iPhone 时自动走真机，否则仍用模拟器；录完需重装正式版 App 并删除 UI 测试运行器（脚本会提示命令）。
+10. **真实语音波形。** 之前按住时的波形是固定的假频谱。现在 `tools/site-demo-speech.swift` 在 Mac 上用系统中文语音朗读 `DemoScript.swift` 里的每句话，输出 16 kHz PCM，录制前拷进 App 的 `Documents/demo-speech/`；演示时按 20 ms 分块送入与麦克风同一个 `SpectrumAnalyzer`，实时文字也按语音进度出现。
+11. **Mac 对齐。** `screencapture` 的显示时间戳是准确的（与模拟器相反），Mac 侧改用 PTS 规整后，各事件偏差降到 ≤17 ms（1 帧以内）。

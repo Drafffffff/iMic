@@ -30,10 +30,9 @@ date +%s.%N > "$RAW/$SCENE.macbegin"
 kill -USR1 "$APP_PID"
 wait "$CAPTURE_PID" || true
 wait "$APP_PID" 2>/dev/null || true
-# Presentation timestamps in these recordings are unreliable while decode timestamps
-# follow capture order (no frame reordering), so time every frame by its decode time.
-ffmpeg -v error -y -i "$MOVIE" -c copy -bsf:v "setts=pts=DTS" "${MOVIE%.mov}.dts.mov"
-ffmpeg -v error -y -i "${MOVIE%.mov}.dts.mov" -vf fps=60 -c:v libx264 -preset veryfast -crf 8 -bf 0 -g 30 \
+# screencapture's presentation timestamps follow real time (unlike the simulator's, see
+# site-demo-ios-capture.sh); normalise to constant 60fps on them.
+ffmpeg -v error -y -i "$MOVIE" -vf fps=60 -c:v libx264 -preset veryfast -crf 8 -bf 0 -g 30 \
   -pix_fmt yuv420p "$RAW/$SCENE.mac.norm.mp4"
 # Place each replayed item in the recording by the window's corner counter (top-left of
 # the recorded area: 2pt in from the 16pt inset, 2 pixels per point on Retina).

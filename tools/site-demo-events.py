@@ -15,8 +15,8 @@ import sys
 
 movie, events_path = sys.argv[1:3]
 # Optional: <x> <y> <pixels-per-point> of the counter's top-left (defaults: iPhone corner).
-X0, Y0, SCALE = (int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])) if len(sys.argv) > 5 else (0, 0, 3)
-W, H = 20 * SCALE, 8 * SCALE
+X0, Y0, SCALE = (int(sys.argv[3]), int(sys.argv[4]), float(sys.argv[5])) if len(sys.argv) > 5 else (0, 0, 3.0)
+W, H = int(round(20 * SCALE)), int(round(8 * SCALE))
 FPS = 60   # the normalised constant-frame-rate copy: frame i is at i / 60 s
 raw = subprocess.run(["ffmpeg", "-v", "error", "-i", movie, "-vf", f"crop={W}:{H}:{X0}:{Y0},format=gray",
                       "-f", "rawvideo", "-"], capture_output=True, check=True).stdout

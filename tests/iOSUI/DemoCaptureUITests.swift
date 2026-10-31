@@ -15,32 +15,32 @@ final class DemoCaptureUITests: XCTestCase {
         app.launchArguments = ["--ui-preview=idle", "--demo-script=\(scene)"]
         app.launch()
         XCTAssertTrue(app.buttons["HOLD TO SPEAK"].waitForExistence(timeout: 10))
-        pause(1.2)   // Let the idle glow settle and the recorder catch up.
+        pause(3.5)   // Speech for every utterance is synthesized on launch; let it finish.
     }
 
     func testScene() throws {
         switch scene {
         case "hero":
-            hold(2.6); pause(3.3)   // polishing, then the result is read before it fires
+            hold(3.5); pause(3.3)   // polishing, then the result is read before it fires
             fire(); pause(1.6)
         case "hold":
-            hold(2.6); pause(2.6)
+            hold(2.5); pause(2.6)
         case "string":
-            hold(2.2); pause(1.0)
+            hold(2.8); pause(1.0)
             swipe(-130); pause(0.25); swipe(90); pause(0.35)
             pullUpDelete(1.0); pause(0.4)
             clearToTop(); pause(0.9)
-            hold(0.9); pause(1.2)
+            hold(1.0); pause(1.2)
             fire(); pause(1.3)
         case "live":
-            hold(2.8); pause(2.4)
+            hold(4.3); pause(2.4)
         case "polish":
-            hold(2.8); pause(3.6)
+            hold(4.5); pause(3.6)
         case "sound":
-            hold(1.4); pause(1.1)
+            hold(1.6); pause(1.1)
             pullUpDelete(0.4); pause(0.3)
             clearToTop(); pause(0.9)
-            hold(0.9); pause(1.1)
+            hold(1.6); pause(1.1)
             fire(); pause(1.2)
         default:
             XCTFail("Unknown demo scene \(scene)")

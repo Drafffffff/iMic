@@ -28,7 +28,7 @@ TestFlight 发布使用独立的签名归档流程，见 [TestFlight 发布说�
 
 ### 官网演示视频
 
-`site/assets/video/` 里的演示视频由真实 App 录制合成，`./scripts/site-demo.sh` 可以一键重新生成（需要 Xcode、ffmpeg、带 Pillow 和 numpy 的 Python，以及已安装 iMic 的辅助功能授权）。过程中 Mac 演示窗口会在主屏幕中央出现，请勿操作电脑。
+`site/assets/video/` 里的演示视频由真实 App 录制合成，`./scripts/site-demo.sh` 可以一键重新生成（需要 Xcode、ffmpeg、带 Pillow 和 numpy 的 Python，以及已安装 iMic 的辅助功能授权；连接 iPhone 时在真机上录制，首次需批准 "iMic Demo Capture" 的摄像头权限）。过程中 Mac 演示窗口会在主屏幕中央出现，请勿操作电脑。
 
 ## 源码构建环境
 

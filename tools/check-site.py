@@ -141,7 +141,7 @@ def video_fps(data):
         return frames / (ticks / timescale) if ticks else 0
     return 0
 
-# Demo videos: hero ≤3 MB, others ≤2.5 MB; ≤12s; 60fps; only sound.mp4 carries audio.
+# Demo videos: hero ≤3 MB, others ≤2.5 MB; ≤13s; 60fps; only sound.mp4 carries audio.
 for path in sorted(root.rglob('*.mp4')):
     data=path.read_bytes()
     limit = 3_000_000 if path.name.startswith('hero') else 2_500_000
@@ -158,7 +158,7 @@ for path in sorted(root.rglob('*.mp4')):
         offset=mvhd+(24 if version==1 else 16)
         scale=struct.unpack_from('>I',data,offset)[0]
         duration=struct.unpack_from('>Q' if version==1 else '>I',data,offset+4)[0]/scale
-        require(0<duration<=12.05, f'{path.name}: duration {duration:.3f}s outside budget')
+        require(0<duration<=13.05, f'{path.name}: duration {duration:.3f}s outside budget')
         fps = video_fps(data)
         require(abs(fps - 60) < 0.5, f'{path.name}: {fps:.2f} fps, expected 60')
         print(f'Video {path.name}: {duration:.2f}s · {fps:.0f}fps · {len(data):,} bytes / {limit:,} bytes · H.264 · faststart · {"AAC audio" if has_audio else "silent"}')
