@@ -301,3 +301,10 @@ Mac 端复用 Brick Mic 的实现，沿用 GPL-3.0。协议与 iOS 端为本次�
 - 跨设备错误：`shared/LinkStatusText.swift` 将稳定 `code` 映射为本地文案；新 iPhone 对未知/缺失 code 继续显示 Mac 的 message。新增 code 必须同步协议、两端和测试文档。
 - 检查：`./scripts/test-l10n.sh`；生成物需要提交。`tools/l10n-exclusions.json` 按精确字符串 SHA-256 记录保留的中文及理由，新中文不能被路径白名单自动放过。
 - 截图：先自行创建专用模拟器，再 `xcrun simctl launch <专用UDID> art.malette.imic --ui-preview=result -AppleLanguages '(en)'`。中文使用 `'(zh-Hans)'`，其他预览状态见代码。Mac 从本 worktree 的构建产物运行 `iMic --ui-preview=settings-general -AppleLanguages '(en)'`。不要安装覆盖正式 App。完成后关闭并删除自己创建的模拟器。
+
+## 官网 CRT 效果
+
+- 所有浏览器：`site/assets/css/site.css` 末尾的 `body::before`（扫描线）与 `body::after`（缓慢滚动的亮带）是固定在最上层、不接收点击的覆盖层；辉光只用于标题、橙色强调和交互状态。减少动态效果时停止滚动亮带。
+- HTML-in-Canvas 增强：`site/assets/js/site.js` 末尾检测 `CanvasRenderingContext2D.prototype.drawElementImage`，支持时把首屏 `<h1>` 放进 `content="drawable"`（Chrome 155 之前为 `layoutsubtree`）的画布，逐帧叠加辉光、扫描线和亮带。`<h1>` 仍是真实 DOM，可选中、可被读屏读取。
+- 该 API 目前是 Chrome 源试用（截至 Chrome 160）。不加试用令牌时，只有开启 `chrome://flags/#canvas-draw-element` 的浏览器会看到画布效果，其余浏览器使用 CSS 效果。要对所有 Chrome 访客开启，需要发布者用自己的 Google 账号在 Chrome Origin Trials 为 `https://drafffffff.github.io` 注册 HTML-in-Canvas 试用，把得到的令牌以 `<meta http-equiv="origin-trial" content="…">` 加到 `site/index.html` 与 `site/en/index.html` 的 `<head>`。令牌到期或 API 再次变更时，按 [Chrome 的迁移说明](https://developer.chrome.com/blog/html-in-canvas-ot-changes) 更新。
+- 本地验证画布路径：`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --enable-blink-features=CanvasDrawElement --dump-dom http://127.0.0.1:8000/`，输出中应有 `data-crt="canvas"`。
