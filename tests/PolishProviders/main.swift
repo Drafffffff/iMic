@@ -19,6 +19,19 @@ private final class PolishResponseProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+private final class HangingModelsProtocol: URLProtocol {
+    private static let lock = NSLock()
+    private static var hosts = Set<String>()
+    static var seen: Set<String> { lock.lock(); defer { lock.unlock() }; return hosts }
+    static func reset() { lock.lock(); hosts.removeAll(); lock.unlock() }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.lock.lock(); Self.hosts.insert(request.url!.host!); Self.lock.unlock()
+    }
+    override func stopLoading() {}
+}
+
 private enum ASRTestEndpoint { static let value = "wss://dashscope.aliyuncs.com/api-ws/v1/inference" }
 
 final class PolishProviderTests: XCTestCase {
@@ -121,6 +134,195 @@ final class PolishProviderTests: XCTestCase {
         XCTAssertEqual(DeepSeekConfiguration.endpoint(for: .custom, defaults: defaults), "http://127.0.0.1:1234/v1/chat/completions")
     }
 
+    func testPastedKeyCleanupPreservesStrictLiteralFormat() {
+        for value in ["  \(bailianKey) ", "\t\r\n\(bailianKey)\r\n", "\"\(bailianKey)\"", "'\(bailianKey)'", "“\(bailianKey)”", "export DASHSCOPE_API_KEY='\(bailianKey)'\r\n", "DASHSCOPE_API_KEY = \"\(bailianKey)\"", " export\tDASHSCOPE_API_KEY=“\(bailianKey)” "] {
+            XCTAssertEqual(ShellCredentials.clean(value), bailianKey)
+            XCTAssertTrue(ShellCredentials.valid(ShellCredentials.clean(value)))
+        }
+        for value in ["export OTHER=\(bailianKey)", "sk-a;malicious", "sk-a\nInjected:header", "sk-a$(touch-file)", "'\(bailianKey)\"", "token-non-sk-key", "sk-a b c d e f"] {
+            XCTAssertFalse(ShellCredentials.valid(ShellCredentials.clean(value)))
+        }
+    }
+
+    func testBailianAddressesShareOneAllowlistAndDeriveBothEndpoints() throws {
+        let hosts = BailianAddress.hosts + ["ws-123.cn-beijing.maas.aliyuncs.com", "ws.ap-southeast-1.maas.aliyuncs.com", "trial.cn-beijing.maas.aliyuncs.com", "trial.ap-southeast-1.maas.aliyuncs.com", "trial.cn-hongkong.maas.aliyuncs.com"]
+        for host in hosts {
+            let base = "https://\(host)/compatible-mode/v1"
+            XCTAssertEqual(try BailianAddress.baseHost(base), host)
+            XCTAssertNotNil(SettingsValidation.asrURL(BailianAddress.asr(host)))
+            XCTAssertNoThrow(try DeepSeekClient.validatedURL(provider: .bailian, model: "model", endpoint: BailianAddress.polish(host)))
+            XCTAssertEqual(BailianKeyCheck.url(forASREndpoint: BailianAddress.asr(host))?.host, host)
+        }
+        for host in ["token-plan.cn-beijing.maas.aliyuncs.com", "coding.dashscope.aliyuncs.com", "evil.example", "dashscope.aliyuncs.com.evil.example", "trial.us-east-1.maas.aliyuncs.com", "-ws.cn-beijing.maas.aliyuncs.com", "a.b.cn-beijing.maas.aliyuncs.com", "ws..cn-beijing.maas.aliyuncs.com"] {
+            XCTAssertThrowsError(try BailianAddress.baseHost("https://\(host)/compatible-mode/v1"))
+            XCTAssertNil(SettingsValidation.asrURL(BailianAddress.asr(host)))
+            XCTAssertNil(BailianKeyCheck.request(key: bailianKey, asrEndpoint: BailianAddress.asr(host)))
+            XCTAssertThrowsError(try DeepSeekClient.validatedURL(provider: .bailian, model: "model", endpoint: BailianAddress.polish(host)))
+        }
+        for value in ["http://dashscope.aliyuncs.com/compatible-mode/v1", "https://dashscope.aliyuncs.com:444/compatible-mode/v1", "https://user:password@dashscope.aliyuncs.com/compatible-mode/v1", "https://dashscope.aliyuncs.com/other", "https://dashscope.aliyuncs.com/compatible-mode/v1?key=secret", "https://dashscope.aliyuncs.com/compatible-mode/v1#fragment"] {
+            XCTAssertThrowsError(try BailianAddress.baseHost(value))
+        }
+        for value in ["wss://dashscope.aliyuncs.com:444/api-ws/v1/inference", "wss://user:password@dashscope.aliyuncs.com/api-ws/v1/inference", "wss://dashscope.aliyuncs.com/other"] {
+            XCTAssertNil(SettingsValidation.asrURL(value))
+            XCTAssertNil(BailianKeyCheck.request(key: bailianKey, asrEndpoint: value))
+        }
+        XCTAssertEqual(try BailianAddress.baseHost("https://dashscope.aliyuncs.com:443/compatible-mode/v1"), BailianAddress.hosts[0])
+    }
+
+    func testActionableErrorsUseServiceCodeBeforeHTTPStatusAndNeverEchoBodies() throws {
+        let cases: [(Int, String, BailianIssue, String)] = [
+            (401,"InvalidApiKey",.invalidKey,"复制不完整"),
+            (403,"InvalidApiKey",.invalidKey,"复制不完整"),
+            (403,"AccessDenied",.permission,"qwen-audio-3.1-asr-flash-message"),
+            (403,"Model.AccessDenied",.permission,"全部"),
+            (403,"AccessDenied.IPRestriction",.ip,"出口 IP"),
+            (403,"Arrearage",.billing,"实名认证并充值"),
+            (403,"AllocationQuota.FreeTierOnly",.billing,"北京"),
+            (403,"AccessDenied.Unpurchased",.activation,"开通"),
+            (403,"Workspace.AccessDenied",.workspace,"Base URL"),
+            (404,"WorkSpaceNotFound",.workspace,"自己的 Key"),
+            (400,"DataInspectionFailed",.inspection,"重新录音"),
+            (429,"Throttling.AllocationQuota",.quota,"稍后重试")]
+        for (status,code,expected,fragment) in cases {
+            XCTAssertEqual(BailianIssue.classify(status: status, code: code), expected)
+            let data = try JSONSerialization.data(withJSONObject: ["error": ["code": code, "message": "never-echo-this-secret"]])
+            XCTAssertEqual(BailianIssue.response(status: status, data: data, error: nil), expected)
+            XCTAssertTrue(expected.message.contains(fragment)); XCTAssertFalse(expected.message.contains("never-echo"))
+        }
+        XCTAssertEqual(BailianIssue.classify(status: 403, code: "access_denied", message: "Access denied by IP address restrictions."), .ip)
+        XCTAssertEqual(BailianIssue.classify(error: URLError(.timedOut)), .network)
+        XCTAssertTrue(BailianIssue.network.message.contains("公司网络"))
+        XCTAssertTrue(BailianIssue.unsupported("中国香港").message.contains("重新创建"))
+    }
+
+    private func discover(key: String? = nil, base: String = "", timeout: TimeInterval = 1,
+                          handler: @escaping (URLRequest) throws -> (Int, Data)) -> Result<BailianDiscovery.Selection, BailianIssue> {
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [PolishResponseProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        PolishResponseProtocol.handler = handler
+        let done = expectation(description: "discovery")
+        var answer: Result<BailianDiscovery.Selection, BailianIssue>!
+        var stages: [String] = []
+        let operation = BailianDiscovery.start(key: key ?? bailianKey, baseURL: base, session: session, timeout: timeout,
+            progress: { stages.append($0) }) { result in answer = result; done.fulfill() }
+        wait(for: [done], timeout: 3)
+        withExtendedLifetime(operation) {}
+        if !stages.isEmpty { XCTAssertEqual(stages, ["正在识别地域…", "正在确认模型权限…"]) }
+        return answer
+    }
+    private func modelList(asr: Bool = true, polish: Bool = true) -> Data {
+        let ids = (asr ? ["qwen-audio-3.1-asr-flash-message"] : []) + (polish ? ["deepseek-v4.1-flash"] : [])
+        return try! JSONSerialization.data(withJSONObject: ["data": ids.map { ["id": $0] }])
+    }
+    func testRegionDiscoveryUniqueSingaporeAlsoUpdatesPolishEndpoint() throws {
+        let list = modelList()
+        let result = discover { request in
+            XCTAssertEqual(request.httpMethod, "GET"); XCTAssertNil(request.httpBody)
+            XCTAssertTrue(BailianAddress.hosts.contains(request.url!.host!))
+            XCTAssertEqual(request.url!.path, "/compatible-mode/v1/models")
+            return (request.url!.host == BailianAddress.hosts[1] ? 200 : 401, list)
+        }
+        let selection = try result.get()
+        XCTAssertEqual(selection.region, "新加坡"); XCTAssertTrue(selection.message.contains("已识别：新加坡"))
+        selection.apply(defaults)
+        XCTAssertEqual(defaults.string(forKey: "asrEndpoint"), BailianAddress.asr(BailianAddress.hosts[1]))
+        XCTAssertEqual(defaults.string(forKey: PolishProvider.bailian.endpointKey), BailianAddress.polish(BailianAddress.hosts[1]))
+    }
+    func testAmbiguousAll401AndPlanHeuristicRequireEvidence() {
+        let list = modelList()
+        XCTAssertEqual(discover { _ in (200,list) }, .failure(.ambiguous))
+        XCTAssertEqual(discover { _ in (401,Data()) }, .failure(.invalidKey))
+        for key in ["sk-sp-fake-test-key", "sk-ws-fake-test-key"] {
+            XCTAssertEqual(discover(key: key) { _ in (401,Data()) }, .failure(.plan))
+            let valid = discover(key: key) { req in (req.url!.host == BailianAddress.hosts[0] ? 200 : 401, list) }
+            XCTAssertNotNil(try? valid.get()) // Never reject a usable workspace key by prefix alone.
+        }
+    }
+    func testUnsupportedRegionsAndPartialTimeoutsHaveSpecificOutcomes() {
+        let list = modelList()
+        for index in [2,3] {
+            let result = discover { req in (req.url!.host == BailianAddress.hosts[index] ? 200 : 401,list) }
+            XCTAssertEqual(result, .failure(.unsupported(BailianAddress.title(BailianAddress.regions[index]))))
+        }
+        let success = discover { req in
+            if req.url!.host != BailianAddress.hosts[0] { throw URLError(.timedOut) }
+            return (200,list)
+        }
+        XCTAssertNotNil(try? success.get())
+        XCTAssertEqual(discover { _ in throw URLError(.notConnectedToInternet) }, .failure(.network))
+        let denied = Data(#"{"code":"Arrearage"}"#.utf8)
+        XCTAssertEqual(discover { req in (req.url!.host == BailianAddress.hosts[1] ? 403 : 401,denied) }, .failure(.billing))
+    }
+    func testModelListingIsNotProofOfASRPermissionAndMissingPolishDisablesIt() throws {
+        let list = modelList(asr: false, polish: true)
+        let selection = try discover { req in (req.url!.host == BailianAddress.hosts[0] ? 200 : 401,list) }.get()
+        XCTAssertFalse(selection.asrListed); XCTAssertTrue(selection.message.contains("首次识别"))
+        let noPolish = modelList(asr: true, polish: false)
+        let restricted = try discover { req in (req.url!.host == BailianAddress.hosts[0] ? 200 : 401,noPolish) }.get()
+        restricted.apply(defaults)
+        XCTAssertFalse(defaults.bool(forKey: "deepseekEnabled"))
+        XCTAssertTrue(restricted.message.contains("可以稍后在设置中开启"))
+        XCTAssertEqual(discover { req in (req.url!.host == BailianAddress.hosts[0] ? 200 : 401,Data("not-json".utf8)) }, .failure(.service(200)))
+    }
+    func testManualWorkspaceTrialAndRejectedBaseNeverLeakCredentials() throws {
+        let list = modelList()
+        for host in ["ws-123.cn-beijing.maas.aliyuncs.com", "trial.ap-southeast-1.maas.aliyuncs.com"] {
+            let answer = discover(base: "https://\(host)/compatible-mode/v1") { req in
+                XCTAssertEqual(req.url!.host,host); return (200,list)
+            }
+            XCTAssertEqual(try answer.get().host,host)
+        }
+        for base in ["https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1", "https://coding.dashscope.aliyuncs.com/v1", "https://evil.example/compatible-mode/v1"] {
+            let answer = discover(base: base) { _ in XCTFail("Must not send key"); return (200,list) }
+            XCTAssertEqual(answer,.failure(BailianAddress.isPlan(base) ? .plan : .address))
+        }
+    }
+    func testBailianPolishUsesSameIPAndBillingErrorsAsRecognition() {
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [PolishResponseProtocol.self]
+        let session = URLSession(configuration: config); defer { session.invalidateAndCancel() }
+        for (body, expected) in [(#"{"error":{"code":"access_denied","message":"Access denied by IP address restrictions."}}"#, BailianIssue.ip),
+                                 (#"{"code":"Arrearage","message":"never-echo-this"}"#, .billing)] {
+            PolishResponseProtocol.handler = { _ in (403,Data(body.utf8)) }
+            let done = expectation(description: "polish error")
+            var issue: CloudFailure?
+            DeepSeekClient.polish(text: raw, key: bailianKey, model: PolishProvider.bailian.defaultModel,
+                endpoint: PolishProvider.bailian.defaultEndpoint, provider: .bailian, options: .default,
+                session: session, failure: { issue = $0 }) { result in
+                    XCTAssertNil(result); XCTAssertEqual(issue,.bailian(expected)); done.fulfill()
+                }
+            wait(for: [done], timeout: 2)
+        }
+    }
+    func testDiscoveryDeadlineAndCancellation() {
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [HangingModelsProtocol.self]
+        let session = URLSession(configuration: config); defer { session.invalidateAndCancel() }
+        HangingModelsProtocol.reset()
+        let done = expectation(description: "deadline")
+        let start = Date()
+        let operation = BailianDiscovery.start(key: bailianKey, session: session, timeout: 0.08) { result in
+            XCTAssertEqual(result,.failure(.network)); XCTAssertLessThan(Date().timeIntervalSince(start),0.5); done.fulfill()
+        }
+        wait(for: [done], timeout: 1); withExtendedLifetime(operation) {}
+        XCTAssertEqual(HangingModelsProtocol.seen, Set(BailianAddress.hosts), "All four requests start concurrently, even when every endpoint hangs")
+        let canceled = expectation(description: "cancelled generations never complete"); canceled.isInverted = true
+        let next = BailianDiscovery.start(key: bailianKey, session: session, timeout: 0.03) { _ in canceled.fulfill() }
+        next.cancel(); wait(for: [canceled], timeout: 0.1)
+    }
+    func testValidationRedirectPolicyRejectsEveryRedirect() {
+        let config = URLSessionConfiguration.ephemeral
+        let session = URLSession(configuration: config); defer { session.invalidateAndCancel() }
+        let task = session.dataTask(with: URL(string: "https://dashscope.aliyuncs.com/compatible-mode/v1/models")!)
+        let policy = BailianRedirectPolicy()
+        for host in ["evil.example", "dashscope.aliyuncs.com"] {
+            var called = false
+            policy.urlSession(session, task: task, willPerformHTTPRedirection: HTTPURLResponse(url: task.originalRequest!.url!, statusCode: 302, httpVersion: nil, headerFields: nil)!, newRequest: URLRequest(url: URL(string: "https://\(host)/")!)) { redirected in
+                called = true; XCTAssertNil(redirected)
+            }
+            XCTAssertTrue(called)
+        }
+    }
+
     private var file: CredentialFile { CredentialFile(url: home.appendingPathComponent("Support/credentials.json")) }
 
     func testNewInstallsDefaultToBailianPolish() {
@@ -158,7 +360,7 @@ final class PolishProviderTests: XCTestCase {
         }
         XCTAssertThrowsError(try SettingsValidation.request(provider: .deepseek, key: officialKey,
             model: "test", endpoint: "https://other.example/chat/completions"))
-        for status in [401,403] {
+        for status in [401] {
             if case .failure(.rejected) = SettingsValidation.classify(status: status, error: nil) {} else { XCTFail("Must reject invalid credentials") }
         }
         if case .failure(.http(302)) = SettingsValidation.classify(status: 302, error: nil) {} else { XCTFail("Redirects are not validation") }

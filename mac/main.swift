@@ -1659,6 +1659,16 @@ extension AppDelegate: SetupWizardHost {
         keyChanged()
     }
 
+    func setupApplyService(_ selection: BailianDiscovery.Selection) {
+        selection.apply()
+        endpoint.stringValue = BailianAddress.asr(selection.host)
+        if preview != nil { previewSetup?.asrEndpoint = endpoint.stringValue }
+        deepseekCheck.state = DeepSeekConfiguration.enabled ? .on : .off
+        polishFields?.isHidden = !DeepSeekConfiguration.enabled
+        sendCurrentFeatureSettings()
+        settingsCoordinator?.refreshCredentials()
+    }
+
     private func keyChanged() {
         updateKeySource()
         if connectedName == nil { setStatus("等待 iPhone 连接") }

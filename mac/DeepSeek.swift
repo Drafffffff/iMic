@@ -139,13 +139,7 @@ enum DeepSeekClient {
                 throw PolishConfigurationError.officialHost
             }
         case .bailian:
-            let dashscope = ["dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com",
-                             "dashscope-us.aliyuncs.com", "cn-hongkong.dashscope.aliyuncs.com"]
-            let workspace = host.range(
-                of: #"^[a-z0-9-]+\.(cn-beijing|ap-southeast-1|us-east-1|eu-central-1|ap-northeast-1|cn-hongkong)\.maas\.aliyuncs\.com$"#,
-                options: .regularExpression
-            ) != nil
-            guard (dashscope.contains(host) || workspace),
+            guard BailianAddress.allowed(host),
                   parts.port == nil || parts.port == 443,
                   parts.path == "/compatible-mode/v1/chat/completions" else {
                 throw PolishConfigurationError.bailianHost
@@ -215,7 +209,12 @@ enum DeepSeekClient {
             let code = (error as NSError?)?.code ?? 0
             IMicLog.write("mac.polish", "\(result == nil ? "fallback" : "ok") provider=\(provider.rawValue) model=\(diagnosticModel) status=\(status) code=\(code) in=\(text.count) out=\(result?.count ?? 0) ms=\(milliseconds)")
             DispatchQueue.main.async {
-                if result == nil { failure?(CloudFailure.classify(status: status, error: error)) }
+                if result == nil {
+                    let issue = provider == .bailian
+                        ? CloudFailure.from(BailianIssue.response(status: status, data: data, error: error))
+                        : status == 401 || status == 403 ? .key : CloudFailure.classify(status: status, error: error)
+                    failure?(issue)
+                }
                 completion(result)
             }
         }

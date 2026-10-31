@@ -1,39 +1,25 @@
 import Foundation
 
-/// No redirect can forward a credential to another host.
-private final class SettingsRedirectPolicy: NSObject, URLSessionTaskDelegate {
-    func urlSession(_ session: URLSession, task: URLSessionTask,
-        willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
-        completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
-}
-
 enum SettingsValidation {
     enum Failure: Error, Equatable {
-        case rejected, network, http(Int)
+        case rejected, network, http(Int), bailian(BailianIssue)
         var message: String {
             switch self {
-            case .rejected: return "服务拒绝了这个 Key，请检查 Key 与地域。"
+            case .rejected: return BailianIssue.invalidKey.message
+            case .bailian(let issue): return issue.message
             case .network: return "无法连接服务，请检查网络后重试。"
             case .http(let status): return "验证失败（HTTP \(status)），请检查服务地址与地域。"
             }
         }
     }
-    private static let session: URLSession = {
+    static let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.urlCache = nil; config.httpShouldSetCookies = false
-        return URLSession(configuration: config, delegate: SettingsRedirectPolicy(), delegateQueue: nil)
+        return URLSession(configuration: config, delegate: BailianRedirectPolicy(), delegateQueue: nil)
     }()
 
     static func asrURL(_ value: String) -> URL? {
-        guard let c = URLComponents(string: value), c.scheme == "wss",
-              let host = c.host, !host.isEmpty, c.user == nil, c.password == nil,
-              c.query == nil, c.fragment == nil, c.path == "/api-ws/v1/inference",
-              !value.contains(where: { $0.isWhitespace }),
-              let check = BailianKeyCheck.url(forASREndpoint: value),
-              (try? DeepSeekClient.validatedURL(provider: .bailian, model: "validation",
-                endpoint: check.deletingLastPathComponent().appendingPathComponent("chat/completions").absoluteString)) != nil
-        else { return nil }
-        return c.url
+        BailianAddress.url(value, scheme: "wss", path: "/api-ws/v1/inference")
     }
 
     static func request(provider: PolishProvider, key: String, model: String, endpoint: String) throws -> URLRequest {
@@ -50,7 +36,8 @@ enum SettingsValidation {
         if error != nil { return .failure(.network) }
         switch status {
         case 200..<300: return .success(())
-        case 401, 403: return .failure(.rejected)
+        case 401: return .failure(.rejected)
+        case 403: return .failure(.bailian(.permission))
         default: return .failure(.http(status))
         }
     }
@@ -58,22 +45,123 @@ enum SettingsValidation {
     @discardableResult
     static func runBailian(key: String, endpoint: String,
                           completion: @escaping (Result<Void, Failure>) -> Void) -> URLSessionDataTask? {
-        BailianKeyCheck.run(key: key, asrEndpoint: endpoint, session: session) { result in
-            switch result {
-            case .valid: completion(.success(()))
-            case .rejected: completion(.failure(.rejected))
-            case .unreachable: completion(.failure(.network))
-            }
+        guard let request = BailianKeyCheck.request(key: key, asrEndpoint: endpoint) else {
+            completion(.failure(.bailian(.address))); return nil
         }
+        return run(request, completion: completion)
     }
 
     @discardableResult
     static func run(_ request: URLRequest, session: URLSession? = nil,
                     completion: @escaping (Result<Void, Failure>) -> Void) -> URLSessionDataTask {
-        let task = (session ?? Self.session).dataTask(with: request) { _, response, error in
-            let result = classify(status: (response as? HTTPURLResponse)?.statusCode ?? 0, error: error)
+        let task = (session ?? Self.session).dataTask(with: request) { data, response, error in
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let result: Result<Void, Failure> = error == nil && status == 200 ? .success(())
+                : .failure(.bailian(BailianIssue.response(status: status, data: data, error: error)))
             DispatchQueue.main.async { completion(result) }
         }
         task.resume(); return task
+    }
+}
+
+
+/// Owns one generation of requests, including a wall-clock deadline. Main-queue confined.
+final class BailianDiscovery {
+    private var tasks: [URLSessionDataTask] = []
+    private var deadline: DispatchWorkItem?
+    private var stopped = false
+    private var responses: [String: (Int, Data?, Error?)] = [:]
+    func cancel() {
+        stopped = true; deadline?.cancel(); deadline = nil
+        tasks.forEach { $0.cancel() }; tasks.removeAll()
+    }
+    deinit { tasks.forEach { $0.cancel() }; deadline?.cancel() }
+
+    struct Selection: Equatable {
+        let host: String
+        let asrListed: Bool
+        let polishListed: Bool
+        var region: String { BailianAddress.title(BailianAddress.region(host)) }
+        var message: String {
+            var text = "已识别：\(region)。"
+            if !asrListed { text += "模型列表未列出语音模型；权限将在首次识别时确认。" }
+            if !polishListed { text += "这个 Key 暂时不能使用润色模型，可以稍后在设置中开启。" }
+            return text
+        }
+        func apply(_ defaults: UserDefaults = MacPreferences.defaults) {
+            defaults.set(BailianAddress.asr(host), forKey: "asrEndpoint")
+            defaults.set(BailianAddress.polish(host), forKey: PolishProvider.bailian.endpointKey)
+            defaults.set(BailianAddress.region(host), forKey: "bailian.detectedRegion")
+            if !polishListed { defaults.set(false, forKey: "deepseekEnabled") }
+        }
+    }
+
+    @discardableResult
+    static func start(key: String, baseURL: String = "", session: URLSession = SettingsValidation.session,
+                      timeout: TimeInterval = 7.8,
+                      progress: @escaping (String) -> Void = { _ in },
+                      completion: @escaping (Result<Selection, BailianIssue>) -> Void) -> BailianDiscovery {
+        let operation = BailianDiscovery()
+        let hosts: [String]
+        do {
+            if BailianAddress.isPlan(key) { throw BailianIssue.plan }
+            guard ShellCredentials.valid(key) else { throw BailianIssue.invalidKey }
+            hosts = baseURL.isEmpty ? BailianAddress.hosts : [try BailianAddress.baseHost(baseURL)]
+        } catch {
+            DispatchQueue.main.async { if !operation.stopped { completion(.failure(error as? BailianIssue ?? .address)) } }
+            return operation
+        }
+        progress("正在识别地域…")
+        let finish = {
+            guard !operation.stopped else { return }
+            let responses = operation.responses
+            operation.cancel()
+            progress("正在确认模型权限…")
+            // Complete on the next turn so both progress stages can be rendered.
+            DispatchQueue.main.async {
+                let accepted = hosts.filter { responses[$0]?.0 == 200 }
+                if accepted.count > 1 { completion(.failure(.ambiguous)); return }
+                if let host = accepted.first, let data = responses[host]?.1,
+                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let list = obj["data"] as? [[String: Any]] {
+                    guard BailianAddress.supportsASR(host) else {
+                        completion(.failure(.unsupported(BailianAddress.title(BailianAddress.region(host))))); return
+                    }
+                    let models = list.compactMap { $0["id"] as? String }
+                    completion(.success(Selection(host: host,
+                        asrListed: models.contains("qwen-audio-3.1-asr-flash-message"),
+                        polishListed: models.contains(PolishProvider.bailian.defaultModel))))
+                    return
+                }
+                if !accepted.isEmpty { completion(.failure(.service(200))); return }
+                if hosts.allSatisfy({ responses[$0]?.0 == 401 }) {
+                    let suspect = key.hasPrefix("sk-sp-") || key.hasPrefix("sk-ws-")
+                    completion(.failure(suspect ? .plan : .invalidKey)); return
+                }
+                // Prefer a specific actionable rejection over a different region's 401.
+                for host in hosts {
+                    if let (status, data, error) = responses[host], status != 401, status != 0 {
+                        completion(.failure(BailianIssue.response(status: status, data: data, error: error))); return
+                    }
+                }
+                completion(.failure(.network))
+            }
+        }
+        let deadline = DispatchWorkItem(block: finish)
+        operation.deadline = deadline
+        DispatchQueue.main.asyncAfter(deadline: .now() + min(7.8, max(0.01, timeout)), execute: deadline)
+        for host in hosts {
+            var request = URLRequest(url: URL(string: "https://\(host)/compatible-mode/v1/models")!, timeoutInterval: min(7.5, timeout))
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            let task = session.dataTask(with: request) { data, response, error in
+                DispatchQueue.main.async {
+                    guard !operation.stopped else { return }
+                    operation.responses[host] = ((response as? HTTPURLResponse)?.statusCode ?? 0, data, error)
+                    if operation.responses.count == hosts.count { finish() }
+                }
+            }
+            operation.tasks.append(task); task.resume()
+        }
+        return operation
     }
 }
