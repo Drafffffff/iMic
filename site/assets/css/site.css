@@ -315,3 +315,26 @@ html[lang="en"] h1 { letter-spacing: -.025em; }
 .sound-toggle .sound-on, .sound-toggle[aria-pressed="true"] .sound-off { display: none; }
 .sound-toggle[aria-pressed="true"] .sound-on { display: block; }
 .sound-toggle[aria-pressed="true"] { color: var(--orange); border-color: var(--orange); box-shadow: 0 0 14px rgba(var(--glow), .35); }
+
+/* Glitch layers: saturated cyan / magenta exist only for these few hundred milliseconds. */
+:root { --glitch-cyan: #00f0ff; --glitch-magenta: #ff2bd6; }
+.glitch-layer { position: absolute; z-index: 5; pointer-events: none; mix-blend-mode: screen; }
+.glitch-ghost { position: absolute !important; inset: 0; margin: 0 !important; width: 100%; height: 100%; text-shadow: none !important; box-shadow: none !important; animation: none !important; }
+.glitch-cyan { color: var(--glitch-cyan) !important; }
+.glitch-magenta { color: var(--glitch-magenta) !important; }
+.glitch-ghost .accent { color: inherit !important; text-shadow: none !important; }
+img.glitch-cyan, .glitch-cyan img { filter: brightness(0) invert(1) sepia(1) saturate(40) hue-rotate(140deg) !important; }
+img.glitch-magenta, .glitch-magenta img { filter: brightness(0) invert(1) sepia(1) saturate(40) hue-rotate(255deg) !important; }
+.button.glitch-cyan { background: var(--glitch-cyan) !important; color: transparent !important; }
+.button.glitch-magenta { background: var(--glitch-magenta) !important; color: transparent !important; }
+.field-window.glitch-cyan { border-color: var(--glitch-cyan) !important; background: rgba(0, 240, 255, .12); }
+.field-window.glitch-magenta { border-color: var(--glitch-magenta) !important; background: rgba(255, 43, 214, .12); }
+.is-glitching { will-change: transform, clip-path; }
+
+/* Full-viewport signal drop: colour bars sweep across, scanlines thicken. */
+.signal-drop { position: fixed; inset: 0; z-index: 40; pointer-events: none; mix-blend-mode: screen; overflow: hidden; }
+.signal-drop i { position: absolute; left: -20vw; right: -20vw; opacity: .8; }
+html.is-signal-drop body::before { background: repeating-linear-gradient(to bottom, transparent 0 3px, rgba(0, 0, 0, .5) 3px 6px); }
+html.is-signal-drop main { filter: saturate(1.6) contrast(1.15); }
+
+@media (prefers-reduced-motion: reduce) { .glitch-layer, .signal-drop { display: none !important; } }

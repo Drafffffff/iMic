@@ -181,6 +181,31 @@ await check('Language suggestion is dismissible, storage-free and never redirect
  assert.equal(await evaluate('document.cookie'), '');assert.equal(await evaluate('sessionStorage.length + localStorage.length'),0);
  await navigate({init:language('zh-TW'),response:{body:valid}});assert.equal(await evaluate('document.querySelector("#language-banner").hidden'),true);
 });
+await check('Glitch: short, self-cleaning, one signal drop per visit, none for reduced motion',async()=>{
+ await navigate({response:{body:valid}});
+ await delay(4600); // let the scheduled first headline glitch (2-4 s) finish
+ await evaluate(`document.dispatchEvent(new CustomEvent('imic:glitch',{detail:{target:document.querySelector('#hero-title'),level:'medium'}}))`);
+ await delay(90);
+ assert.equal(await evaluate('document.querySelectorAll(".glitch-layer .glitch-ghost").length'),2);
+ await shot('glitch-title');
+ await delay(600);
+ assert.equal(await evaluate('document.querySelectorAll(".glitch-layer").length'),0);
+ assert.equal(await evaluate('document.querySelector("#hero-title").style.clipPath + document.querySelector("#hero-title").style.transform'),'');
+ await evaluate(`document.dispatchEvent(new CustomEvent('imic:glitch',{detail:{level:'signal'}}))`);
+ await delay(80);
+ assert.equal(await evaluate('document.querySelectorAll(".signal-drop i").length'),7);
+ assert.equal(await evaluate('document.documentElement.classList.contains("is-signal-drop")'),true);
+ await shot('glitch-signal');
+ await delay(500);
+ assert.equal(await evaluate('document.querySelectorAll(".signal-drop").length + document.querySelector("main").style.transform.length'),0);
+ await evaluate(`document.dispatchEvent(new CustomEvent('imic:glitch',{detail:{level:'signal'}}))`);
+ await delay(60);
+ assert.equal(await evaluate('document.querySelectorAll(".signal-drop").length'),0,'signal drop must run once per visit');
+ await navigate({reduced:true,response:{body:valid}});
+ await evaluate(`document.dispatchEvent(new CustomEvent('imic:glitch',{detail:{target:document.querySelector('#hero-title'),level:'medium'}}));document.dispatchEvent(new CustomEvent('imic:glitch',{detail:{level:'signal'}}))`);
+ await delay(60);
+ assert.equal(await evaluate('document.querySelectorAll(".glitch-layer,.signal-drop").length'),0);
+});
 }finally{
  await fs.mkdir('build/site-tests',{recursive:true});
  await fs.writeFile('build/site-tests/browser-results.json',JSON.stringify(report,null,2));
