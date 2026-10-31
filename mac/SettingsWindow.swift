@@ -294,7 +294,8 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             app.divider(), heading("RECOGNITION"), fixed,
             field("asr.endpoint", "识别服务地址", app.endpoint.stringValue),
             note("只支持百炼推理地址，须与 Key 的地域或业务空间一致。"),
-            app.divider(), app.linkButton("重新打开设置向导…", #selector(AppDelegate.showSetupAction))], spacing: 10)
+            app.divider(), app.linkButton("重新打开设置向导…", #selector(AppDelegate.showSetupAction)),
+            app.linkButton("iMic 官网 ↗", #selector(AppDelegate.openWebsite))], spacing: 10)
     }
 
     private var previewKeys: [PolishProvider: ResolvedCredential] = [

@@ -175,22 +175,8 @@ final class SessionModel: ObservableObject {
         // 模拟器联调用合成语音，不需要也不应该弹麦克风授权。
         if debugTTSText != nil || debugBufferText != nil { return }
         #endif
-        if AudioCapture.permissionGranted {
-            micDenied = false
-            if !wantsRecording { speechPreview.prepareAuthorization() }
-            return
-        }
-        guard audioAuthorizationTask == nil else { return }
-        audioAuthorizationTask = Task { [weak self] in
-            let granted = await AudioCapture.requestPermission()
-            guard let self else { return }
-            defer { self.audioAuthorizationTask = nil }
-            guard !Task.isCancelled, UIApplication.shared.applicationState == .active else { return }
-            micDenied = !granted
-            if granted {
-                if !wantsRecording { speechPreview.prepareAuthorization() }
-            }
-        }
+        // Foreground activation never requests permission. Only a real hold may do so.
+        if AudioCapture.permissionGranted { micDenied = false }
     }
 
     func deactivateAudio() {
@@ -327,6 +313,12 @@ final class SessionModel: ObservableObject {
             }
             if preRoll.count % 2 == 1 { preRoll.removeFirst() }
         }
+    }
+
+    /// 两个系统弹窗串行出现；拒绝任一权限也允许完成引导。
+    func prepareFirstUsePermissions() async {
+        micDenied = !(await AudioCapture.requestPermission())
+        await speechPreview.prepareAuthorization()
     }
 
     func beginListening() {
@@ -575,6 +567,17 @@ final class SessionModel: ObservableObject {
     func endListening(cancelled: Bool) {
         wantsRecording = false
         guard phase == .listening else { return }
+        #if DEBUG
+        if !cancelled, finishDemoUtterance() { return }
+        #endif
+        defer {
+            if !isPreview {
+                Task {
+                    guard !wantsRecording else { return }
+                    await speechPreview.prepareAuthorization()
+                }
+            }
+        }
         timer?.invalidate()
         timer = nil
         commitTimer?.invalidate()
@@ -1257,8 +1260,87 @@ final class SessionModel: ObservableObject {
         transcript = ""
         message = nil
         spectrumStore.reset()
+        #if DEBUG
+        if DemoScript.shared.active { startDemoLiveText() } else { startPreviewSpectrum() }
+        #else
         startPreviewSpectrum()
+        #endif
     }
+
+    #if DEBUG
+    private var demoLiveTimer: Timer?
+
+    /// Demo recordings only: play the utterance's synthesized speech through the same
+    /// analyzer as the microphone (real waveform), revealing the words in step with it.
+    private func startDemoLiveText() {
+        guard DemoScript.shared.active else { return }
+        let index = DemoScript.shared.currentIndex
+        let words = Array(DemoScript.shared.beginUtterance().live)
+        liveTranscript = ""
+        demoLiveTimer?.invalidate()
+        if let pcm = DemoScript.shared.speech[index], pcm.count > 640 {
+            var offset = 0
+            let total = pcm.count
+            let timer = Timer(timeInterval: 0.02, repeats: true) { [weak self] timer in
+                Task { @MainActor in
+                    guard let self, self.phase == .listening, offset < total else { timer.invalidate(); return }
+                    let end = min(offset + 640, total)      // 20 ms of 16-bit 16 kHz audio
+                    self.analyzeVisuals(pcm.subdata(in: offset..<end))
+                    self.elapsed = Double(end) / 32_000
+                    offset = end
+                    let shown = min(words.count, Int((Double(end) / Double(total) * Double(words.count)).rounded(.up)))
+                    if shown != self.liveTranscript.count {
+                        self.liveTranscript = String(words.prefix(shown))
+                        DemoScript.shared.record("live", ["text": self.liveTranscript])
+                    }
+                }
+            }
+            demoLiveTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
+            return
+        }
+        startPreviewSpectrum()   // speech not synthesized yet: keep the preview animation
+        var shown = 0
+        let pace = max(0.055, min(0.13, 2.0 / Double(max(1, words.count))))
+        let timer = Timer(timeInterval: pace, repeats: true) { [weak self] timer in
+            Task { @MainActor in
+                guard let self, self.phase == .listening, shown < words.count else { timer.invalidate(); return }
+                shown += 1
+                self.liveTranscript = String(words.prefix(shown))
+                DemoScript.shared.record("live", ["text": self.liveTranscript])
+            }
+        }
+        demoLiveTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    /// Demo recordings only: a release lands the scripted text as if the Mac typed it.
+    private func finishDemoUtterance() -> Bool {
+        guard isPreview, DemoScript.shared.active else { return false }
+        demoLiveTimer?.invalidate(); demoLiveTimer = nil
+        stopVisualInput()        // as on a real release: stop feeding, let the waveform settle
+        let item = DemoScript.shared.finishUtterance()
+        DemoScript.shared.record("release", ["live": liveTranscript])
+        Haptics.shared.play(.release)      // as on a real release that is sent
+        phase = .transcribing
+        let polishes = DemoScript.shared.polishes
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(380))
+            if polishes {
+                DemoScript.shared.record("polish.start", ["raw": item.live])
+                try? await Task.sleep(for: .milliseconds(1700))
+            }
+            guard let self, self.phase == .transcribing else { return }
+            self.transcript = item.final
+            self.pasted = true
+            self.target = "Messages"
+            self.phase = .result
+            Haptics.shared.play(.result)   // as when a real result arrives from the Mac
+            DemoScript.shared.record("typed", ["raw": item.live, "final": item.final])
+        }
+        return true
+    }
+    #endif
 
     private func startPreviewSpectrum() {
         previewTimer?.invalidate()

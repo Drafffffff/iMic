@@ -76,7 +76,8 @@ SHA-1 在这里仅用于识别证书。包内 `Certificates/AppleDistribution-KE
 
 | 路径 | 用途 |
 |---|---|
-| `README.md` | 本核心说明，请从此处开始 |
+| `README.md` | 用户说明 |
+| `docs/DEVELOPMENT.md` | 开发者说明 |
 | `iOS/iMic.xcarchive/` | iPhone 1.4.4 Build 3 的未签名 Release 归档，含调试符号 |
 | `iOS/ArchiveSource.zip` | 与最终归档对应的隔离构建源码快照 |
 | `iOS/ExportOptions.plist` | App Store Connect 导出配置，支持后续外部测试 |

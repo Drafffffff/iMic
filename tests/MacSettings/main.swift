@@ -126,6 +126,13 @@ let menuMode = app.menuModeItems.first { $0.title == PolishMode.agent.title }!
 app.selectMenuMode(menuMode)
 check(DeepSeekConfiguration.options.mode == .agent && DeepSeekConfiguration.options.output == .japanese && DeepSeekConfiguration.options.tone == .rant, "Menu changes mode only, keeping tone and language")
 check(menuMode.state == .on && app.polishModeButtons.selectedSegment == 0, "Menu and settings checks agree")
+let settingsIndex = app.statusMenu.items.firstIndex { $0.title == "设置…" }!
+let websiteItem = app.statusMenu.items[settingsIndex + 1]
+check(websiteItem.title == "iMic 官网与帮助…" && websiteItem.action == #selector(AppDelegate.openWebsite), "Website help follows settings in menu")
+let websiteButton = allViews(advanced).compactMap { $0 as? NSButton }.first { $0.title == "iMic 官网 ↗" }
+check(websiteButton?.action == #selector(AppDelegate.openWebsite), "Advanced help shares the menu action")
+check(SetupLinks.website.absoluteString == "https://drafffffff.github.io/iMic/", "Shared website destination")
+app.openWebsite() // Preview must return before opening the browser.
 check(!app.statusMenu.items.contains { $0.title == "复制配对码" || $0.title == "设置向导…" }, "Low frequency operations leave the top-level menu")
 app.showCloudFailure(.key, provider: .bailian, recognition: true)
 check(app.issueLabel.stringValue.contains("百炼拒绝了 Key") && app.menuStatusItem.title.contains("百炼拒绝了 Key"), "ASR failures show reason in main and menu")

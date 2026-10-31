@@ -11,14 +11,14 @@ final class DebugSpeech {
 
     private init() {}
 
-    func synthesize(_ text: String, completion: @escaping (Data?) -> Void) {
+    func synthesize(_ text: String, rate: Float = 0.48, completion: @escaping (Data?) -> Void) {
         queue.async {
             let synthesizer = AVSpeechSynthesizer()
             self.active = synthesizer
             let utterance = AVSpeechUtterance(string: text)
             utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
                 ?? AVSpeechSynthesisVoice(language: "en-US")
-            utterance.rate = 0.48
+            utterance.rate = rate
 
             guard let target = AVAudioFormat(
                 commonFormat: .pcmFormatInt16,

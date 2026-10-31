@@ -22,18 +22,24 @@ struct iMicApp: App {
 
 private struct LiveApplicationView: View {
     @StateObject private var link: LinkClient
+    @StateObject private var onboarding: OnboardingCoordinator
     @StateObject private var session: SessionModel
 
     init() {
         let link = LinkClient()
+        _onboarding = StateObject(wrappedValue: OnboardingCoordinator(link: link))
         _link = StateObject(wrappedValue: link)
         _session = StateObject(wrappedValue: SessionModel(link: link))
     }
 
     var body: some View {
-        HomeView()
+        Group {
+            if onboarding.presented { OnboardingView() }
+            else { HomeView() }
+        }
             .environmentObject(link)
             .environmentObject(session)
+            .environmentObject(onboarding)
             .preferredColorScheme(.dark)
             .background {
                 IdleScreenObserver(busy: session.phase == .listening || session.phase == .transcribing || session.isUploading,
