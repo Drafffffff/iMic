@@ -1,6 +1,63 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+<?xml version='1.0' encoding='utf-8'?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
   <channel>
+    <item>
+      <title>iMic 1.4.5 (2)</title>
+      <pubDate>Sat, 31 Oct 2026 18:20:17 GMT</pubDate>
+      <sparkle:version>2</sparkle:version>
+      <sparkle:shortVersionString>1.4.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description>&lt;pre&gt;# iMic 1.4.5
+
+## 主要更新
+
+### Mac
+
+- **自动更新**：接入 Sparkle 2，默认每天检查更新，也可从菜单手动检查或选择自动下载安装；首次设置和输入处理中会推迟提示与重启。
+- **百炼 Key 更容易配置**：粘贴时自动清理引号和环境变量赋值，自动识别北京、新加坡、香港、弗吉尼亚地域，验证成功后同步识别与润色地址；向导与设置共用清晰的权限、白名单和计费错误提示。
+- **兼容更多百炼业务空间**：支持官方业务空间和试用 Base URL，拒绝不兼容的套餐地址；验证只查询模型，无法确认语音权限时留到首次识别验证，不创建可能计费的空任务。
+- **设置向导先填 Key，再开权限**：先配置识别与 AI 润色，再授权；屏幕录制放在最后。未完成时重开 App 会回到原步骤，修复已有 Key 和权限时错误跳过向导的问题。
+- **润色扫光跟随输入框高度**：输入框展开、缩行或面板被系统挪位时，扫光仍跟随可见顶边；排版稳定后再确认最终位置，保留用户接管即停止与减弱动态效果支持，并增加顶部／底部固定、动态增高和四行封顶布局的测试页。
+- **官网与帮助入口**：菜单「设置…」下和高级设置底部可直接打开 iMic 官网与帮助，界面预览模式不会打开浏览器。
+- **英文界面**：跟随系统语言提供简体中文或英文，补充国际站 Model Studio 配置引导。
+
+### iPhone
+
+- **可恢复的首次引导**：介绍双端用法，通过接力、共享或复制把 Mac 下载页送到电脑，解释本地网络权限，再搜索并通过六位码配对；已配对用户直接进入主页。
+- **五张交互式手势练习**：用真实的录音横条、弦的弹簧反馈、触感与音效练习操作，只修改模拟输入框，不录音、不请求录音权限、不向 Mac 发送内容；设置中的「使用教程」可随时重新练习或获取 Mac 版。
+- **更合适的权限时机**：「开始使用」依次请求麦克风与语音识别权限，拒绝后仍可进入主页；老用户按住时只兜底麦克风，语音识别权限延后到松手后。
+- **引导期间连接更稳定**：练习时握手与心跳继续保活；暂缓搜索时回到前台不会提前弹出本地网络授权。
+- **英文界面**：跟随系统语言显示简体中文或英文，操作说明同步本地化。
+
+### 官网与文档
+
+- **全新双语官网**：GitHub Pages 单页提供交互预览、润色示例、隐私、安装指引和动态 Mac 下载；支持从 iPhone 引导直达下载并分享到 Mac，英文站补充国际站配置说明。
+- **新口号与输入场景**：「一只手机，接管所有输入。」（One phone. Every input.），突出任意输入框、多台 Mac 和 Agent 输入；场景区块上移，展示六种输入场景，减少动态效果或离屏时暂停动画。
+- **更清晰的页面结构**：桌面首屏文案与视频并排，手机使用同源真机素材竖版；保留三项交互亮点，合并上手与下载，字标与 App 一致，实时预览风险及权限、切换应用等限制集中到 FAQ。
+- **真实双端演示**：首屏与交互视频使用真实 iPhone、Mac 窗口、语音波形、手势、润色扫光和音效，以 60fps 录制合成，加入推近、节奏冲击、溶解剪辑与无缝循环；开发者可用 `./scripts/site-demo.sh` 重新生成。
+- **视频控制更直接**：点击画面暂停，音效视频用静音角标控制声音，SOUND 板块可开启真实音轨。
+- **荧光与扫描线视觉**：全页加入辉光和扫描线，支持 HTML-in-Canvas 的 Chrome 会实时绘制首屏标题效果，同时保留可选择的真实标题文字。
+- **低频信号效果**：标题偶发撕裂和青／品红通道分离，像素标签偶发错位，每次访问最多一次全屏信号中断，下载按钮和终端示意有轻量反馈；减弱动态效果时完全关闭，色彩变化每秒不超过三次。
+- **帮助文档同步**：README 与官网 FAQ 补充北京地域开户指引，精简说明并保留增强功能的适用范围和风险；官网已上线 https://drafffffff.github.io/iMic/ ，TestFlight 公开链接仍待补充。
+
+建议 Mac 与 iPhone 同时更新至 **1.4.5**。
+
+## 下载与安装
+
+- **macOS 13+**：`iMic-1.4.5-macOS-universal.dmg`，支持 Apple Silicon 与 Intel；Developer ID 签名并已通过 Apple 公证，双击即可打开。
+- **iOS 17+ / iPhone**：`iMic-1.4.5-iOS-unsigned.ipa`，需要用自己的 Apple ID 或开发团队重新签名安装；不是免签包，也不是 TestFlight 或 App Store 分发。
+- **校验**：两个安装包与 `SHA256SUMS.txt` 放在同一目录，执行 `shasum -a 256 -c SHA256SUMS.txt`。
+- 完整源码对应本 Release 的 `v1.4.5` 标签。
+
+## 边界说明
+
+- 首次安装 Mac 仍需授权辅助功能；终端与 Chrome 等的润色扫光依赖屏幕录制，扫光只作视觉提示，不作为写入依据。
+- 实时预览的键盘兼容模式无法独立核验目标程序自行改稿或丢弃按键，可能重复或误删；用户接管或切换应用会停止本轮输入。
+- 从 1.4.3 及更早版本升级的 iPhone 用户，需要在新 App 中重新配对 Mac；登录时启动只在从「应用程序」文件夹运行时可用。
+- 尚待真机验证：未授权过的 Mac 开启屏幕录制并按系统要求重开后，应回到向导第 2 步，再完成设置。
+&lt;/pre&gt;</description>
+      <enclosure url="https://github.com/Drafffffff/iMic/releases/download/v1.4.5/iMic-1.4.5-macOS-universal.dmg" length="2733736" type="application/octet-stream" sparkle:edSignature="DIr2GCq+pYPYyX0yE6kRhCP1a6viknd0/tNaJJxBLOnrt+TyEzWjNSO2zdmGcX04DpPHWxRvRx+gVKhBrffrAg==" />
+    </item>
     <title>iMic Mac 更新</title>
     <link>https://drafffffff.github.io/iMic/</link>
     <description>iMic macOS 更新</description>
