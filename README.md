@@ -24,7 +24,7 @@
 
 需要：macOS 13+ 的 Mac、iOS 17+ 的 iPhone、一个[阿里云百炼 API Key](https://bailian.console.aliyun.com/?tab=model#/api-key)，两台设备连同一个 Wi-Fi。
 
-1. **Mac**：下载 [最新 DMG](https://github.com/Drafffffff/iMic/releases/latest)，拖进「应用程序」打开，按向导填入 Key 并开启辅助功能权限。在百炼控制台创建 Key 时，请选择「华北2（北京）」地域。
+1. **Mac**：下载 [最新 DMG](https://github.com/Drafffffff/iMic/releases/latest)，拖进「应用程序」打开，按向导填入 Key 并开启辅助功能权限。
 2. **iPhone**：TestFlight 即将开放，届时从[官网](https://drafffffff.github.io/iMic/#download)获取。
 3. **配对**：iPhone 上选择你的 Mac，输入 Mac 显示的 6 位配对码。
 4. **输入**：在 Mac 上点进输入框，按住 iPhone 底部橙色横条说话，松手即可。
