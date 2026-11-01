@@ -321,7 +321,7 @@ Mac 端复用 Brick Mic 的实现，沿用 GPL-3.0。协议与 iOS 端为本次�
 1. 在 [Umami Cloud](https://cloud.umami.is/signup) 注册免费 Hobby 账号，完成邮箱验证，选择数据地域（本站已选 **US**）；该选项随后只读，参阅 [地域与保留说明](https://docs.umami.is/docs/cloud/faq)。当前免费档为 1 个网站、每月 100K 事件、保留 6 个月；属性也计入用量，见 [定价](https://umami.is/pricing)。
 2. 添加站点，域名填 `drafffffff.github.io`，名称可用 `iMic`。中英文路径共用同一站点。在站点设置的 Tracking code 中复制 `data-website-id` 的 UUID。
 3. 只填写 `site/assets/js/site.js` 顶部的 `ANALYTICS_SITE_ID = ""`；这是公开站点标识，不是 API Key，不要添加账号凭据，也不要再往 HTML 粘贴服务脚本。若需关闭，将常量恢复为空。
-4. 按现有 Pages 发布流程上线。在真实官网、未开启 DNT/GPC 的浏览器查看 Network：应异步请求 `https://cloud.umami.is/script.js`，随后向 `https://gateway.umami.is/api/send` 上报。数据只有固定 `/iMic/`、`/iMic/en/` 路径和来源域名，不应出现查询参数或片段。在 EU 账号对应站点的实时视图确认访问，再点击下载、展开 FAQ；在站点仪表盘 Events 中查看事件，在 Event data/Breakdown 选择 `placement`、`lang`、`result` 等属性。参阅 [事件接口](https://docs.umami.is/docs/tracker-functions)。
+4. 按现有 Pages 发布流程上线。在真实官网、未开启 DNT/GPC 的浏览器查看 Network：应异步请求 `https://cloud.umami.is/script.js`，随后向 `https://gateway.umami.is/api/send` 上报。数据只有固定 `/iMic/`、`/iMic/en/` 路径和来源域名，不应出现查询参数或片段。在 Umami 站点的实时视图确认访问，再点击下载、展开 FAQ；在站点仪表盘 Events 中查看事件，在 Event data/Breakdown 选择 `placement`、`lang`、`result` 等属性。参阅 [事件接口](https://docs.umami.is/docs/tracker-functions)。
 5. 用大陆真实网络复查脚本 **和** 上报请求成功并在后台出现数据。本机 HTTP 200 只能说明本机出口可达，不保证大陆各运营商或拦截器可达；失败时先保持 ID 为空，或评估自托管 Umami。
 
 事件契约：`download_mac(placement, lang)`、`iphone_get(placement, lang)`、`share_to_mac(result, lang)`、`from_ios(lang)`、`language_switch(to, placement)`、`video_play(video)`、`sound_on()`、`faq_open(question)`、`scroll_depth(depth)`。属性全部为短字符串；FAQ 从 `"1"` 起，滚动档位为 `"25"/"50"/"75"/"100"` 且每次加载各一次。下载记录点击意图，不证明安装成功。分享每次操作完成后记录一个结果；用户取消计 `failed`，界面保持原有安静取消行为。视频只在点击播放控件时记录，自动播放、暂停和音效试听引发的播放不算 `video_play`。
