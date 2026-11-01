@@ -1,7 +1,7 @@
 /* Public installation link: set after TestFlight public testing opens. */
 const IOS_TESTFLIGHT_URL = "";
 /* Umami Cloud website UUID. Empty means no analytics script or requests. */
-const ANALYTICS_SITE_ID = "";
+const ANALYTICS_SITE_ID = "c302cf40-d2ee-4601-9d76-fbacfd86a543";
 const RELEASE_API = "https://api.github.com/repos/Drafffffff/iMic/releases/latest";
 const RELEASE_FALLBACK = "https://github.com/Drafffffff/iMic/releases/latest";
 const SHARE_URL = document.querySelector("#share-manual").href;

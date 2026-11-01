@@ -63,7 +63,9 @@ cdp.on('Fetch.requestPaused',async p=>{
   }
   if(url.pathname.endsWith('/assets/js/site.js')) {
     let source=await fs.readFile('site/assets/js/site.js','utf8');
-    if(analyticsId!==null)source=source.replace('const ANALYTICS_SITE_ID = "";',`const ANALYTICS_SITE_ID = ${JSON.stringify(analyticsId)};`);
+    // Tests are independent of the configured production ID: every page load gets an
+    // explicit ID (empty unless a test injects one).
+    source=source.replace(/const ANALYTICS_SITE_ID = "[^"]*";/,`const ANALYTICS_SITE_ID = ${JSON.stringify(analyticsId ?? '')};`);
     return await fulfill(source);
   }
   if(fixtureOrigin&&url.origin===fixtureOrigin) {
