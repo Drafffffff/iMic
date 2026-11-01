@@ -308,3 +308,32 @@ Mac 端复用 Brick Mic 的实现，沿用 GPL-3.0。协议与 iOS 端为本次�
 - HTML-in-Canvas 增强：`site/assets/js/site.js` 末尾检测 `CanvasRenderingContext2D.prototype.drawElementImage`，支持时把首屏 `<h1>` 放进 `content="drawable"`（Chrome 155 之前为 `layoutsubtree`）的画布，逐帧叠加辉光、扫描线和亮带。`<h1>` 仍是真实 DOM，可选中、可被读屏读取。
 - 该 API 目前是 Chrome 源试用（截至 Chrome 160）。站点已注册令牌（2026-11-01 注册，2027-03-02 到期），在两个页面的 `<head>` 中；到期前需在 Chrome Origin Trials 续期并替换。不加试用令牌时，只有开启 `chrome://flags/#canvas-draw-element` 的浏览器会看到画布效果，其余浏览器使用 CSS 效果。要对所有 Chrome 访客开启，需要发布者用自己的 Google 账号在 Chrome Origin Trials 为 `https://drafffffff.github.io` 注册 HTML-in-Canvas 试用，把得到的令牌以 `<meta http-equiv="origin-trial" content="…">` 加到 `site/index.html` 与 `site/en/index.html` 的 `<head>`。令牌到期或 API 再次变更时，按 [Chrome 的迁移说明](https://developer.chrome.com/blog/html-in-canvas-ot-changes) 更新。
 - 本地验证画布路径：`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --enable-blink-features=CanvasDrawElement --dump-dom http://127.0.0.1:8000/`，输出中应有 `data-crt="canvas"`。
+
+
+## 官网匿名统计
+
+2026-11-01 使用无需账号的 Globalping 中国大陆家宽探针实测：`cloud.umami.is/script.js` 的 HTTPS GET 在武汉联通、广州移动、芜湖联通均返回 200（229–333 ms）；`gateway.umami.is/api/send` 的带 Origin/请求头 OPTIONS 预检在武汉联通、广州电信、上海联通均返回 200（296–1627 ms）。[脚本测量](https://api.globalping.io/v1/measurements/2R0tHLwZYWJ57v9wn00021QF8) · [预检测量](https://api.globalping.io/v1/measurements/2GMJ5u15qcw8VIalv00021QF8)。这是当时这些线路的连通性结果，不代表所有大陆网络，也不代表已有真实站点接收数据；测量链接由服务临时保留，结果摘要同时写入 PR。
+
+官网接入 Umami Cloud，默认关闭；只影响 `site/`，不在 App 中收集统计。无需 Cookie 横幅，脚本异步加载；只允许 `cloud.umami.is`（脚本）和 `gateway.umami.is`（上报）。服务未加载时的交互不缓存、不补报。`from_ios` 在脚本加载完成后发出一次，加载失败或超过 4 秒则仅派发页面内事件。`imic:track` 是当前页面内的调试/测试事件，即使统计禁用仍会派发，不产生网络请求。
+
+启用由站点维护者自行完成（开发任务不会注册、登录或创建账号）：
+
+1. 在 [Umami Cloud](https://cloud.umami.is/signup) 注册免费 Hobby 账号，完成邮箱验证，选择 **EU** 数据地域；该选项随后只读，参阅 [地域与保留说明](https://docs.umami.is/docs/cloud/faq)。当前免费档为 1 个网站、每月 100K 事件、保留 6 个月；属性也计入用量，见 [定价](https://umami.is/pricing)。
+2. 添加站点，域名填 `drafffffff.github.io`，名称可用 `iMic`。中英文路径共用同一站点。在站点设置的 Tracking code 中复制 `data-website-id` 的 UUID。
+3. 只填写 `site/assets/js/site.js` 顶部的 `ANALYTICS_SITE_ID = ""`；这是公开站点标识，不是 API Key，不要添加账号凭据，也不要再往 HTML 粘贴服务脚本。若需关闭，将常量恢复为空。
+4. 按现有 Pages 发布流程上线。在真实官网、未开启 DNT/GPC 的浏览器查看 Network：应异步请求 `https://cloud.umami.is/script.js`，随后向 `https://gateway.umami.is/api/send` 上报。数据只有固定 `/iMic/`、`/iMic/en/` 路径和来源域名，不应出现查询参数或片段。在 EU 账号对应站点的实时视图确认访问，再点击下载、展开 FAQ；在站点仪表盘 Events 中查看事件，在 Event data/Breakdown 选择 `placement`、`lang`、`result` 等属性。参阅 [事件接口](https://docs.umami.is/docs/tracker-functions)。
+5. 用大陆真实网络复查脚本 **和** 上报请求成功并在后台出现数据。本机 HTTP 200 只能说明本机出口可达，不保证大陆各运营商或拦截器可达；失败时先保持 ID 为空，或评估自托管 Umami。
+
+事件契约：`download_mac(placement, lang)`、`iphone_get(placement, lang)`、`share_to_mac(result, lang)`、`from_ios(lang)`、`language_switch(to, placement)`、`video_play(video)`、`sound_on()`、`faq_open(question)`、`scroll_depth(depth)`。属性全部为短字符串；FAQ 从 `"1"` 起，滚动档位为 `"25"/"50"/"75"/"100"` 且每次加载各一次。下载记录点击意图，不证明安装成功。分享每次操作完成后记录一个结果；用户取消计 `failed`，界面保持原有安静取消行为。视频只在点击播放控件时记录，自动播放、暂停和音效试听引发的播放不算 `video_play`。
+
+```bash
+# 在本 worktree 单独启动，端口按需调整；不要复用别人的服务。
+python3 -m http.server 48763 --bind 127.0.0.1 --directory site
+# 另一个终端
+python3 tools/check-site.py
+IMIC_SITE_URL=http://127.0.0.1:48763/ node tools/test-site-browser.mjs
+```
+
+浏览器脚本使用自己创建并关闭的 agent-browser 会话。启用场景在浏览器内拦截模拟生产域名，页面资源仍取自 `IMIC_SITE_URL`；临时注入测试 UUID，并模拟服务响应，不上传到真实统计服务。报告及 `imic:track` 样例在 `build/site-tests/`。本地地址、`file:`、DNT、GPC 均不得加载脚本。页面内测试钩子不是公共上报 API，不能通过派发 `imic:track` 向服务注入任意数据。
+
+若改为自托管 Umami，需要服务器、HTTPS 和 PostgreSQL，以及备份与更新维护；保留 `track(name, props)` 和枚举契约，只更换适配层脚本/上报地址与站点 UUID，并同步精确域名白名单、隐私存放地和浏览器模拟。不要同时加载两种服务。

@@ -1,5 +1,7 @@
 /* Public installation link: set after TestFlight public testing opens. */
 const IOS_TESTFLIGHT_URL = "";
+/* Umami Cloud website UUID. Empty means no analytics script or requests. */
+const ANALYTICS_SITE_ID = "";
 const RELEASE_API = "https://api.github.com/repos/Drafffffff/iMic/releases/latest";
 const RELEASE_FALLBACK = "https://github.com/Drafffffff/iMic/releases/latest";
 const SHARE_URL = document.querySelector("#share-manual").href;
@@ -8,6 +10,109 @@ const SHARE_URL = document.querySelector("#share-manual").href;
   "use strict";
   const query = new URLSearchParams(location.search);
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  const lang = document.documentElement.lang === "en" ? "en" : "zh";
+  // Only these short enums may leave the page. Never pass DOM text or URLs as props.
+  const eventProps = {
+    download_mac: { placement: ["hero", "card", "mobile-direct"], lang: ["zh", "en"] },
+    iphone_get: { placement: ["hero", "card"], lang: ["zh", "en"] },
+    share_to_mac: { result: ["shared", "copied", "failed"], lang: ["zh", "en"] },
+    from_ios: { lang: ["zh", "en"] },
+    language_switch: { to: ["zh", "en"], placement: ["nav", "banner"] },
+    video_play: { video: ["hero", "string", "polish", "sound"] },
+    sound_on: {},
+    faq_open: { question: Array.from(document.querySelectorAll("#faq details"), (_, i) => String(i + 1)) },
+    scroll_depth: { depth: ["25", "50", "75", "100"] }
+  };
+  function analyticsAllowed() {
+    const host = location.hostname.toLowerCase().replace(/\.$/, "");
+    const dnt = [navigator.doNotTrack, window.doNotTrack, navigator.msDoNotTrack];
+    return /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(ANALYTICS_SITE_ID)
+      && /https?:/.test(location.protocol)
+      && !/^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(host) && !host.endsWith(".local")
+      && !dnt.some((value) => ["1", "yes"].includes(String(value).toLowerCase()))
+      && !navigator.globalPrivacyControl;
+  }
+  let analyticsLoaded = false;
+  function sendAnalytics(name, props) {
+    if (!analyticsLoaded || !analyticsAllowed() || typeof window.umami?.track !== "function") return;
+    try {
+      let referrer = "";
+      try {
+        const url = new URL(document.referrer);
+        if (/^https?:$/.test(url.protocol)) referrer = url.origin;
+      } catch { /* No referrer. */ }
+      // Explicit payload: no default full URL, query, hash, title or referrer path.
+      const payload = {
+        website: ANALYTICS_SITE_ID, hostname: location.hostname,
+        url: lang === "en" ? "/iMic/en/" : "/iMic/", title: "iMic",
+        language: lang, screen: `${screen.width}x${screen.height}`, referrer
+      };
+      if (name) Object.assign(payload, { name, data: props });
+      Promise.resolve(window.umami.track(payload)).catch(() => {});
+    } catch { /* Analytics must never affect page controls. */ }
+  }
+  function track(name, props = {}) {
+    if (!Object.hasOwn(eventProps, name)) return;
+    const safe = {};
+    for (const [key, values] of Object.entries(eventProps[name])) {
+      if (!values.includes(props[key])) return;
+      safe[key] = props[key];
+    }
+    document.dispatchEvent(new CustomEvent("imic:track", { detail: { name, props: { ...safe } } }));
+    sendAnalytics(name, safe);
+  }
+  let entryTracked = false;
+  function trackEntry() {
+    if (entryTracked) return;
+    entryTracked = true;
+    if (query.get("from") === "ios") track("from_ios", { lang });
+  }
+  if (analyticsAllowed()) {
+    const script = document.createElement("script");
+    script.src = "https://cloud.umami.is/script.js";
+    script.async = true;
+    script.referrerPolicy = "no-referrer";
+    script.dataset.websiteId = ANALYTICS_SITE_ID;
+    script.dataset.hostUrl = "https://gateway.umami.is";
+    // Disable all implicit collection (including clicks/performance/errors).
+    script.dataset.autoTrack = "false";
+    script.onload = () => { analyticsLoaded = true; sendAnalytics(); trackEntry(); };
+    script.onerror = trackEntry;
+    document.head.append(script);
+    // Entry is emitted once even if a blocker leaves the script pending forever.
+    setTimeout(trackEntry, 4000);
+  } else trackEntry();
+
+  document.querySelectorAll("[data-dmg-link], .hero-actions .primary").forEach((link) => {
+    const placement = link.closest(".hero-actions") ? "hero" : link.closest("#mobile-download-note") ? "mobile-direct" : "card";
+    link.addEventListener("click", () => track("download_mac", { placement, lang }));
+  });
+  document.querySelectorAll(".hero-actions .text-link, #testflight-link").forEach((link) => {
+    const placement = link.closest(".hero-actions") ? "hero" : "card";
+    link.addEventListener("click", () => track("iphone_get", { placement, lang }));
+  });
+  document.querySelectorAll(".language-switch, #language-banner a").forEach((link) => {
+    const to = link.hreflang === "zh-Hans" ? "zh" : "en";
+    const placement = link.closest("#language-banner") ? "banner" : "nav";
+    link.addEventListener("click", () => track("language_switch", { to, placement }));
+  });
+  document.querySelectorAll("#faq details").forEach((item, i) => {
+    item.addEventListener("toggle", () => {
+      if (item.open) track("faq_open", { question: String(i + 1) });
+    });
+  });
+  const depths = new Set();
+  addEventListener("scroll", () => {
+    const range = document.documentElement.scrollHeight - innerHeight;
+    if (range <= 0) return;
+    for (const depth of [25, 50, 75, 100]) {
+      if (!depths.has(depth) && scrollY + 1 >= range * depth / 100) {
+        depths.add(depth);
+        track("scroll_depth", { depth: String(depth) });
+      }
+    }
+  }, { passive: true });
+
   // Static, complete HTML is also the no-JS / reduced-motion fallback.
   const demo = document.querySelector(".field-demo");
   if (demo && "IntersectionObserver" in window) {
@@ -146,17 +251,21 @@ const SHARE_URL = document.querySelector("#share-manual").href;
       try {
         if (navigator.share) {
           await navigator.share({ title: button.dataset.shareTitle, url: SHARE_URL });
+          track("share_to_mac", { result: "shared", lang });
         } else {
           await navigator.clipboard.writeText(SHARE_URL);
           status.textContent = button.dataset.success;
+          track("share_to_mac", { result: "copied", lang });
         }
       } catch (error) {
-        if (error.name === "AbortError") return; // Dismissing a share sheet is expected.
+        if (error.name === "AbortError") { track("share_to_mac", { result: "failed", lang }); return; } // Dismissing a share sheet is expected.
         // A share API can exist but be denied. Try clipboard before offering a manual link.
         try {
           await navigator.clipboard.writeText(SHARE_URL);
           status.textContent = button.dataset.success;
+          track("share_to_mac", { result: "copied", lang });
         } catch {
+          track("share_to_mac", { result: "failed", lang });
           status.textContent = button.dataset.failure;
           document.querySelector("#share-manual").hidden = false;
         }
@@ -230,14 +339,17 @@ const SHARE_URL = document.querySelector("#share-manual").href;
       video.muted = !on;
       button.setAttribute("aria-pressed", String(on));
       button.setAttribute("aria-label", on ? button.dataset.onLabel : button.dataset.offLabel);
-      if (on) { manuallyPaused.delete(video); video.currentTime = 0; play(video); }
+      if (on) { track("sound_on"); manuallyPaused.delete(video); video.currentTime = 0; play(video); }
     });
   });
   videos.forEach((video) => {
     video.muted = true;
     const button = video.parentElement.querySelector(".video-toggle");
     button.addEventListener("click", () => {
-      if (video.paused) { manuallyPaused.delete(video); play(video); }
+      if (video.paused) {
+        track("video_play", { video: video.dataset.src.split("/").pop().replace(".mp4", "") });
+        manuallyPaused.delete(video); play(video);
+      }
       else { manuallyPaused.add(video); video.pause(); }
     });
     video.addEventListener("play", () => setButton(video));

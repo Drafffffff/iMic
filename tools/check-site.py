@@ -11,6 +11,13 @@ from urllib.parse import unquote, urlsplit
 
 root = Path(sys.argv[1] if len(sys.argv) > 1 else 'site').resolve()
 errors, external, refs, documents = [], set(), [], {}
+# Exact hosts only; analytics adds no wildcard or arbitrary third-party resources.
+ANALYTICS_HOSTS = {'cloud.umami.is', 'gateway.umami.is'}
+EXTERNAL_HOSTS = {
+    'api.github.com', 'github.com', 'drafffffff.github.io',
+    'bailian.console.aliyun.com', 'modelstudio.console.alibabacloud.com',
+} | ANALYTICS_HOSTS
+ANALYTICS_URLS = {'https://cloud.umami.is/script.js', 'https://gateway.umami.is'}
 
 def require(condition, message):
     if not condition: errors.append(message)
@@ -84,7 +91,7 @@ for path in root.rglob('*.css'):
         require(resolve(path,url).is_file(), f'{path.name}: missing CSS asset {url}')
 for path in root.rglob('*.js'):
     source = path.read_text()
-    require(not re.search(r'\b(?:localStorage|sessionStorage)\b|document\.cookie', source), f'{path.name}: storage/tracking forbidden')
+    require(not re.search(r'\b(?:localStorage|sessionStorage)\b|document\.cookie', source), f'{path.name}: browser storage forbidden')
     external.update(re.findall(r'https://[^\s"\'`<>]+',source))
 index = (root/'index.html').read_text()
 for value in ('canonical', 'og:title', 'og:description', 'og:image', 'og:url', 'twitter:card', 'apple-touch-icon'):
@@ -134,6 +141,14 @@ for filename, source, language in [('index.html', index, 'zh-Hans'), ('en/index.
     for lang in ['zh-Hans','en','x-default']:
         require(f'hreflang="{lang}"' in source, f'{filename}: missing alternate {lang}')
     require('class="language-switch"' in source, f'{filename}: language switch missing')
+    privacy = re.search(r'<section id="private".*?</section>', source, re.S)
+    require(privacy is not None, f'{filename}: privacy section missing')
+    if privacy:
+        require(not re.search(r'无追踪|no tracking', source, re.I), f'{filename}: obsolete tracking claim')
+        wording = '无 Cookie 的匿名访问统计' if language == 'zh-Hans' else 'cookieless anonymous analytics'
+        require(wording in privacy[0], f'{filename}: anonymous analytics disclosure missing')
+        require('href="https://github.com/Drafffffff/iMic/blob/codex/ui-phosphor-wireframe/docs/PRIVACY.md"' in privacy[0],
+                f'{filename}: privacy notice link missing')
     for value in ['og:title','og:description','og:url','twitter:card','data-template','data-demo-toggle']:
         require(value in source, f'{filename}: missing {value}')
     require('?from=ios#download' in source, f'{filename}: missing iPhone deep link')
@@ -228,7 +243,14 @@ og=root/'assets/icons/og.png'
 if og.is_file():
     require(struct.unpack('>II',og.read_bytes()[16:24])==(1200,630),'OG image must be 1200×630')
 else: require(False,'OG image missing')
-print('\nExternal links (navigation/API only):')
+for link in external:
+    parsed = urlsplit(link)
+    if parsed.scheme == 'mailto':
+        continue
+    require(parsed.hostname in EXTERNAL_HOSTS, f'External host not allowlisted: {link}')
+    if parsed.hostname in ANALYTICS_HOSTS:
+        require(link in ANALYTICS_URLS, f'Unexpected analytics URL: {link}')
+print('\nExternal links (navigation/API; optional Umami script/ingestion only):')
 for link in sorted(external):print('  '+link)
 if errors:
     print('\nFAILED:\n'+'\n'.join('  '+e for e in errors),file=sys.stderr)
