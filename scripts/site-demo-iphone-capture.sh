@@ -9,6 +9,8 @@ SCENE=${1:?scene}
 RAW=${2:?raw directory}
 UDID=${3:?device udid}
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
+source "$ROOT/scripts/ios-bundle-id.sh"
+BUNDLE_ID=${IMIC_BUNDLE_ID:-$IMIC_DEV_BUNDLE_ID}
 MOVIE="$RAW/$SCENE.mov"
 CAPTURE_APP="$ROOT/build/site-demo/bin/iMic Demo Capture.app"
 mkdir -p "$RAW"
@@ -19,7 +21,7 @@ rm -f -- "${MOVIE:?}"
 for pcm in "$ROOT/build/site-demo/speech/$SCENE"-*.pcm; do
   [ -f "$pcm" ] || continue
   xcrun devicectl device copy to --device "$UDID" --domain-type appDataContainer \
-    --domain-identifier art.malette.imic --source "$pcm" \
+    --domain-identifier "$BUNDLE_ID" --source "$pcm" \
     --destination "Documents/demo-speech/$(basename "$pcm")" > "$RAW/$SCENE.speechcopy.log" 2>&1 \
     || echo "warning: could not copy $(basename "$pcm") (an earlier copy is used if present)" >&2
 done
@@ -36,7 +38,7 @@ grep -q "Capture ready" "$RAW/$SCENE.rec.log" || { stop_recorder; cat "$RAW/$SCE
 
 run_test() {
   TEST_RUNNER_IMIC_DEMO_SCENE="$SCENE" xcodebuild test-without-building -project "$ROOT/ios/iMic.xcodeproj" \
-    -scheme iMic -destination "id=$UDID" -derivedDataPath "$ROOT/build/site-demo/dd-device" \
+    -scheme iMic IMIC_BUNDLE_ID="$BUNDLE_ID" -destination "id=$UDID" -derivedDataPath "$ROOT/build/site-demo/dd-device" \
     -only-testing:iMicUITests/DemoCaptureUITests/testScene > "$RAW/$SCENE.test.log" 2>&1
 }
 # The device test runner occasionally exits before bootstrapping; one retry is enough.
@@ -46,7 +48,7 @@ sleep 0.5
 stop_recorder
 
 xcrun devicectl device copy from --device "$UDID" --domain-type appDataContainer \
-  --domain-identifier art.malette.imic --source Documents/demo-events.jsonl \
+  --domain-identifier "$BUNDLE_ID" --source Documents/demo-events.jsonl \
   --destination "$RAW/$SCENE.events.jsonl" > "$RAW/$SCENE.copy.log" 2>&1
 
 # Time frames by decode order, normalise to constant 60fps, and place events by the

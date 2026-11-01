@@ -2,19 +2,20 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
+source "$ROOT/scripts/ios-bundle-id.sh"
 DEVICE=${IMIC_SIM_NAME:-booted}
 APP=${IMIC_SIM_APP:-$ROOT/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app}
 xcrun simctl install "$DEVICE" "$APP"
-python3 - "$DEVICE" <<'PY'
+python3 - "$DEVICE" "$IMIC_SIM_BUNDLE_ID" <<'PY'
 import pathlib, subprocess, sys, time
-device = sys.argv[1]
+device, bundle_id = sys.argv[1:]
 container = pathlib.Path(subprocess.check_output([
-    'xcrun', 'simctl', 'get_app_container', device, 'art.malette.imic', 'data'
+    'xcrun', 'simctl', 'get_app_container', device, bundle_id, 'data'
 ], text=True).strip())
 log = container / 'Library/Logs/iMic/iMic.log'
 offset = log.stat().st_size if log.exists() else 0
 subprocess.run(['xcrun', 'simctl', 'launch', '--terminate-running-process', device,
-                'art.malette.imic', '--ui-preview=idle', '--debug-standby-check'], check=True)
+                bundle_id, '--ui-preview=idle', '--debug-standby-check'], check=True)
 deadline = time.monotonic() + 80
 while time.monotonic() < deadline:
     data = log.read_bytes() if log.exists() else b''

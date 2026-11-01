@@ -200,10 +200,10 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 
 # App 界面预览
 open build/mac.noindex/iMic.app --args --ui-preview=ready
-xcrun simctl launch booted art.malette.imic --ui-preview=result
+xcrun simctl launch booted art.malette.imic.app --ui-preview=result
 
 # Debug 专用弹射预览：自动装载文字，3 秒后弹射；可分别检查 8 / 120 / 1000 字
-xcrun simctl launch --terminate-running-process booted art.malette.imic \
+xcrun simctl launch --terminate-running-process booted art.malette.imic.app \
   --ui-preview=flight --debug-flight-count=120
 # 可加 --debug-flight-origin=0.15 / 0.85 检查按钮左右触点（0–1，Debug 专用）
 ```
@@ -300,7 +300,7 @@ Mac 端复用 Brick Mic 的实现，沿用 GPL-3.0。协议与 iOS 端为本次�
 - 不要在模型提示词中使用已本地化的显示名称。`promptTitle` / `promptExample`、`instruction` 和 `languageName` 是固定中文提示词输入。
 - 跨设备错误：`shared/LinkStatusText.swift` 将稳定 `code` 映射为本地文案；新 iPhone 对未知/缺失 code 继续显示 Mac 的 message。新增 code 必须同步协议、两端和测试文档。
 - 检查：`./scripts/test-l10n.sh`；生成物需要提交。`tools/l10n-exclusions.json` 按精确字符串 SHA-256 记录保留的中文及理由，新中文不能被路径白名单自动放过。
-- 截图：先自行创建专用模拟器，再 `xcrun simctl launch <专用UDID> art.malette.imic --ui-preview=result -AppleLanguages '(en)'`。中文使用 `'(zh-Hans)'`，其他预览状态见代码。Mac 从本 worktree 的构建产物运行 `iMic --ui-preview=settings-general -AppleLanguages '(en)'`。不要安装覆盖正式 App。完成后关闭并删除自己创建的模拟器。
+- 截图：先自行创建专用模拟器，再 `xcrun simctl launch <专用UDID> art.malette.imic.app --ui-preview=result -AppleLanguages '(en)'`。中文使用 `'(zh-Hans)'`，其他预览状态见代码。Mac 从本 worktree 的构建产物运行 `iMic --ui-preview=settings-general -AppleLanguages '(en)'`。不要安装覆盖正式 App。完成后关闭并删除自己创建的模拟器。
 
 ## 官网 CRT 效果
 
@@ -337,3 +337,17 @@ IMIC_SITE_URL=http://127.0.0.1:48763/ node tools/test-site-browser.mjs
 浏览器脚本使用自己创建并关闭的 agent-browser 会话。启用场景在浏览器内拦截模拟生产域名，页面资源仍取自 `IMIC_SITE_URL`；临时注入测试 UUID，并模拟服务响应，不上传到真实统计服务。报告及 `imic:track` 样例在 `build/site-tests/`。本地地址、`file:`、DNT、GPC 均不得加载脚本。页面内测试钩子不是公共上报 API，不能通过派发 `imic:track` 向服务注入任意数据。
 
 若改为自托管 Umami，需要服务器、HTTPS 和 PostgreSQL，以及备份与更新维护；保留 `track(name, props)` 和枚举契约，只更换适配层脚本/上报地址与站点 UUID，并同步精确域名白名单、隐私存放地和浏览器模拟。不要同时加载两种服务。
+
+## iOS Bundle ID 与本地签名
+
+发布/未签名归档和模拟器使用 `art.malette.imic.app`，UI 测试为 `art.malette.imic.app.uitests`；模拟器禁用签名。只有 `5H39F98ND4` 团队可签发布 ID。本地真机安装、官网演示默认为 `art.malette.imic.dev`，运行器由同一 `IMIC_BUNDLE_ID` 派生 `.uitests`。非发布团队请求发布 ID 时，脚本在构建和设备操作前退出，避免个人团队自动签名占用发布 ID。
+
+```bash
+# 只解析配置，不构建、不签名、不发现或操作设备
+IMIC_DEV_TEAM=S889TFV5A4 ./scripts/install-ios-device.sh --dry-run
+IMIC_DEV_TEAM=S889TFV5A4 ./scripts/site-demo.sh --dry-run
+# 保护逻辑演示：必须报错退出
+IMIC_DEV_TEAM=S889TFV5A4 IMIC_BUNDLE_ID=art.malette.imic.app ./scripts/install-ios-device.sh --dry-run
+```
+
+身份常量集中在 `scripts/ios-bundle-id.sh`，工程使用 `IMIC_BUNDLE_ID` 派生两个 target 的 ID，脚本不能直接覆盖 `PRODUCT_BUNDLE_IDENTIFIER`。`pull-ios-log.sh` 和真机采集默认读取 `.dev` 容器；如读取正式团队安装的 App，显式设置 `IMIC_BUNDLE_ID=art.malette.imic.app`。新 App 不继承旧应用配对数据，需要重新配对。Keychain service 名、共享日志子系统只是逻辑标签，没有共享 access group、App Group 或依赖 ID 的 URL scheme；默认钥匙串权限与容器仍按新 App 隔离。Mac 与本地 ad-hoc 签名的 `art.malette.imic.democapture` 不涉及 iOS 团队注册，保持原样。

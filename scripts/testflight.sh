@@ -3,16 +3,18 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
+source "$ROOT/scripts/ios-bundle-id.sh"
 ACTION=${1:-help}
-if [ "$#" -gt 1 ]; then echo "用法：$0 archive|archive-unsigned|check|export|upload" >&2; exit 2; fi
+if [ "$#" -gt 1 ]; then echo "用法：$0 archive|archive-unsigned|check|handoff|export|upload" >&2; exit 2; fi
 case "$ACTION" in
-  archive|archive-unsigned|check|export|upload) ;;
+  archive|archive-unsigned|check|handoff|export|upload) ;;
   help|--help|-h)
     cat <<'HELP'
-用法：./scripts/testflight.sh archive|archive-unsigned|check|export|upload
+用法：./scripts/testflight.sh archive|archive-unsigned|check|handoff|export|upload
   archive           使用 Xcode 已登录账号自动签名归档（可能创建/更新描述文件）
   archive-unsigned  无账号时生成未签名归档，供之后签名导出；不能直接分发
   check             检查归档的版本、隐私清单、平台和调试入口
+  handoff           打包未签名归档与已提交源码，不签名、不上传
   export            将已有归档签名导出为 App Store Connect IPA（不上传）
   upload            将已有归档签名并上传到 App Store Connect
 环境变量：IMIC_TEAM_ID、IMIC_BUILD_NUMBER、IMIC_TESTFLIGHT_DIR、IMIC_PROFILE_PATH
@@ -27,7 +29,8 @@ esac
 VERSION=$(<"$ROOT/VERSION")
 PROJECT_VERSION=$(awk '/MARKETING_VERSION:/ {gsub(/"/, "", $2); print $2; exit}' "$ROOT/ios/project.yml")
 BUILD_NUMBER=${IMIC_BUILD_NUMBER:-$(awk '/CURRENT_PROJECT_VERSION:/ {gsub(/"/, "", $2); print $2; exit}' "$ROOT/ios/project.yml")}
-TEAM=${IMIC_TEAM_ID:-5H39F98ND4}
+TEAM=${IMIC_TEAM_ID:-$IMIC_RELEASE_TEAM}
+imic_require_release_team "$TEAM"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "VERSION 格式无效" >&2; exit 1; }
 [ "$PROJECT_VERSION" = "$VERSION" ] || { echo "ios/project.yml 与 VERSION 不一致" >&2; exit 1; }
 [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]{0,3}(\.[0-9]{1,2}){0,2}$ ]] || { echo "Build 应为最多 4.2.2 位的正数字版本，例如 2 或 2.1" >&2; exit 1; }
@@ -81,7 +84,7 @@ PY
   xcodebuild -project "$WORK/ios/iMic.xcodeproj" -scheme iMic -configuration Release \
     -destination 'generic/platform=iOS' -derivedDataPath "$OUTPUT/DerivedData" \
     -archivePath "$ARCHIVE" DEVELOPMENT_TEAM="$TEAM" MARKETING_VERSION="$VERSION" \
-    CURRENT_PROJECT_VERSION="$BUILD_NUMBER" TARGETED_DEVICE_FAMILY=1 ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
+    IMIC_BUNDLE_ID="$IMIC_RELEASE_BUNDLE_ID" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" TARGETED_DEVICE_FAMILY=1 ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
     "${SIGNING[@]}" archive 2>&1 | tee "$OUTPUT/archive-$ACTION.log"
   check_archive | tee "$OUTPUT/validation.txt"
   ditto -c -k --keepParent "$WORK" "$OUTPUT/source.zip"
@@ -95,6 +98,11 @@ fi
 [ -d "$ARCHIVE" ] || { echo "请先运行 archive 或 archive-unsigned：$ARCHIVE 不存在" >&2; exit 1; }
 check_archive | tee "$OUTPUT/validation.txt"
 [ "$ACTION" != check ] || exit 0
+if [ "$ACTION" = handoff ]; then
+  python3 "$ROOT/tools/testflight-handoff.py" --root "$ROOT" --archive "$ARCHIVE" \
+    --output "$ROOT/build/testflight.noindex/handoff/iMic-TestFlight-Handoff-$VERSION-build$BUILD_NUMBER-$IMIC_RELEASE_BUNDLE_ID.zip"
+  exit 0
+fi
 
 # Always produce and validate a local distribution IPA before any upload attempt.
 if [ "$ACTION" = upload ]; then "$ROOT/scripts/testflight.sh" export; fi

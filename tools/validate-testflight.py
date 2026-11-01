@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 
-BUNDLE_ID = "art.malette.imic"
+BUNDLE_ID = "art.malette.imic.app"
 
 
 def require(condition, message):

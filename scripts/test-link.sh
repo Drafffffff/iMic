@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
+source "$ROOT/scripts/ios-bundle-id.sh"
 PORT=${IMIC_TEST_PORT:-47844}
 CODE=$([[ $(date +%S) -lt 30 ]] && echo 246810 || echo 135790)
 WORK=$(mktemp -d /tmp/imic-link-test.XXXXXX)
@@ -45,7 +46,7 @@ swiftc -swift-version 5 -O -target arm64-apple-macosx13.0 \
 
 # 避免模拟器里的 iPhone 应用自动重连并抢走测试连接。
 if [ "${IMIC_KEEP_SIMULATOR:-0}" != 1 ]; then
-  xcrun simctl terminate booted art.malette.imic 2>/dev/null || true
+  xcrun simctl terminate booted "$IMIC_SIM_BUNDLE_ID" 2>/dev/null || true
 fi
 
 echo "==> 3/4 启动无界面 Mac（端口 ${PORT}，配对码 ${CODE}）"

@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
+source "$ROOT/scripts/ios-bundle-id.sh"
 DESTINATION=${IMIC_SIM_DESTINATION:-generic/platform=iOS Simulator}
 RUN=false
 if [ "${1:-}" = "--run" ]; then RUN=true; fi
@@ -21,7 +22,7 @@ xcodebuild \
   -sdk iphonesimulator \
   -destination "$DESTINATION" \
   -derivedDataPath "$ROOT/build/ios.noindex" \
-  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGNING_ALLOWED=NO IMIC_BUNDLE_ID="$IMIC_SIM_BUNDLE_ID" \
   build
 
 APP="$ROOT/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app"
@@ -36,6 +37,6 @@ if [ "$RUN" = true ]; then
   xcrun simctl boot "$DEVICE" 2>/dev/null || true
   xcrun simctl bootstatus "$DEVICE" -b
   xcrun simctl install "$DEVICE" "$APP"
-  xcrun simctl launch "$DEVICE" art.malette.imic
+  xcrun simctl launch "$DEVICE" "$IMIC_SIM_BUNDLE_ID"
   echo "Launched on simulator: $DEVICE"
 fi

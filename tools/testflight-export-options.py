@@ -11,7 +11,7 @@ import sys
 import uuid
 
 
-BUNDLE_ID = "art.malette.imic"
+BUNDLE_ID = "art.malette.imic.app"
 
 
 def main():
@@ -22,6 +22,8 @@ def main():
     parser.add_argument("--destination", choices=("export", "upload"), required=True)
     parser.add_argument("--profile", type=pathlib.Path)
     args = parser.parse_args()
+    if args.team != "5H39F98ND4":
+        raise ValueError("发布 ID 只能在团队 5H39F98ND4 中签名")
     options = plistlib.loads(args.template.read_bytes())
     options.update(teamID=args.team, destination=args.destination)
     if args.profile:

@@ -8,6 +8,7 @@ SCENE=${1:?scene}
 RAW=${2:?raw directory}
 UDID=${3:?simulator udid}
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
+source "$ROOT/scripts/ios-bundle-id.sh"
 MOVIE="$RAW/$SCENE.mov"
 mkdir -p "$RAW"
 rm -f -- "${MOVIE:?}"
@@ -20,13 +21,13 @@ RECORDER=$!
 for _ in $(seq 1 100); do grep -q "Recording started" "$RAW/$SCENE.rec.log" 2>/dev/null && break; sleep 0.05; done
 
 TEST_RUNNER_IMIC_DEMO_SCENE="$SCENE" xcodebuild test-without-building -project "$ROOT/ios/iMic.xcodeproj" \
-  -scheme iMic -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$ROOT/build/site-demo/dd" \
+  -scheme iMic CODE_SIGNING_ALLOWED=NO IMIC_BUNDLE_ID="$IMIC_SIM_BUNDLE_ID" -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$ROOT/build/site-demo/dd" \
   -only-testing:iMicUITests/DemoCaptureUITests/testScene > "$RAW/$SCENE.test.log" 2>&1 || {
     kill -INT "$RECORDER"; echo "$SCENE: UI test failed (see $RAW/$SCENE.test.log)" >&2; exit 1; }
 kill -INT "$RECORDER"
 wait "$RECORDER" || true
 
-CONTAINER=$(xcrun simctl get_app_container "$UDID" art.malette.imic data)
+CONTAINER=$(xcrun simctl get_app_container "$UDID" "$IMIC_SIM_BUNDLE_ID" data)
 cp "$CONTAINER/Documents/demo-events.jsonl" "$RAW/$SCENE.events.jsonl"
 # Place every event in the recording by the app's corner event counter (simulator
 # recordings drift from wall time, so wall clocks cannot be used).
