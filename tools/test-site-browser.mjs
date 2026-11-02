@@ -84,14 +84,14 @@ cdp.on('Fetch.requestPaused',async p=>{
 await call('Page.enable');await call('Runtime.enable');await call('Network.enable');await call('Emulation.setFocusEmulationEnabled',{enabled:true});
 const desktop='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const iphone='Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1';
-async function navigate({url='',width=1440,height=900,mobile=false,reduced=false,init='',response=null,noJS=false,siteID=null,analytics='stub',origin=null}={}){
+async function navigate({url='',width=1440,height=900,dpr=1,mobile=false,reduced=false,init='',response=null,noJS=false,siteID=null,analytics='stub',origin=null}={}){
   await call('Page.stopLoading');
   await call('Fetch.disable');
   if(initId){await call('Page.removeScriptToEvaluateOnNewDocument',{identifier:initId});initId=null;}
   const observe='window.__tracks=[];document.addEventListener("imic:track",e=>window.__tracks.push(e.detail));';
   initId=(await call('Page.addScriptToEvaluateOnNewDocument',{source:observe+init})).identifier;
   await call('Emulation.setScriptExecutionDisabled',{value:noJS});
-  await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+  await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:dpr,mobile:false});
   await call('Network.setUserAgentOverride',{userAgent:mobile?iphone:desktop,platform:mobile?'iPhone':'MacIntel'});
   await call('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:reduced?'reduce':'no-preference'}]});
   mock=response;requests=0;
@@ -400,12 +400,27 @@ await check('Language suggestion is dismissible, storage-free and never redirect
  assert.equal(await evaluate('document.cookie'), '');assert.equal(await evaluate('sessionStorage.length + localStorage.length'),0);
  await navigate({init:language('zh-TW'),response:{body:valid}});assert.equal(await evaluate('document.querySelector("#language-banner").hidden'),true);
 });
+await check('DPR 2: actual CRT draw covers the full headline (CSS path skips)',async()=>{
+ await navigate({dpr:2,reduced:true,response:{body:valid},init:`
+  const native=CanvasRenderingContext2D.prototype.drawElementImage;
+  if(native)CanvasRenderingContext2D.prototype.drawElementImage=function(element,...args){
+   const result=native.call(this,element,...args),r=element.getBoundingClientRect();
+   window.__crtDrawHeight=result&&typeof result.d==='number'
+    ? Math.abs(result.b)*element.offsetWidth+Math.abs(result.d)*element.offsetHeight:r.height;
+   return result;
+  };`});
+ if(await evaluate('document.documentElement.dataset.crt !== "canvas"'))return;
+ const size=await evaluate(`({draw:window.__crtDrawHeight,title:document.querySelector('#hero-title').getBoundingClientRect().height})`);
+ assert(Number.isFinite(size.draw),'Measure a native draw, not only canvas allocation');
+ assert(size.draw+1>=size.title && size.draw<=size.title*1.1,JSON.stringify(size));
+});
 await check('Glitch: short, self-cleaning, one signal drop per visit, none for reduced motion',async()=>{
  await navigate({response:{body:valid}});
  await delay(4600); // let the scheduled first headline glitch (2-4 s) finish
  await evaluate(`document.dispatchEvent(new CustomEvent('imic:glitch',{detail:{target:document.querySelector('#hero-title'),level:'medium'}}))`);
  await delay(90);
- assert.equal(await evaluate('document.querySelectorAll(".glitch-layer .glitch-ghost").length'),2);
+ const canvas=await evaluate('document.documentElement.dataset.crt === "canvas"');
+ assert.equal(await evaluate('document.querySelectorAll(".glitch-layer .glitch-ghost").length'),canvas?0:2);
  await shot('glitch-title');
  await delay(600);
  assert.equal(await evaluate('document.querySelectorAll(".glitch-layer").length'),0);

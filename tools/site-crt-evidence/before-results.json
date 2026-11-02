@@ -1,0 +1,330 @@
+[
+  {
+    "name": "zh-1440x900-dpr1-canvas",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 1,
+    "mode": "canvas",
+    "title": [
+      526.65625,
+      170.5625
+    ],
+    "canvas": [
+      575,
+      219
+    ],
+    "draw": {
+      "args": [
+        24,
+        24
+      ],
+      "image": [
+        527,
+        170.5625
+      ],
+      "returnType": "DOMMatrix",
+      "width": 527,
+      "height": 171
+    },
+    "selected": "一只手机，\n接管所有输入。"
+  },
+  {
+    "name": "zh-1440x900-dpr2-canvas",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 2,
+    "mode": "canvas",
+    "title": [
+      526.65625,
+      170.5625
+    ],
+    "canvas": [
+      1150,
+      438
+    ],
+    "draw": {
+      "args": [
+        24,
+        24
+      ],
+      "image": [
+        1054,
+        341.125
+      ],
+      "returnType": "DOMMatrix",
+      "width": 1054,
+      "height": 342
+    },
+    "selected": "一只手机，\n接管所有输入。"
+  },
+  {
+    "name": "zh-2560x1440-dpr1-canvas",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 1,
+    "mode": "canvas",
+    "title": [
+      546.65625,
+      181.4375
+    ],
+    "canvas": [
+      595,
+      229
+    ],
+    "draw": {
+      "args": [
+        24,
+        24
+      ],
+      "image": [
+        547,
+        181.4375
+      ],
+      "returnType": "DOMMatrix",
+      "width": 547,
+      "height": 181
+    },
+    "selected": "一只手机，\n接管所有输入。"
+  },
+  {
+    "name": "zh-2560x1440-dpr2-canvas",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 2,
+    "mode": "canvas",
+    "title": [
+      546.65625,
+      181.4375
+    ],
+    "canvas": [
+      1190,
+      458
+    ],
+    "draw": {
+      "args": [
+        24,
+        24
+      ],
+      "image": [
+        1094,
+        362.875
+      ],
+      "returnType": "DOMMatrix",
+      "width": 1094,
+      "height": 362
+    },
+    "selected": "一只手机，\n接管所有输入。"
+  },
+  {
+    "name": "en-1440x900-dpr1-canvas",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 1,
+    "mode": "canvas",
+    "title": [
+      526.65625,
+      167.1875
+    ],
+    "canvas": [
+      575,
+      215
+    ],
+    "draw": {
+      "args": [
+        24,
+        24
+      ],
+      "image": [
+        527,
+        167.1875
+      ],
+      "returnType": "DOMMatrix",
+      "width": 527,
+      "height": 167
+    },
+    "selected": "One phone.\nEvery input."
+  },
+  {
+    "name": "en-1440x900-dpr2-canvas",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 2,
+    "mode": "canvas",
+    "title": [
+      526.65625,
+      167.1875
+    ],
+    "canvas": [
+      1150,
+      430
+    ],
+    "draw": {
+      "args": [
+        24,
+        24
+      ],
+      "image": [
+        1054,
+        334.375
+      ],
+      "returnType": "DOMMatrix",
+      "width": 1054,
+      "height": 334
+    },
+    "selected": "One phone.\nEvery input."
+  },
+  {
+    "name": "en-2560x1440-dpr1-canvas",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 1,
+    "mode": "canvas",
+    "title": [
+      546.65625,
+      167.1875
+    ],
+    "canvas": [
+      595,
+      215
+    ],
+    "draw": {
+      "args": [
+        24,
+        24
+      ],
+      "image": [
+        547,
+        167.1875
+      ],
+      "returnType": "DOMMatrix",
+      "width": 547,
+      "height": 167
+    },
+    "selected": "One phone.\nEvery input."
+  },
+  {
+    "name": "en-2560x1440-dpr2-canvas",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 2,
+    "mode": "canvas",
+    "title": [
+      546.65625,
+      167.1875
+    ],
+    "canvas": [
+      1190,
+      430
+    ],
+    "draw": {
+      "args": [
+        24,
+        24
+      ],
+      "image": [
+        1094,
+        334.375
+      ],
+      "returnType": "DOMMatrix",
+      "width": 1094,
+      "height": 334
+    },
+    "selected": "One phone.\nEvery input."
+  },
+  {
+    "name": "zh-1440x900-dpr1-css",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 1,
+    "mode": "css",
+    "title": [
+      526.65625,
+      170.5625
+    ],
+    "canvas": null,
+    "draw": null,
+    "selected": "一只手机，\n接管所有输入。"
+  },
+  {
+    "name": "zh-1440x900-dpr2-css",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 2,
+    "mode": "css",
+    "title": [
+      526.65625,
+      170.5625
+    ],
+    "canvas": null,
+    "draw": null,
+    "selected": "一只手机，\n接管所有输入。"
+  },
+  {
+    "name": "zh-2560x1440-dpr1-css",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 1,
+    "mode": "css",
+    "title": [
+      546.65625,
+      181.4375
+    ],
+    "canvas": null,
+    "draw": null,
+    "selected": "一只手机，\n接管所有输入。"
+  },
+  {
+    "name": "zh-2560x1440-dpr2-css",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 2,
+    "mode": "css",
+    "title": [
+      546.65625,
+      181.4375
+    ],
+    "canvas": null,
+    "draw": null,
+    "selected": "一只手机，\n接管所有输入。"
+  },
+  {
+    "name": "en-1440x900-dpr1-css",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 1,
+    "mode": "css",
+    "title": [
+      526.65625,
+      167.1875
+    ],
+    "canvas": null,
+    "draw": null,
+    "selected": "One phone.\nEvery input."
+  },
+  {
+    "name": "en-1440x900-dpr2-css",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 2,
+    "mode": "css",
+    "title": [
+      526.65625,
+      167.1875
+    ],
+    "canvas": null,
+    "draw": null,
+    "selected": "One phone.\nEvery input."
+  },
+  {
+    "name": "en-2560x1440-dpr1-css",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 1,
+    "mode": "css",
+    "title": [
+      546.65625,
+      167.1875
+    ],
+    "canvas": null,
+    "draw": null,
+    "selected": "One phone.\nEvery input."
+  },
+  {
+    "name": "en-2560x1440-dpr2-css",
+    "browser": "Chrome/156.0.8078.76",
+    "dpr": 2,
+    "mode": "css",
+    "title": [
+      546.65625,
+      167.1875
+    ],
+    "canvas": null,
+    "draw": null,
+    "selected": "One phone.\nEvery input."
+  }
+]
