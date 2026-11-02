@@ -36,7 +36,7 @@ enum BailianIssue: Error, Equatable {
         case .workspace: return L10n.text("The Key does not match this workspace address or lacks access. Paste the console's Base URL under Advanced options and use that workspace's own Key.")
         case .network: return L10n.text("Cannot connect to Model Studio. Check your network. Office networks may block Alibaba Cloud domains. Retry once connected.")
         case .ambiguous: return L10n.text("Multiple regions accepted this Key, so its region could not be uniquely identified. Paste the console's Base URL under Advanced options.")
-        case .address: return L10n.text("Unsupported service address. Paste the official Model Studio pay-as-you-go Base URL (HTTPS, port 443, /compatible-mode/v1). Plan endpoints and other hosts are not supported.")
+        case .address: return L10n.text("Unsupported service address. Use an allowed Model Studio API Host (hostname only) or an HTTPS URL ending in /compatible-mode/v1 or /api/v1 (port 443). Plan addresses and other hosts are not supported.")
         case .unsupported(let region): return L10n.text("This Key belongs to %@, which does not currently support iMic's speech model. Select Singapore in Model Studio and create a new Key.", L10n.argument(region))
         case .service(200): return L10n.text("Could not read Model Studio's model list. Retry later or check the console's Base URL under Advanced options.")
         case .service(let status): return L10n.text("Model Studio could not verify your Key (HTTP %@). Retry later or check the console's Base URL under Advanced options.", L10n.argument(status))
@@ -113,7 +113,16 @@ enum BailianAddress {
     static func baseHost(_ value: String) throws -> String {
         let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
         if isPlan(text) { throw BailianIssue.plan }
-        guard let url = url(text, scheme: "https", path: "/compatible-mode/v1"), let host = url.host else { throw BailianIssue.address }
+        // The console offers a bare API Host and two HTTPS base paths. Normalize
+        // only these forms; credential-bearing requests still use the same allowlist.
+        let bareHost = !text.contains("://")
+        let candidate = bareHost ? "https://" + text : text
+        guard let components = URLComponents(string: candidate) else { throw BailianIssue.address }
+        let paths = bareHost ? ["", "/"] : ["/compatible-mode/v1", "/compatible-mode/v1/", "/api/v1", "/api/v1/"]
+        // Compare the encoded path so escaped separators and path aliases are rejected.
+        let path = components.percentEncodedPath
+        guard paths.contains(path), let url = url(candidate, scheme: "https", path: path),
+              let host = url.host else { throw BailianIssue.address }
         return host
     }
 }

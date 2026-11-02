@@ -34,7 +34,26 @@ extension AppDelegate: NSMenuDelegate {
         menu.addItem(item(L10n.text("Quit iMic"), #selector(quit), key: "q"))
         statusMenu = menu
         let appMenu = NSMenu(); let root = NSMenuItem(); root.submenu = menu
-        appMenu.addItem(root); NSApp.mainMenu = appMenu
+        appMenu.addItem(root)
+        // Key equivalents travel through the main menu to the first responder,
+        // even for an LSUIElement app whose menu bar is normally hidden.
+        let edit = NSMenu(title: L10n.text("Edit"))
+        func editItem(_ title: String, _ action: Selector, _ key: String, shift: Bool = false) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: shift ? key.uppercased() : key)
+            item.keyEquivalentModifierMask = shift ? [.command, .shift] : .command
+            // Leave target nil so AppKit validates and routes through the responder chain.
+            edit.addItem(item)
+        }
+        editItem(L10n.text("Undo"), Selector(("undo:")), "z")
+        editItem(L10n.text("Redo"), Selector(("redo:")), "z", shift: true)
+        edit.addItem(.separator())
+        editItem(L10n.text("Cut"), #selector(NSText.cut(_:)), "x")
+        editItem(L10n.text("Copy"), #selector(NSText.copy(_:)), "c")
+        editItem(L10n.text("Paste"), #selector(NSText.paste(_:)), "v")
+        editItem(L10n.text("Select All"), #selector(NSText.selectAll(_:)), "a")
+        let editRoot = NSMenuItem(title: edit.title, action: nil, keyEquivalent: "")
+        editRoot.submenu = edit; appMenu.addItem(editRoot)
+        NSApp.mainMenu = appMenu
         refreshStatusMenu()
     }
 
