@@ -8,6 +8,7 @@ final class MicrophoneTestModel: ObservableObject {
     @Published var copied = false
     @Published var rebuilding = false
     @Published var starting = false
+    @Published var processing = MicrophoneTestProcessing()
     private var capture: AudioCapture?
     private var generation = 0
 
@@ -28,7 +29,7 @@ final class MicrophoneTestModel: ObservableObject {
     }
 
     private func beginCapture(_ capture: AudioCapture, rebuildFirst: Bool) {
-        capture.start(rebuildFirst: rebuildFirst, onChunk: { _ in }, onFailure: { [weak self] message in
+        capture.start(rebuildFirst: rebuildFirst, voiceProcessingOverride: processing.enabled, microphoneTest: true, onChunk: { _ in }, onFailure: { [weak self] message in
             self?.message = message
             self?.starting = false
         }, onDiagnostics: { [weak self] diagnostics in
@@ -40,6 +41,11 @@ final class MicrophoneTestModel: ObservableObject {
             if let error { self?.message = error is CaptureRouteError ? error.localizedDescription : L10n.text("Microphone failed to start") }
         })
         capture.setMonitoring(true)
+    }
+
+    func toggleProcessing(capture: AudioCapture) async {
+        processing.toggle()
+        await start(capture: capture)
     }
 
     var canRebuild: Bool { capture != nil && AudioCapture.permissionGranted && !starting && !rebuilding }
@@ -78,7 +84,7 @@ final class MicrophoneTestModel: ObservableObject {
     }
 
     func copy() {
-        UIPasteboard.general.string = diagnostics.report + "\nstatus=\(message ?? "ok")"
+        UIPasteboard.general.string = diagnostics.report + "\nrequestedVPIO=\(processing.enabled ? "on" : "off")\nstatus=\(message ?? "ok")"
         copied = true
     }
 }
@@ -105,12 +111,14 @@ struct MicrophoneTestView: View {
                         .font(.body).foregroundStyle(Theme.ivory)
                         .fixedSize(horizontal: false, vertical: true)
                     meterPanel
+                    processingPanel
                     Hairline()
                     inputDetails
                     testActions
                 }
                 .padding(24)
             }
+            .accessibilityIdentifier("microphone-test-scroll")
         }
         .presentationDetents([.large])
         .task { await model.start(capture: session.microphoneTestCapture()) }
@@ -127,6 +135,7 @@ struct MicrophoneTestView: View {
             Spacer()
             Button(L10n.text("Close")) { dismiss() }
                 .foregroundStyle(Theme.muted).frame(minWidth: 44, minHeight: 44)
+                .accessibilityIdentifier("close-mic-test")
         }
     }
 
@@ -141,8 +150,43 @@ struct MicrophoneTestView: View {
             }
             .accessibilityLabel(L10n.text("Microphone level"))
             .accessibilityValue(String(format: "%.0f%%", level * 100))
+            Text(levelStatus).font(.callout).foregroundStyle(Theme.ivory)
+                .accessibilityIdentifier("mic-test-level-state")
             Text(String(format: "RMS %.5f   PEAK %.5f", model.diagnostics.meter.rms, model.diagnostics.meter.peak))
                 .font(.system(.caption, design: .monospaced)).foregroundStyle(Theme.muted)
+        }
+    }
+
+    private var processingPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 32) {
+                detail("VPIO", model.diagnostics.voiceProcessing ? L10n.text("On") : L10n.text("Off"))
+                detail("MODE", model.diagnostics.mode.replacingOccurrences(of: "AVAudioSessionMode", with: ""))
+            }
+            Button(model.processing.enabled ? L10n.text("Test without VPIO") : L10n.text("Test with VPIO")) {
+                active = true
+                Task { await model.toggleProcessing(capture: session.microphoneTestCapture()) }
+            }
+            .foregroundStyle(Theme.orange).frame(minHeight: 44)
+            .disabled(model.starting || model.rebuilding)
+            .accessibilityIdentifier("mic-test-vpio-toggle")
+            .accessibilityValue(model.processing.enabled ? "on" : "off")
+            if let message = model.message {
+                Text(message).font(.callout).foregroundStyle(Theme.orange)
+                    .accessibilityIdentifier("mic-test-message")
+            }
+            Text(L10n.text("Temporary comparison only. Your saved voice processing setting is unchanged."))
+                .font(.caption).foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var levelStatus: String {
+        switch model.diagnostics.level {
+        case .normal: return L10n.text("Normal input level")
+        case .lowLevel: return L10n.text("Almost silent")
+        case .allZero: return L10n.text("All zero")
+        case .unavailable: return L10n.text("Waiting for input")
         }
     }
 
@@ -165,10 +209,6 @@ struct MicrophoneTestView: View {
 
     private var testActions: some View {
         VStack(alignment: .leading, spacing: 24) {
-            if let message = model.message {
-                Text(message).font(.callout).foregroundStyle(Theme.orange)
-                    .accessibilityIdentifier("mic-test-message")
-            }
             Button(L10n.text("Rebuild audio route")) { model.rebuild() }
                 .foregroundStyle(model.canRebuild ? Theme.orange : Theme.muted)
                 .disabled(!model.canRebuild).frame(minHeight: 44)
@@ -196,6 +236,7 @@ struct MicrophoneTestView: View {
         case .none: return L10n.text("Not attempted")
         case .rebuilding: return L10n.text("Rebuilding audio route…")
         case .awaitingSignal: return L10n.text("Route rebuilt. Speak to check the level.")
+        case .lowLevel: return L10n.text("Almost silent")
         case .signalDetected: return L10n.text("Input signal detected")
         case .failed: return L10n.text("Audio route recovery failed")
         }

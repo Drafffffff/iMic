@@ -39,7 +39,7 @@ enum CaptureRouteError: Error {
 }
 
 enum CaptureRecoveryResult: String {
-    case none, rebuilding, awaitingSignal, signalDetected, failed
+    case none, rebuilding, awaitingSignal, signalDetected, lowLevel, failed
 }
 
 struct CaptureDiagnostics {
@@ -55,8 +55,14 @@ struct CaptureDiagnostics {
     var inputRoute = CaptureInputRoute()
     var recoveryResult: CaptureRecoveryResult = .none
 
+    var voiceProcessing = false
+    var mode = "unknown"
+    var format = "unavailable"
+    var ducking = "not-applied"
+    var level: CaptureLevel { CaptureLevel.classify(meter) }
+
     var report: String {
-        "iMic MIC TEST\ninput=\(input) route=\(route)\nsessionRate=\(sampleRate) nativeRate=\(nativeRate) channels=\(channels)\nengineRunning=\(running) recoveries=\(attempt) recoveryResult=\(recoveryResult.rawValue) event=\(event)\n\(inputRoute.report)\nRMS=\(meter.rms) peak=\(meter.peak) callbacks=\(meter.callbacks) interval=\(meter.elapsed) allZero=\(meter.allZero)"
+        "iMic MIC TEST\ninput=\(input) route=\(route)\nsessionRate=\(sampleRate) nativeRate=\(nativeRate) channels=\(channels)\nvpio=\(voiceProcessing ? "on" : "off") mode=\(mode) format=\(format) ducking=\(ducking) level=\(level.rawValue)\nengineRunning=\(running) recoveries=\(attempt) recoveryResult=\(recoveryResult.rawValue) event=\(event)\n\(inputRoute.report)\nRMS=\(meter.rms) peak=\(meter.peak) callbacks=\(meter.callbacks) interval=\(meter.elapsed) allZero=\(meter.allZero)"
     }
 }
 
@@ -85,7 +91,7 @@ final class AudioCaptureController {
     let queue: DispatchQueue
     private let center: NotificationCenter
     private let names: CaptureNotifications
-    private let makeHardware: () -> CaptureHardware
+    private let makeHardware: (Bool) -> CaptureHardware
     private let deactivate: (Bool) -> Void
     private let rebuildRoute: () throws -> Void
     private let log: (String) -> Void
@@ -107,9 +113,15 @@ final class AudioCaptureController {
     private var onFailure: ((String) -> Void)?
     private var onDiagnostics: ((CaptureDiagnostics) -> Void)?
     private var last = CaptureDiagnostics()
+    private var voiceProcessing = true
+    private var microphoneTest = false
+    private var lowLevel = CaptureLowLevelWatchdog()
+    private var fallbackPending = false
+    private var onVoiceProcessingRecovered: (() -> Void)?
+    static let noAudioMessage = "No audio received. Open MIC TEST to check your microphone."
 
     init(queue: DispatchQueue, center: NotificationCenter, names: CaptureNotifications,
-         makeHardware: @escaping () -> CaptureHardware, deactivate: @escaping (Bool) -> Void,
+         makeHardware: @escaping (Bool) -> CaptureHardware, deactivate: @escaping (Bool) -> Void,
          rebuildRoute: @escaping () throws -> Void,
          log: @escaping (String) -> Void, now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.queue = queue; self.center = center; self.names = names
@@ -123,10 +135,16 @@ final class AudioCaptureController {
         }
     }
 
-    func start(rebuildFirst: Bool = false, onFailure: @escaping (String) -> Void,
+    func start(rebuildFirst: Bool = false, voiceProcessing: Bool = true, microphoneTest: Bool = false,
+               onVoiceProcessingRecovered: (() -> Void)? = nil, onFailure: @escaping (String) -> Void,
                onDiagnostics: @escaping (CaptureDiagnostics) -> Void) throws {
         stop()
         self.onFailure = onFailure; self.onDiagnostics = onDiagnostics
+        self.voiceProcessing = voiceProcessing
+        self.microphoneTest = microphoneTest
+        self.onVoiceProcessingRecovered = onVoiceProcessingRecovered
+        lowLevel = CaptureLowLevelWatchdog()
+        fallbackPending = false
         retried = false
         hasMonitored = false
         recoveryResult = .none
@@ -152,7 +170,8 @@ final class AudioCaptureController {
         noCallbacks = 0; zeroSamples = 0
         measuredAt = now()
         last.meter = CaptureMeter()
-        let new = makeHardware()
+        lowLevel.restartMeasurement()
+        let new = makeHardware(voiceProcessing)
         hardware = new
         do {
             try new.start(meter: { [weak self] meter in
@@ -181,6 +200,7 @@ final class AudioCaptureController {
     func setMonitoring(_ enabled: Bool) {
         guard monitoring != enabled else { return }
         monitoring = enabled
+        if !enabled { fallbackPending = false }
         measuredAt = now()
         noCallbacks = 0; zeroSamples = 0
         if enabled {
@@ -188,6 +208,7 @@ final class AudioCaptureController {
             // route. Only a subsequent hold re-arms it, never the first arm.
             if hasMonitored { retried = false; recoveryResult = .none }
             hasMonitored = true
+            lowLevel = CaptureLowLevelWatchdog()
             if let hardware, hardware.diagnostics.inputRoute.invalidReason != nil {
                 do { try recoverRoute(reason: "invalid-route-at-hold") }
                 catch { invalidate(CaptureRouteError.message) }
@@ -199,9 +220,17 @@ final class AudioCaptureController {
         guard let hardware else { return }
         last = hardware.diagnostics
         last.meter = meter
-        if recoveryResult == .awaitingSignal, last.inputRoute.invalidReason == nil, meter.hasSamples, !meter.allZero, meter.peak > 0 {
-            recoveryResult = .signalDetected
-            log("route-recovery signal-detected rms=\(meter.rms) peak=\(meter.peak)")
+        if recoveryResult == .awaitingSignal || recoveryResult == .lowLevel {
+            if last.inputRoute.invalidReason == nil, last.level == .normal {
+                recoveryResult = .signalDetected
+                log("recovery signal-detected rms=\(meter.rms) peak=\(meter.peak)")
+                if fallbackPending && monitoring {
+                    fallbackPending = false
+                    onVoiceProcessingRecovered?()
+                }
+            } else if last.level == .lowLevel || last.level == .allZero {
+                recoveryResult = .lowLevel
+            }
         }
         publish(event: "meter")
         log("level rms=\(meter.rms) peak=\(meter.peak) callbacks=\(meter.callbacks) route=\(last.route) sessionRate=\(last.sampleRate) nativeRate=\(last.nativeRate) channels=\(last.channels) running=\(last.running)")
@@ -220,14 +249,24 @@ final class AudioCaptureController {
         let time = now()
         let interval = min(meter.elapsed, max(0, time - measuredAt))
         measuredAt = time
-        // Native exact zeros only. A tiny nonzero signal resets the zero streak.
+        let almostSilent = lowLevel.observe(meter, interval: interval)
+        if !microphoneTest && almostSilent {
+            recoveryResult = .lowLevel
+            publish(event: "low-level")
+            if !voiceProcessing && !retried {
+                do { try recoverRoute(reason: "low-level-vpio-fallback", enableVoiceProcessing: true) }
+                catch { invalidate(Self.noAudioMessage) }
+            } else { invalidate(Self.noAudioMessage) }
+            return
+        }
+        // Exact digital silence keeps the existing one-second recovery deadline.
         noCallbacks = meter.callbacks == 0 || !meter.hasSamples ? noCallbacks + interval : 0
         zeroSamples = meter.hasSamples && meter.allZero ? zeroSamples + interval : 0
         guard noCallbacks >= 1 || zeroSamples >= 1 else { return }
         let reason = noCallbacks >= 1 ? (meter.callbacks == 0 ? "no-callbacks" : "no-samples") : "digital-zero"
         log("silent-capture reason=\(reason) retry=\(retried)")
-        do { try recoverRoute(reason: reason) }
-        catch { invalidate(CaptureRouteError.message) }
+        do { try recoverRoute(reason: reason, enableVoiceProcessing: !microphoneTest && !voiceProcessing) }
+        catch { invalidate(microphoneTest ? CaptureRouteError.message : Self.noAudioMessage) }
     }
 
     /// Manual self-test recovery shares the current test's automatic budget. A
@@ -247,7 +286,7 @@ final class AudioCaptureController {
         return true
     }
 
-    private func recoverRoute(reason: String) throws {
+    private func recoverRoute(reason: String, enableVoiceProcessing: Bool = false) throws {
         guard !retried, !interrupted else { throw CaptureRouteError.recoveryFailed }
         retried = true
         recoveryResult = .rebuilding
@@ -258,7 +297,11 @@ final class AudioCaptureController {
         // immediately interrupt someone else's playback during our own recovery.
         releaseHardware(notifyOthers: false)
         do {
-            try rebuildRoute()
+            if enableVoiceProcessing {
+                voiceProcessing = true
+                fallbackPending = true
+                log("vpio-fallback: switch input path; no playback kick")
+            } else { try rebuildRoute() }
             try build() // Hardware validates the post-activation route again.
             recoveryResult = .awaitingSignal
             publish(event: "route-rebuilt-awaiting-signal")
