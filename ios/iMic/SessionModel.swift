@@ -194,7 +194,7 @@ final class SessionModel: ObservableObject {
     private func startAudioEngine() -> Bool {
         audioStandbyTask?.cancel()
         audioStandbyTask = nil
-        guard !audio.isRunning else { return true }
+        guard !audio.isRunning else { audio.setMonitoring(true); return true }
         audioGeneration &+= 1
         let generation = audioGeneration
         // Starts in the background: capture begins at once and PCM flows when the engine is up.
@@ -228,17 +228,28 @@ final class SessionModel: ObservableObject {
                 }
             }
         )
+        audio.setMonitoring(true)
         return true
+    }
+
+    /// MIC TEST uses the same serialized capture owner, so the previous lease
+    /// must finish deactivating before self-test can activate the shared session.
+    func microphoneTestCapture() -> AudioCapture {
+        if phase == .listening { endListening(cancelled: true) }
+        deactivateAudio()
+        return audio
     }
 
     /// A short lease retains 150ms pre-roll for consecutive utterances; it never
     /// starts a cold engine and expires even while ASR/network work is pending.
     private func updateAudioStandby() {
         if wantsRecording || phase == .listening {
+            audio.setMonitoring(true)
             audioStandbyTask?.cancel()
             audioStandbyTask = nil
             return
         }
+        audio.setMonitoring(false)
         guard !isPreview, audio.isRunning, audioStandbyTask == nil else { return }
         audioStandbyTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(5)) }
