@@ -2,6 +2,54 @@
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
   <channel>
     <item>
+      <title>iMic 1.4.6 (3)</title>
+      <pubDate>Mon, 02 Nov 2026 19:22:09 GMT</pubDate>
+      <sparkle:version>3</sparkle:version>
+      <sparkle:shortVersionString>1.4.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description>&lt;pre&gt;# iMic 1.4.6
+
+## 主要更新
+
+### Mac
+
+- **百炼服务地址更容易填写**：手动配置支持控制台「API 快捷接入」的 API Host、OpenAI 兼容地址和 DashScope 地址，自动处理末尾斜杠与前后空白，继续限制可信域名、HTTPS/WSS 和 443 端口，并拦截不兼容的套餐地址。
+- **兼容新版百炼 Key**：接受包含 `. + / =` 的新格式 Key，修正格式提示与 `sk-ws-` 套餐误判，保留注入字符防护与 512 字节上限；向导和设置页支持标准编辑快捷键，并保持 Key 输入为单行。
+
+### iPhone
+
+- **默认启用苹果语音处理（VPIO）**：录音与 MIC TEST 默认使用降噪、回声消除与自动增益，并尽量减少对其他音频的闪避；设置中可关闭，关闭后原始输入持续几乎无声时会自动尝试一次 VPIO 恢复，确认电平正常后保存开启并提示。
+- **麦克风输入失效自动恢复**：处理中断、路由变化、媒体服务重置及无回调或静音故障，按本轮共享的单次预算重建输入通路，避免反复恢复；新增 MIC TEST 自检，显示实时电平、输入设备、采样率、VPIO 状态和低电平诊断，支持临时开关对照与复制诊断，不保存或发送音频。
+
+- **在真实主页上学会操作**：新手引导改为主页上的轻提示，先离线练习按住、松手和下拉发送，再从共用设备列表配对 Mac；还可选择练习删字、移动光标、清空与取消。
+- **练习安全且可随时继续**：正式版内可直接练习，不开麦、不请求录音权限、不联网；设置中可重播，支持步骤恢复、中英文、动态字体、减少动态效果，以及 VoiceOver 跳过。
+- **发布与本地开发签名隔离**：iOS 发布 Bundle ID 改为 `art.malette.imic.app`，本地真机使用独立的 `.dev` ID；非发布团队使用正式 ID 时会提前停止，更新 TestFlight 交接与未签名打包流程，Mac ID 与加密协议保持一致。
+
+### 官网与文档
+
+- **修复高清屏幕标题裁切**：Retina 屏幕和页面缩放时，CRT 首屏标题与特效尺寸保持一致；绘制尺寸异常时自动回退到 CSS 辉光。
+- **预留匿名网站统计**：增加默认关闭的 Umami Cloud 无 Cookie 统计配置与下载等事件，支持 DNT/GPC，并补充中英文隐私说明；App 不做任何统计。
+- **TestFlight 下载入口**：官网与 README 接入 iPhone 的 TestFlight 公开测试链接。
+
+建议 Mac 与 iPhone 同时更新至 **1.4.6**。
+
+## 下载与安装
+
+- **macOS 13+**：`iMic-1.4.6-macOS-universal.dmg`，支持 Apple Silicon 与 Intel，使用 Developer ID 签名并通过 Apple 公证。
+- **iPhone / iOS 17+**：可从官网的 TestFlight 链接安装；本版本的上传结果会在发布记录中补充。
+- **自行签名安装**：`iMic-1.4.6-iOS-unsigned.ipa` 是未签名真机包，需使用自己的 Apple ID 或开发团队重新签名，不能直接点击安装。
+- **校验**：两个安装包与 `SHA256SUMS.txt` 放在同一目录，执行 `shasum -a 256 -c SHA256SUMS.txt`。
+- 完整源码对应本 Release 的 `v1.4.6` 标签。
+
+## 边界说明
+
+- 首次安装 Mac 仍需授权辅助功能；屏幕录制仅支持润色扫光等本地视觉提示。
+- 实时预览的键盘兼容模式无法独立核验目标程序自行改稿或丢弃按键，可能重复或误删；用户接管或切换应用会停止本轮输入。
+- 新 iOS 发布 ID 与旧开发包可并存，首次使用需要重新配对 Mac；不自动迁移旧 App 数据。
+&lt;/pre&gt;</description>
+      <enclosure url="https://github.com/Drafffffff/iMic/releases/download/v1.4.6/iMic-1.4.6-macOS-universal.dmg" length="2750538" type="application/octet-stream" sparkle:edSignature="TkcVlP1+KWmXcO7+6X3YkopmYmDYnyr8z9cTfAzbifwxQZR04a3R6EvMjy/E12MKclA0n15xmNbgGfmoFb3TAA==" />
+    </item>
+    <item>
       <title>iMic 1.4.5 (2)</title>
       <pubDate>Sat, 31 Oct 2026 18:20:17 GMT</pubDate>
       <sparkle:version>2</sparkle:version>
