@@ -17,6 +17,7 @@ struct HomeView: View {
     @State private var debugStringStatus = 0
     @State private var cancelArmed = false
     @State private var showPairing = false
+    @State private var showMicrophoneTest = false
     @State private var interactionStart = false
     @State private var showCopied = false
     @State private var showResult = false
@@ -42,7 +43,7 @@ struct HomeView: View {
     private var canUseString: Bool {
         linkReady && link.gestureSupported && link.gestureReady && !link.clearPending
             && session.phase != .listening && session.phase != .transcribing && !session.isUploading
-            && scenePhase == .active && !showPairing && !showResult && !showDevices
+            && scenePhase == .active && !showPairing && !showResult && !showDevices && !showMicrophoneTest
     }
 
     var body: some View {
@@ -162,6 +163,9 @@ struct HomeView: View {
                 .environmentObject(link)
                 .environmentObject(session)
         }
+        .sheet(isPresented: $showMicrophoneTest) {
+            MicrophoneTestView().environmentObject(session)
+        }
         .overlay(alignment: .top) {
             if !onboarding.presented && onboarding.unfinished && !link.phase.isReady {
                 Button(L10n.text("No Mac connected · Continue setup")) { onboarding.resume() }
@@ -171,7 +175,7 @@ struct HomeView: View {
         }
         .onAppear {
             session.spectrumStore.configureAmbientMotion(enabled: true, reducedMotion: reduceMotion)
-            session.spectrumStore.setVisible(scenePhase == .active && !showPairing && !showResult && !showDevices)
+            session.spectrumStore.setVisible(scenePhase == .active && !showPairing && !showResult && !showDevices && !showMicrophoneTest)
             UIApplication.shared.isIdleTimerDisabled = true
             session.prepareHaptics()
             link.start()
@@ -209,6 +213,9 @@ struct HomeView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { showResult = true }
             }
             let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--ui-preview=mic-test") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showMicrophoneTest = true }
+            }
             if arguments.contains("--ui-preview=settings") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showPairing = true }
             }
@@ -279,7 +286,7 @@ struct HomeView: View {
             #endif
         }
         .onChange(of: scenePhase) { _, phase in
-            session.spectrumStore.setVisible(phase == .active && !showPairing && !showResult && !showDevices)
+            session.spectrumStore.setVisible(phase == .active && !showPairing && !showResult && !showDevices && !showMicrophoneTest)
             if phase != .active {
                 stringMotion.cancel()
                 receiver.cancelFlight()
@@ -350,13 +357,17 @@ struct HomeView: View {
                 receiver.cancelFlight()
             }
         }
+        .onChange(of: showMicrophoneTest) { _, presented in
+            if presented { stringMotion.cancel(); receiver.cancelFlight() }
+            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showPairing && !showResult && !showDevices)
+        }
         .onChange(of: showPairing) { _, presented in
             if presented { stringMotion.cancel() }
-            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showResult && !showDevices)
+            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showResult && !showDevices && !showMicrophoneTest)
         }
         .onChange(of: showResult) { _, presented in
             if presented { stringMotion.cancel() }
-            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showPairing && !showDevices)
+            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showPairing && !showDevices && !showMicrophoneTest)
         }
         .onChange(of: session.pullDeleteEnabled) { _, enabled in
             if !enabled { stringMotion.cancel() }
@@ -776,6 +787,11 @@ struct HomeView: View {
     private var footer: some View {
         HStack {
             Spacer()
+            if session.phase == .error {
+                Button(L10n.text("Open microphone test")) { showMicrophoneTest = true }
+                    .font(.caption).foregroundStyle(Theme.orange).frame(minHeight: 44)
+                Spacer()
+            }
             ZStack(alignment: .trailing) {
                 HUDLabel(text: "PCM / 16K")
                     .opacity(hasResultText ? 0 : 1)

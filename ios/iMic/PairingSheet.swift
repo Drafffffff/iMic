@@ -3,7 +3,7 @@ import UIKit
 
 struct PairingSheet: View {
     private enum UtilitySheet: String, Identifiable {
-        case waveforms
+        case waveforms, microphone
 
         var id: String { rawValue }
     }
@@ -37,6 +37,8 @@ struct PairingSheet: View {
                                     .padding(.top, 8)
                                     .padding(.bottom, 24)
                                 Hairline()
+                                microphoneTestEntry
+                                    .padding(.vertical, 16)
                                 PolishPreferencesSection()
                                     .padding(.vertical, 24)
                                 Hairline()
@@ -131,6 +133,8 @@ struct PairingSheet: View {
             switch sheet {
             case .waveforms:
                 WaveformLibraryView()
+            case .microphone:
+                MicrophoneTestView().environmentObject(session)
             }
         }
     }
@@ -362,6 +366,24 @@ struct PairingSheet: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.muted)
             }
+        }
+    }
+
+    private var microphoneTestEntry: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                codeFocused = false
+                utilitySheet = .microphone
+            } label: {
+                HStack {
+                    PixelText(text: "MIC TEST", cell: 1.6, color: Theme.ivory, tracking: 1)
+                    Spacer()
+                    Text(L10n.text("Test your microphone")).font(.system(size: 12))
+                        .foregroundStyle(Theme.muted)
+                    Image(systemName: "chevron.right").font(.system(size: 10))
+                }.frame(minHeight: 44).contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityIdentifier("open-mic-test")
+            Hairline()
         }
     }
 

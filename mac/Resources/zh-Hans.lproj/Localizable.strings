@@ -155,6 +155,7 @@
 "Copied · Enter %@ on your iPhone" = "已复制 · 在 iPhone 输入 %@";
 "Copied. Paste on your Mac with Universal Clipboard enabled." = "已复制，可在 Mac 上直接粘贴（需开启通用剪贴板）";
 "Copy" = "复制";
+"Copy diagnostics" = "复制诊断信息";
 "Copy link" = "复制链接";
 "Copy pairing code" = "复制配对码";
 "Copy text" = "复制文字";
@@ -263,6 +264,7 @@
 "Hold to speak on your iPhone" = "按住 iPhone 说话";
 "Hold to speak, release to type" = "按住说话，松手即输入";
 "How to use iMic" = "使用教程";
+"If the level stays empty, close this test and hold to record again. If it still fails, copy diagnostics and share them with the log." = "如果电平始终为空，请关闭自检后重新按住录音。如果仍然无声，请复制诊断信息并连同日志反馈。";
 "If your Mac and iPhone use the same Apple ID, a Safari icon will appear on the left of your Mac's Dock. Click it to open the download page." = "如果 Mac 和 iPhone 登录同一 Apple ID，Mac 程序坞左侧会出现一个 Safari 图标，点它即可打开下载页。";
 "Incomplete audio frame" = "音频帧不完整";
 "Incorrect pairing code" = "配对码不正确";
@@ -320,8 +322,15 @@
 "Mark as understood" = "标记为已了解";
 "Meeting today at three" = "今天下午三点开会";
 "Microphone access is off" = "麦克风权限未开启";
+"Microphone configuration changed. Hold again to record." = "麦克风配置已变化，请重新按住录音。";
 "Microphone failed to start" = "麦克风启动失败";
 "Microphone format unavailable" = "麦克风格式不可用";
+"Microphone input changed. Hold again to record." = "麦克风输入设备已变化，请重新按住录音。";
+"Microphone input failed. Hold again to record." = "麦克风输入失败，请重新按住录音。";
+"Microphone interrupted. Hold again to record." = "麦克风被中断，请重新按住录音。";
+"Microphone lease expired. Hold again to record." = "麦克风热启动已失效，请重新按住录音。";
+"Microphone level" = "麦克风电平";
+"Microphone services reset. Hold again to record." = "麦克风服务已重置，请重新按住录音。";
 "Model" = "模型";
 "Model Studio" = "百炼";
 "Model Studio (recommended)" = "百炼（推荐）";
@@ -357,6 +366,7 @@
 "No Model Studio API Key configured on your Mac" = "Mac 尚未配置百炼 API Key";
 "No Model Studio API Key yet" = "还没有百炼 API Key";
 "No app available for typing" = "没有可输入的应用";
+"No audio received" = "没有收到声音";
 "No automatic typing. Check the target and permissions." = "未自动输入，请检查目标位置与权限";
 "No iPhone paired yet" = "尚未配对 iPhone";
 "No speech recognized" = "没有识别到语音";
@@ -385,6 +395,7 @@
 "Open iMic on your iPhone to connect automatically.\nKeep both devices on the same network." = "打开 iPhone 上的 iMic 即可自动连接。\n请保持两台设备在同一网络。";
 "Open iMic on your iPhone to connect automatically. New devices use the pairing code above." = "打开 iPhone 上的 iMic 会自动连接。新设备输入上方配对码。";
 "Open iMic on your iPhone, tap the computer name at the top, and enter this pairing code." = "在 iPhone 上打开 iMic，点顶部的电脑名称，输入这个配对码。";
+"Open microphone test" = "打开麦克风自检";
 "Open setup and paste your Model Studio Key to get started." = "打开设置向导，粘贴百炼 Key 后就能开始。";
 "Optional · Connect when the local network is unavailable." = "可选 · 局域网不可用时兜底连接。";
 "Optional · Locate the polish highlight. Processed only on this Mac." = "可选 · 扫光定位，仅在本机处理。";
@@ -537,6 +548,8 @@
 "Some editors use keyboard compatibility mode, which may duplicate or delete text by mistake. Keypresses, clicks, or app switches stop automatic revisions for this session." = "部分编辑器使用键盘兼容模式，可能重复或误删。按键、点击或切换应用后停止本轮自动修订。";
 "Some gestures are disabled in Settings. You can skip them. Re-enable them in iMic on your Mac." = "部分手势已在设置中关闭，可以直接跳过。恢复开关需在 Mac 设置中操作。";
 "Source: %@ · iMic configuration takes priority over environment variables and shell files." = "来源：%@ · iMic 配置优先于环境变量和 shell 文件。";
+"Speak normally and watch the level. Audio stays on this device and is not saved or sent." = "请正常说话并观察电平。音频仅在本机处理，不保存、不发送。";
+"Start microphone test" = "开始麦克风自检";
 "Start using iMic" = "开始使用";
 "Starting connection…" = "正在启动链路…";
 "Starts in the menu bar when you log in to your Mac." = "登录 Mac 后在菜单栏启动。";
@@ -560,6 +573,7 @@
 "Test speech generation failed" = "测试语音生成失败";
 "Test text delivered" = "测试已投递";
 "Test typing" = "测试输入";
+"Test your microphone" = "麦克风自检";
 "Text" = "文字";
 "Text attachment" = "文字附着";
 "Text attachment: %@" = "文字附着：%@";
