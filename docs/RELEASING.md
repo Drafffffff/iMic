@@ -24,6 +24,7 @@ Mac 构建仍使用 `swiftc` 和命令行工具，不引入 Xcode 工程。更�
    ```
 
    脚本显式从内向外签 `Autoupdate`、`Updater.app`、`Sparkle.framework` 和主 App，不使用 `--deep` 签名。iMic 未启用 App Sandbox，不启用 Installer/Downloader XPC，嵌入时删除这两个可选服务。验证签名后生成并签名 DMG、提交公证、staple，再用 `sign_update` 对**最终 DMG**签 EdDSA；另用仓库公钥独立校验签名。`codesign --verify --deep --strict`、`spctl -a -vv` 不通过就停止。签名身份还会核验团队为 `5H39F98ND4`。
+   网络不稳定时，公证只提交一次，再按递增间隔轮询同一 submission ID（最多 8 次）；staple 也最多 8 次，两者共享 30 分钟时限，只有 Apple 返回 Accepted 才继续。Developer ID 时间戳签名遇到网络错误最多尝试 4 次，不降低签名要求。失败时保留 `build/notarization-pending/` 下的已签名 DMG、校验信息与日志；使用输出的 `IMIC_NOTARY_PROFILE=… ./scripts/package-release.sh --resume-notarization <id> <dmg>` 命令续跑（跳过构建和 Developer ID 签名，重新核验文件、版本与团队后等待公证，再 staple、Sparkle 签名及生成 appcast）。Invalid/Rejected 会立即失败并输出 Apple 公证日志；认证或其他非网络错误不会自动重试。
 5. 脚本只在本地生成文件和修改 appcast，**不上传、不创建 Release、不提交或推送**。检查输出 DMG、SHA256SUMS 和 `site/appcast.xml`。同一营销版本只保留新条目，原签名、长度、BUILD 一并替换。未指定发布身份时仅产生本地 ad-hoc 包，不签更新、不生成 appcast；占位公钥仍会阻止打包。
 6. **先把最终 DMG 上传到 GitHub Release** 的 `v<VERSION>`，地址必须为 `https://github.com/Drafffffff/iMic/releases/download/v<VERSION>/iMic-<VERSION>-macOS-universal.dmg`。确认可下载、长度和 SHA-256 一致后，再提交并推送 `site/appcast.xml`，让 Pages 部署。禁止先部署 appcast。原地覆盖同样遵守这个顺序，避免用户收到指向不存在文件或旧签名的条目。
 7. 执行 `python3 tools/check-site.py`，确认线上 feed 为 `https://drafffffff.github.io/iMic/appcast.xml`。每条须有 EdDSA 签名、长度、递增构建号、营销版本和 macOS 13.0 最低版本。不要修改 DMG 后复用旧签名。
