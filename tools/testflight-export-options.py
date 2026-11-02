@@ -42,7 +42,8 @@ def main():
         now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         if profile["ExpirationDate"] <= now:
             raise ValueError("描述文件已过期")
-        profile_uuid = str(uuid.UUID(profile["UUID"])).upper()
+        profile_uuid = profile["UUID"]
+        uuid.UUID(profile_uuid)  # Validate without changing Xcode's case-sensitive profile specifier.
         permitted = {hashlib.sha1(cert).hexdigest().upper() for cert in profile["DeveloperCertificates"]}
         identities = subprocess.check_output(["security", "find-identity", "-v", "-p", "codesigning"], text=True)
         signing_hash = None
