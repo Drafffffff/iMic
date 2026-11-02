@@ -25,7 +25,7 @@ Switch Macs anytime and speak into any text field. Tell your agent what to do, t
 You'll need a Mac with macOS 13+, an iPhone with iOS 17+, and your own [Model Studio (Bailian) API Key](https://modelstudio.console.alibabacloud.com/ap-southeast-1/model/settings/api-key). Connect both devices to the same Wi-Fi.
 
 1. **Mac**: download the [latest DMG](https://github.com/Drafffffff/iMic/releases/latest), drag iMic into Applications, and open it. Follow setup to enter your Key and allow Accessibility.
-2. **iPhone**: the TestFlight beta is coming soon. Get it from the [website](https://drafffffff.github.io/iMic/en/#download) when available.
+2. **iPhone**: install via [TestFlight](https://testflight.apple.com/join/BZmRwkZC).
 3. **Pair**: choose your Mac on iPhone and enter the 6-digit pairing code shown on your Mac.
 4. **Type**: click a text field on your Mac, hold the orange bar at the bottom of your iPhone to speak, then release.
 
