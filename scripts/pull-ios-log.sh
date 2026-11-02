@@ -3,7 +3,8 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
-BUNDLE_ID=${IMIC_BUNDLE_ID:-art.malette.imic}
+source "$ROOT/scripts/ios-bundle-id.sh"
+BUNDLE_ID=${IMIC_BUNDLE_ID:-$IMIC_DEV_BUNDLE_ID}
 DEVICE_JSON=$(mktemp /tmp/imic-log-device.XXXXXX.json)
 trap 'rm -f "$DEVICE_JSON"' EXIT
 

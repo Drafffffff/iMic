@@ -176,7 +176,7 @@ UI 音效不再借用 App 的 `AVAudioSession`。全部音色在启动后离线�
 
 - 设置 › SOUND（界面音效）：ON / OFF，存于 `UserDefaults` 键 `imic.sound.enabled`，默认开启。关闭后只剩触感，日志记为 `skip … reason=disabled`。
 - Debug 试听：
-  - `xcrun simctl launch --terminate-running-process booted art.malette.imic --ui-preview=sounds` 打开独立试听页，不连 Mac、不开麦克风。点单个音逐个试听，`PLAY ALL` 依次播放全部 19 个音。
+  - `xcrun simctl launch --terminate-running-process booted art.malette.imic.app --ui-preview=sounds` 打开独立试听页，不连 Mac、不开麦克风。点单个音逐个试听，`PLAY ALL` 依次播放全部 19 个音。
   - Debug 构建的设置页底部也有同一个试听列表，方便在真机上直接试听。
   - 两个入口都在 `#if DEBUG` 内，Release 不含（`tools/validate-testflight.py` 会检查 `--ui-preview=` 字符串）。
 

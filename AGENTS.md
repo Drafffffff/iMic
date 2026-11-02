@@ -32,15 +32,15 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 iOS 界面状态可直接预览，不需要真实链路：
 
 ```bash
-xcrun simctl launch booted art.malette.imic --ui-preview=idle
-xcrun simctl launch booted art.malette.imic --ui-preview=result
-xcrun simctl launch booted art.malette.imic --ui-preview=pairing
+xcrun simctl launch booted art.malette.imic.app --ui-preview=idle
+xcrun simctl launch booted art.malette.imic.app --ui-preview=result
+xcrun simctl launch booted art.malette.imic.app --ui-preview=pairing
 ```
 
 模拟器没有可用输入设备时，`--debug-tts=` 会用系统语音合成走同一条分帧/加密/识别路径：
 
 ```bash
-xcrun simctl launch booted art.malette.imic \
+xcrun simctl launch booted art.malette.imic.app \
   --debug-host=127.0.0.1 --debug-port=47832 \
   --debug-pair-code=123456 \
   --debug-tts=把今天讨论的交互细节整理成一页说明
@@ -54,6 +54,10 @@ xcrun simctl launch booted art.malette.imic \
 - 录音开始时记录前台应用；识别结束时若前台变化，不输入，保留文字。
 - 普通模式不要求可读取的 AX 输入框；直接投递 Unicode 键盘事件。
 - 实时预览开启时允许将临时文字输入目标应用，不全选、不设置整框 AXValue。范围接口可靠的目标只修订已验证的本轮范围；用户已明确授权对 Otty、缺少范围接口或范围持续不同步的目标使用键盘兼容模式，按本轮已投递文字计算变化尾部，不依赖 AX 光标确认。兼容模式必须有手动按键/点击及应用切换监视，用户接管后冻结本轮，不能在最终回写时绕过。兼容模式无法独立验证目标程序自行改稿或丢弃按键，存在重复或误删风险，文档须说明。没有可用接管监视且无法核验范围的目标只投递最终结果。
+
+## iOS 签名隔离
+
+- iOS 发布 Bundle ID `art.malette.imic.app`（含 `.uitests`）只能在团队 `5H39F98ND4` 中签名；本地用 Personal Team 或其他团队时必须用 `art.malette.imic.dev`（测试为 `.dev.uitests`）。真机脚本通过 `IMIC_BUNDLE_ID` 同时覆盖 App 与测试运行器，禁止绕过保护。模拟器使用发布 ID 并禁用签名。
 
 ## 品牌与版本
 

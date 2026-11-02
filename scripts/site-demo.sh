@@ -18,6 +18,17 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
+source "$ROOT/scripts/ios-bundle-id.sh"
+# Resolve/guard explicit signing requests before any build or device operation.
+if [ "${1:-}" = --dry-run ] || [ -n "${IMIC_DEMO_DEVICE:-}${IMIC_DEV_TEAM:-}${IMIC_BUNDLE_ID:-}" ]; then
+  imic_device_identity
+fi
+if [ "${1:-}" = --dry-run ]; then
+  [ "$#" = 1 ] || { echo "用法：$0 [--dry-run | scenes...]" >&2; exit 2; }
+  imic_print_device_identity
+  echo 'Dry run: no build, signing, device discovery or installation.'
+  exit 0
+fi
 OUT="$ROOT/build/site-demo"
 RAW="$OUT/raw"
 SCENES=("$@")
@@ -27,6 +38,7 @@ mkdir -p "$RAW"
 # Real iPhone over USB (smooth 60fps capture) when IMIC_DEMO_DEVICE is set or exactly
 # one iPhone is attached; otherwise the simulator (renders and records far fewer frames).
 DEVICE=${IMIC_DEMO_DEVICE:-$(xcrun devicectl list devices 2>/dev/null | sed -nE 's/.* ([0-9A-F]{8}-[0-9A-F]{16}) \(UDID\).*physical.*/\1/p' | head -1)}
+if [ -n "$DEVICE" ]; then imic_device_identity; fi
 (cd "$ROOT/ios" && xcodegen generate >/dev/null)
 mkdir -p "$ROOT/build/tools" "$OUT/bin"
 swiftc -swift-version 5 -O "$ROOT/tools/icon.swift" -o "$ROOT/build/tools/icon-gen" -framework AppKit
@@ -37,19 +49,17 @@ xcrun swiftc -O "$ROOT/tools/site-demo-speech.swift" -o "$OUT/bin/speech" -frame
 "$OUT/bin/speech" "$ROOT/ios/iMic/Demo/DemoScript.swift" "$OUT/speech"
 
 if [ -n "$DEVICE" ]; then
-  TEAM=${IMIC_DEV_TEAM:-$(defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier 2>/dev/null \
-    | grep -o 'teamID = [A-Z0-9]*' | head -1 | awk '{print $3}')}
   "$ROOT/scripts/site-demo-build-iphone-capture.sh" >/dev/null
   xcodebuild build-for-testing -project "$ROOT/ios/iMic.xcodeproj" -scheme iMic -configuration Debug \
     -destination "id=$DEVICE" -derivedDataPath "$OUT/dd-device" -allowProvisioningUpdates \
-    CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$TEAM" > "$OUT/build-for-testing.log" 2>&1
+    CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$TEAM" IMIC_BUNDLE_ID="$BUNDLE_ID" > "$OUT/build-for-testing.log" 2>&1
   RAW="$OUT/device"
   for scene in "${SCENES[@]}"; do
     "$ROOT/scripts/site-demo-iphone-capture.sh" "$scene" "$RAW" "$DEVICE"
     "$ROOT/scripts/site-demo-mac-capture.sh" "$scene" "$RAW"
   done
   echo "Done on $DEVICE. Reinstall the normal app with ./scripts/install-ios-device.sh and remove the"
-  echo "UI test runner: xcrun devicectl device uninstall app --device $DEVICE art.malette.imic.uitests.xctrunner"
+  echo "UI test runner: xcrun devicectl device uninstall app --device $DEVICE $BUNDLE_ID.uitests.xctrunner"
 else
   DEVICE_TYPE=$(xcrun simctl list devicetypes | sed -nE 's/^(iPhone 1[7-9] Pro) \(.*/\1/p' | head -1)
   UDID=$(xcrun simctl create "iMic Demo Capture" "${DEVICE_TYPE:-iPhone 17 Pro}")
@@ -58,7 +68,8 @@ else
   xcrun simctl boot "$UDID"
   xcrun simctl bootstatus "$UDID" -b >/dev/null
   xcodebuild build-for-testing -project "$ROOT/ios/iMic.xcodeproj" -scheme iMic \
-    -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$OUT/dd" > "$OUT/build-for-testing.log" 2>&1
+    -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$OUT/dd" \
+    CODE_SIGNING_ALLOWED=NO IMIC_BUNDLE_ID="$IMIC_SIM_BUNDLE_ID" > "$OUT/build-for-testing.log" 2>&1
   for scene in "${SCENES[@]}"; do
     "$ROOT/scripts/site-demo-ios-capture.sh" "$scene" "$RAW" "$UDID"
     "$ROOT/scripts/site-demo-mac-capture.sh" "$scene" "$RAW"
@@ -68,7 +79,7 @@ fi
 # The app renders its sound cues on first launch; the SOUND scene mixes those files
 # (taken from a simulator run of the same build).
 if [ -n "${UDID:-}" ]; then
-  CONTAINER=$(xcrun simctl get_app_container "$UDID" art.malette.imic data)
+  CONTAINER=$(xcrun simctl get_app_container "$UDID" "$IMIC_SIM_BUNDLE_ID" data)
   mkdir -p "$OUT/sounds"
   cp "$CONTAINER"/Library/Caches/iMicSounds-v*/*.wav "$OUT/sounds/"
 fi

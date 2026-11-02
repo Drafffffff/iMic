@@ -9,6 +9,7 @@ options:
   groupSortPosition: top
 settings:
   base:
+    IMIC_BUNDLE_ID: art.malette.imic.app
     SWIFT_VERSION: "5.0"
     CODE_SIGN_STYLE: Automatic
     CURRENT_PROJECT_VERSION: "4"
@@ -33,7 +34,7 @@ targets:
         name: Shared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: art.malette.imic
+        PRODUCT_BUNDLE_IDENTIFIER: $(IMIC_BUNDLE_ID)
         TARGETED_DEVICE_FAMILY: "1"
         PRODUCT_NAME: iMic
         INFOPLIST_FILE: Info.plist
@@ -60,5 +61,5 @@ targets:
       - target: iMic
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: art.malette.imic.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: $(IMIC_BUNDLE_ID).uitests
         GENERATE_INFOPLIST_FILE: YES

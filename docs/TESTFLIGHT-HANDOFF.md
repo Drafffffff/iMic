@@ -1,76 +1,68 @@
-# TestFlight 交接：先处理账号侧两项
+# TestFlight 交接：新发布 ID 与本地签名隔离
 
-日期：2026-10-29。反馈邮箱：**i0.0ia@qq.com**。
+日期：2026-11-02。反馈邮箱：**i0.0ia@qq.com**。
 
-## 当前结果
+iPhone 端版本为 **1.4.5（Build 4）**，发布 ID 为 **`art.malette.imic.app`**。本次只生成未签名 Release 归档与源码交接包，没有登录 Apple 账号、注册 ID、创建描述文件/App 记录、签名、安装真机或上传。ID 是否可用由负责 TestFlight 的同事在正式团队中确认。
 
-已准备 iPhone 端 **1.4.4（Build 3）**、隐私清单、无 alpha 图标、独立的归档/导出/上传脚本，以及中英文测试和审核说明。
+前两次真机自动签名将旧 iOS ID 占用在免费 Personal Team 中。因此本地真机安装、官网录制默认使用 `art.malette.imic.dev`，测试运行器为 `art.malette.imic.dev.uitests`；模拟器使用发布 ID，禁用签名。非 `5H39F98ND4` 团队请求发布 ID 时脚本会直接退出。Mac Bundle ID 保持 `com.drafffffff.imic`。
 
-旧 Bundle ID 的历史归档位于 `build/testflight.noindex/1.4.3-2/iMic.xcarchive`，不能用于新 App 分发。新 ID 的未签名归档已生成并通过包内容校验，位于独立目录 `build/testflight-bundleid.noindex/iMic.xcarchive`。**这是未签名的 Release 归档，目前没有可安装的 TestFlight IPA，没有上传成功，也没有创建成功的 App Store Connect 应用记录。**
+## 同事需要按顺序完成
 
-## 1. 请 KE CHENG 团队持有人处理 Bundle ID 和描述文件
+1. 在 **KE CHENG / `5H39F98ND4`** 团队注册 explicit App ID：**`art.malette.imic.app`**。检查 `ios/project.yml` 和 `ios/Info.plist`：没有 iOS entitlements 文件、App Groups、iCloud、推送或共享 Keychain access group，**无需额外能力**。麦克风、本地网络/Bonjour、语音识别、蓝牙仅使用现有 Info.plist 权限说明。若 ID 被占用，停下来反馈，不要自行换 ID。
+2. 如需在正式团队运行 UI 测试，可选注册 **`art.malette.imic.app.uitests`**。本地开发测试使用 `.dev.uitests`。
+3. 使用**现有 Apple Distribution 证书**生成新的 **App Store Connect / iOS** 分发描述文件，选择新的 App ID。**证书不用重新申请，也不用导出或传递私钥。** 已知签名身份为 `Apple Distribution: KE CHENG (5H39F98ND4)`，历史证书 SHA-1 为 `80941B8B1EBA7E68B2D94B13E2D3BF4FFA3C7849`；持有人核对证书与本机私钥是否匹配。本包不包含证书或描述文件。
+4. 在 App Store Connect 创建新的 iOS App 记录，Bundle ID 使用 **`art.malette.imic.app`**。名称 iMic，主要语言简体中文，SKU 可用 `imic-ios`（若已用则选新的唯一 SKU）。补齐应用权限、适用协议和审核联系人。账号操作由同事或持有人亲自完成。
+5. 按下面的 `scripts/testflight.sh` 步骤归档、导出、上传，**`IMIC_PROFILE_PATH` 指向新 ID 的描述文件**。旧 ID 的归档和描述文件不能复用。导出成功并通过分发校验才有可上传 IPA；`upload` 会先本地导出校验再上传。
+6. 这是新的 App 记录，旧 TestFlight 测试数据和 iPhone 配对不会继承，测试者需要重新配对。旧应用可并存，请先复制需要保留的结果。
+7. **不要在登录了个人 Apple ID 的 Xcode 中自动签名构建 `art.malette.imic.app` 或其 UI 测试运行器到真机，否则会再次在个人团队占用发布 ID。** 本地真机只用 `.dev`；正式 ID 只允许 `5H39F98ND4`。
 
-实际检查到：
+## 交接包和使用方法
 
-- 发布证书与私钥在这台 Mac 上可用：`Apple Distribution: KE CHENG (5H39F98ND4)`，证书 SHA-1：`80941B8B1EBA7E68B2D94B13E2D3BF4FFA3C7849`。
-- Xcode 中 `i0.0ia@qq.com` 是该团队的 App Manager，但「Certificates, Identifiers & Profiles」显示不可访问。
-- iOS 发布端已改用 `art.malette.imic`，下一步需在发布团队注册该显式 App ID，再在 App Store Connect 创建对应的新应用记录。
-- 自动归档报团队资源不可用；实际导出报缺少对应的 iOS App Store 描述文件。
-
-请持有人在 [Apple Developer](https://developer.apple.com/account/resources/identifiers/list) 中：
-
-1. 选择团队 **5H39F98ND4**。
-2. 注册显式 App ID，Bundle ID 为 **`art.malette.imic`**。已确认 `com.drafffffff.imic` 被旧 Personal Team `S889TFV5A4` 占用，因此改用新 ID；如果新 ID 也被占用，停下来报告，不要自行换 ID。
-3. 在 Profiles 中新建 **App Store Connect / iOS** 分发描述文件，选择上述 App ID 和与本机证书 SHA-1 匹配的 Apple Distribution 证书。
-4. 下载 `.mobileprovision`，保存到这台 Mac。**只需要描述文件，不需要再发送私钥或账号密码。**
-
-如果这是组织团队，也可以由持有人授权当前账号访问 Certificates, Identifiers & Profiles，再刷新 Xcode 登录。若是个人开发者团队，受邀 App Manager 只有 App Store Connect 访问权，通常不能通过增加角色获得 Developer 资源权限；使用持有人提供描述文件的方式即可。参见 [Apple 账号角色说明](https://developer.apple.com/help/account/access/roles/)。
-
-拿到匹配的文件后，使用新 ID 的归档导出（不要使用旧 Bundle ID 的历史归档）：
+源码准备者运行（不签名、不上传）：
 
 ```bash
-IMIC_TESTFLIGHT_DIR=build/testflight-bundleid.noindex IMIC_PROFILE_PATH=/绝对路径/iMic-AppStore.mobileprovision ./scripts/testflight.sh export
+./scripts/testflight.sh archive-unsigned
+# 将源码修改提交后打包；归档目录覆盖值须保持一致
+./scripts/testflight.sh check
+./scripts/testflight.sh handoff
 ```
 
-脚本先校验描述文件，再用本机已有私钥签名；导出通过后才有可上传的 IPA。此手动签名分支尚待匹配的真实描述文件验证。
+默认归档为 `build/testflight.noindex/1.4.5-4/iMic.xcarchive`，已有归档不会覆盖；可用 `IMIC_TESTFLIGHT_DIR` 隔离目录。交接 ZIP 为 `build/testflight.noindex/handoff/iMic-TestFlight-Handoff-1.4.5-build4-art.malette.imic.app.zip`，同目录生成 `.sha256` 和 `.contents.txt`。ZIP 不提交仓库，实际路径、大小、SHA-256 和验证结果附于 PR。
 
-## 2. 请持有人核查协议，补齐应用记录
-
-App Store Connect 当前显示 **Review the updated Paid Applications Schedule**，明确要求 Account Holder 处理。请持有人在 [Business](https://appstoreconnect.apple.com/business) 及 Developer 账户中核查适用的待签协议；协议的审阅和接受由持有人亲自完成，不要为发布免费测试版误开购买项目。
-
-Bundle ID 注册完成后，刷新已保留的 App Store Connect「新建 App」表单：
-
-| 字段 | 填写内容 |
+| 包内路径 | 用途 |
 |---|---|
-| 平台 | iOS |
-| 名称 | iMic（如占用需选择可用名称） |
-| 主要语言 | 简体中文 |
-| Bundle ID | `art.malette.imic` |
-| SKU | `imic-ios` |
+| `iOS/iMic.xcarchive/` | 未签名 iPhone Release 归档及符号 |
+| `Source/` | 已提交的完整源码、测试、许可证与脚本 |
+| `Source/docs/TESTFLIGHT.md` | 发布、Beta 描述、What to Test、英文 Review Notes |
+| `Source/docs/TESTFLIGHT-QUICKSTART.md` | 测试者安装与配对说明 |
+| `Source/docs/PRIVACY.md` | 隐私说明 |
+| `SOURCE-REVISION.txt` | 源码提交号 |
+| `README.txt` | 解压后的具体命令 |
+| `MANIFEST.sha256` | 包内每个文件的 SHA-256 |
 
-应用记录创建后，且签名导出成功，即可上传：
+打包工具只读取 Git 跟踪且已提交的文件，检查未签名状态，拒绝私钥、证书、描述文件、`.claude/`、构建中间目录与 Sparkle 私钥备份；不会读取钥匙串签名材料或账号。归档和源码使用相同的提交版本。没有附带 Mac 安装包，配套 Mac 仍从 [现有 Release](https://github.com/Drafffffff/iMic/releases/tag/v1.4.4) 获取。
+
+解压整个 ZIP，保持目录结构。在已安装 Xcode 和 Python 3 的 Mac 上进入 `Source/`，先检查随包归档：
 
 ```bash
-IMIC_TESTFLIGHT_DIR=build/testflight-bundleid.noindex IMIC_PROFILE_PATH=/绝对路径/iMic-AppStore.mobileprovision ./scripts/testflight.sh upload
+IMIC_TESTFLIGHT_DIR=../iOS ./scripts/testflight.sh check
+# 以下仅由有正式团队权限和已有分发私钥的同事执行
+IMIC_TESTFLIGHT_DIR=../iOS IMIC_PROFILE_PATH=/绝对路径/新ID-AppStore.mobileprovision ./scripts/testflight.sh export
+IMIC_TESTFLIGHT_DIR=../iOS IMIC_PROFILE_PATH=/绝对路径/新ID-AppStore.mobileprovision ./scripts/testflight.sh upload
 ```
 
-`upload` 会先完成本地分发签名校验，成功后才尝试提交。上传成功仍需要等待 Apple 处理构建，再进行内部测试和首次外部测试审核。
+若要从源码重新归档，另需 XcodeGen，选一个尚不存在归档的输出目录：
 
-## 后续需要你确认的内容
+```bash
+IMIC_TESTFLIGHT_DIR=../new-archive ./scripts/testflight.sh archive-unsigned
+IMIC_TESTFLIGHT_DIR=../new-archive IMIC_PROFILE_PATH=/绝对路径/新ID-AppStore.mobileprovision ./scripts/testflight.sh export
+IMIC_TESTFLIGHT_DIR=../new-archive IMIC_PROFILE_PATH=/绝对路径/新ID-AppStore.mobileprovision ./scripts/testflight.sh upload
+```
 
-- 审核联系人的真实姓名、电话。邮箱已确定为 `i0.0ia@qq.com`。
-- 首次外测审核所需的可用识别环境。当前不内置公共 API Key；如需给审核员提供专用限额测试 Key，请通过审核信息安全提供，勿提交到仓库。
-- 阅读 [隐私说明](PRIVACY.md)，按实际服务商处理方式确认隐私问卷，并将说明发布为可公开访问的网址。本地 Markdown 尚不是公开隐私政策 URL。
-- 收到内部测试邀请后，用自己的 iPhone 和 Mac 完成 [真机验收清单](TESTFLIGHT.md#真机验收)。主要检查权限、配对、真实录音、常用应用输入、用户接管和升级；不要在重要文档里首次测试编辑手势。
+未签名校验通过不代表签名/分发成功。手动导出需新描述文件与可用的匹配分发私钥；上传需正式团队的 App Store Connect 访问权。包中没有私钥，证书不需要重新申请。
 
-## 自动验证结果与一项待确认问题
+## 上传后验收
 
-已通过：53 项协议/逻辑测试、Mac 构建及签名校验、iPhone Release 归档与包内容校验、原有未签名 IPA 打包流程、真实百炼识别联调。最终归档的 iPhone 平台、版本、Build、隐私清单、许可证和调试入口检查均通过；9 张 iOS 图标已确认为无 alpha 的 RGB PNG，Mac 图标生成结果保持一致。
+等待 Apple 处理构建，安排内部测试，再提交首次外部 Beta 审核。审核通过后再分享外部邀请链接。审核联系人真实姓名/电话、公开隐私说明网址和可用的 Mac + 百炼识别环境由负责人确认；测试 Key 通过审核信息安全提供，不能放入仓库或交接包。
 
-现有 7 项模拟器 UI 测试中 **6 项通过、1 项失败**。失败项为 `DisplayUITests/testRecordingTouchPassesThroughMetalAndResultRemainsUsable`：按住 0.8 秒后预期看到「录音太短，再说一次」，实际日志显示 `cancelled=true`。单独重跑及固定坐标触摸复查仍出现取消回调；尚不能确定是模拟器/自动化触摸行为还是实际设备也会发生的问题。没有放宽断言；用于诊断的临时测试改动已恢复。
-
-请把 **真实 iPhone 按住录音、正常松开应提交，上滑应取消** 作为进入外部测试前的优先验收项。若真机正常，后续再改进模拟器触摸测试；若真机也自动取消，应先修复再开放外部测试。模拟器自动检查不能替代这一项。
-
-可直接复制的 Beta 描述、What to Test 和英文 Review Notes 都在 [TESTFLIGHT.md](TESTFLIGHT.md)。发给朋友的安装步骤在 [TESTFLIGHT-QUICKSTART.md](TESTFLIGHT-QUICKSTART.md)。
-
-自动检查及产物证据见 `build/testflight.noindex/`。本次没有替换 `/Applications/iMic.app`，没有卸载手机上的旧应用，也没有修改系统权限数据库。
+本次测试结果见 PR 的第 6 节报告。模拟器预览用于确认新 ID 可启动，不能替代真机验收。历史 UI 测试中曾出现“正常松手被当成取消”的情况，外测前仍须用真实 iPhone 确认“正常松手提交，上滑取消”，以及权限、配对、重连、用户接管和升级行为。完整清单见 [TESTFLIGHT.md](TESTFLIGHT.md#真机验收)。

@@ -3,7 +3,14 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
-BUNDLE_ID=${IMIC_BUNDLE_ID:-art.malette.imic}
+source "$ROOT/scripts/ios-bundle-id.sh"
+imic_device_identity
+if [ "${1:-}" = --dry-run ]; then
+  imic_print_device_identity
+  echo 'Dry run: no build, signing, device discovery or installation.'
+  exit 0
+fi
+[ "$#" = 0 ] || { echo "用法：$0 [--dry-run]" >&2; exit 2; }
 DEVICE_JSON=$(mktemp /tmp/imic-device.XXXXXX.json)
 trap 'rm -f "$DEVICE_JSON"' EXIT
 
@@ -37,13 +44,6 @@ for device in data.get("result", {}).get("devices", []):
 PY
 )
 
-TEAM=${IMIC_DEV_TEAM:-$(defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier 2>/dev/null \
-  | grep -o 'teamID = [A-Z0-9]*' | head -1 | awk '{print $3}')}
-if [ -z "$TEAM" ]; then
-  echo "没有可用的 Personal Team。请先在 Xcode → Settings → Accounts 登录 Apple ID。" >&2
-  exit 1
-fi
-
 echo "设备: $DEVICE_NAME ($UDID)"
 echo "团队: $TEAM"
 
@@ -60,7 +60,7 @@ xcodebuild \
   -allowProvisioningUpdates \
   CODE_SIGN_STYLE=Automatic \
   DEVELOPMENT_TEAM="$TEAM" \
-  PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+  IMIC_BUNDLE_ID="$BUNDLE_ID" \
   build | tail -4
 
 APP="$ROOT/build/ios-device.noindex/Build/Products/Release-iphoneos/iMic.app"
