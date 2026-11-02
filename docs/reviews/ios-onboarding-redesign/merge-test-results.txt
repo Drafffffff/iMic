@@ -1,0 +1,56 @@
+2026-11-03 / PR #25 合并回归最终结果
+合入基础分支 862436f（#23、#24）；后续 c817e36 仅新增任务书，不改变受测代码。
+
+协议：DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
+	 Executed 74 tests, with 0 failures (0 unexpected) in 0.704 (0.735) seconds
+
+Debug Simulator：./scripts/build-ios.sh
+** BUILD SUCCEEDED **
+
+本地化：python3 tools/check-l10n.py
+PASS: bilingual keys, placeholders, generated resources and exact Chinese exclusions
+
+Mac 选择：./scripts/test-ios-mac-selection.sh
+PASS grace, authenticated fallback identity/recency, late discovery preserves active link
+PASS preferred wins when discovered 200ms later
+PASS failed network target advances to next candidate without recording success
+PASS discovered endpoint cannot substitute another Mac identity
+PASS exhausted candidate round uses existing backoff without rapid ping-pong
+PASS revoked automatic token skips pairing and authenticates the next Mac
+PASS auth rejection removes only the stale token and falls back without pairing
+PASS manual offline wait, foreground unlock, forget removes authenticated recency
+PASS any offline pairing prevents automatic pairing with an unpaired discovery
+PASS first-install single-Mac pairing stays explicit and records success only after ready
+PASS all automatic Mac selection integration checks
+
+重连：IMIC_RESUME_TEST_PORT=48625 ./scripts/test-ios-reconnect.sh
+PASS healthy resume 24ms; same encrypted connection
+PASS stale resume 1097ms; loss delivered once; authenticated without re-pairing
+PASS idle stale reconnect preserves newly buffered recording
+PASS backoff bypass 629ms
+PASS all foreground reconnect checks
+
+采集恢复：./scripts/test-ios-audio.sh
+PASS: 48 capture assertions (notifications, warm leases, native silence, bounded retry, generations)
+
+Debug UI：OnboardingUITests + MicrophoneEntryMergeUITests，串行、专用 17 Pro
+Test Case '-[iMicUITests.MicrophoneEntryMergeUITests testHomeAndSettingsKeepMicrophoneSelfTest]' passed (47.863 seconds).
+PRACTICE AUDIT: link=0 send=0 mic=undetermined speech=undetermined practice=true phase=result text=25 deferred=true idle=true captureStarts=0
+PRACTICE AUDIT: link=0 send=0 mic=undetermined speech=undetermined practice=true phase=idle text=0 deferred=true idle=true captureStarts=0
+PRACTICE CLEANUP: link=4 send=0 mic=undetermined speech=undetermined practice=false phase=idle text=0 deferred=true idle=true captureStarts=0
+Test Case '-[iMicUITests.OnboardingUITests testCoreAndAllOptionalGesturesAreOffline]' passed (45.708 seconds).
+PRACTICE AUDIT: link=0 send=0 mic=undetermined speech=undetermined practice=true phase=idle text=0 deferred=true idle=true captureStarts=0
+Test Case '-[iMicUITests.OnboardingUITests testOptionalSkipAndReplayFromSettings]' passed (49.489 seconds).
+Test Case '-[iMicUITests.OnboardingUITests testSkipRestoreAndConnectLater]' passed (40.520 seconds).
+	 Executed 4 tests, with 0 failures (0 unexpected) in 183.579 (183.611) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 183.579 (183.615) seconds
+** TEST SUCCEEDED **
+
+Release Simulator：xcodebuild -configuration Release -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build-for-testing
+** TEST BUILD SUCCEEDED **
+
+Release UI：ShippingPracticeUITests，串行、全新安装专用 SE，仅系统语言参数
+Test Case '-[iMicUITests.ShippingPracticeUITests testShippingJourney]' passed (31.715 seconds).
+** TEST EXECUTE SUCCEEDED **
+
+PASS: 两台合并回归专用模拟器已关闭并删除。

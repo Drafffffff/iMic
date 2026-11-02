@@ -1,151 +1,178 @@
 import AVFoundation
+import UIKit
 
-/// On-demand 16 kHz / mono / PCM16 capture, with a short warm lease owned by SessionModel.
+/// Main-thread request facade. Every activation, engine operation and deactivation
+/// (including retry) is serialized by the controller's lifecycle queue.
 final class AudioCapture {
     enum CaptureError: LocalizedError {
         case format
-
-        var errorDescription: String? {
-            switch self {
-            case .format: return L10n.text("Microphone format unavailable")
-            }
-        }
+        var errorDescription: String? { L10n.text("Microphone format unavailable") }
     }
-
-    // Session activation and engine start/stop block for 0.2–1s on device. They run on this
-    // serial queue, never the main thread, so pressing the bar no longer freezes the UI.
-    // engine and inputBridge are confined to `lifecycle`; requests are made on the main thread.
     private let lifecycle = DispatchQueue(label: "imic.audio.lifecycle", qos: .userInitiated)
-    private var engine: AVAudioEngine?
-    private var inputBridge: IMicAudioInputBridge?
+    private let queueKey = DispatchSpecificKey<Bool>()
     private var requested = false
     private var request: UInt64 = 0
+    private var delivery: CaptureDeliveryGate?
+    private var chunk: (Data) -> Void = { _ in }
+    private var buffer: ((AVAudioPCMBuffer) -> Void)?
+    private lazy var controller = AudioCaptureController(
+        queue: lifecycle, center: .default,
+        names: CaptureNotifications(
+            interruption: AVAudioSession.interruptionNotification,
+            route: AVAudioSession.routeChangeNotification,
+            configuration: .AVAudioEngineConfigurationChange,
+            reset: AVAudioSession.mediaServicesWereResetNotification,
+            foreground: UIApplication.didBecomeActiveNotification,
+            interruptionBegan: { ($0.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) == AVAudioSession.InterruptionType.began.rawValue }),
+        makeHardware: { [unowned self] in AVMicHardware(onChunk: chunk, onBuffer: buffer) },
+        deactivate: {
+            do { try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
+            catch { IMicLog.write("iphone.audio", "deactivate failed: \(error.localizedDescription)") }
+        }, log: { IMicLog.write("iphone.audio", $0) })
 
-    /// The owner's requested state (main thread): true from start() until stop() or a failed start.
-    var isRunning: Bool { requested }
-
-    static var permissionGranted: Bool {
-        AVAudioApplication.shared.recordPermission == .granted
+    init() {
+        lifecycle.setSpecific(key: queueKey, value: true)
+        _ = controller // Register notifications before the first engine exists.
     }
 
+    var isRunning: Bool { requested }
+    static var permissionGranted: Bool { AVAudioApplication.shared.recordPermission == .granted }
     static func requestPermission() async -> Bool {
         await withCheckedContinuation { continuation in
-            AVAudioApplication.requestRecordPermission { granted in
-                continuation.resume(returning: granted)
-            }
+            AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
         }
     }
 
-    /// Both audio callbacks and onFailure run in order on one non-realtime worker.
-    /// onBuffer borrows its storage until return. onChunk owns its Data bytes.
-    /// onFailure is terminal: the owner must stop capture on its lifecycle queue.
-    /// Returns at once; `completion` runs on the main thread when the engine is up or failed.
-    func start(
-        onChunk: @escaping (Data) -> Void,
-        onBuffer: ((AVAudioPCMBuffer) -> Void)? = nil,
-        onFailure: @escaping (String) -> Void,
-        completion: @escaping (Error?) -> Void
-    ) {
+    func start(onChunk: @escaping (Data) -> Void,
+               onBuffer: ((AVAudioPCMBuffer) -> Void)? = nil,
+               onFailure: @escaping (String) -> Void,
+               onDiagnostics: ((CaptureDiagnostics) -> Void)? = nil,
+               completion: @escaping (Error?) -> Void) {
         guard !requested else { return }
         requested = true
         request &+= 1
         let current = request
-        IMicLog.write("iphone.audio", "sink engine start requested")
+        let gate = CaptureDeliveryGate()
+        delivery = gate
+        IMicLog.write("iphone.audio", "start requested generation=\(current)")
         lifecycle.async { [self] in
+            chunk = { data in gate.deliver { onChunk(data) } }
+            buffer = onBuffer.map { callback in { pcm in gate.deliver { callback(pcm) } } }
             do {
-                try startEngine(onChunk: onChunk, onBuffer: onBuffer, onFailure: onFailure)
-                DispatchQueue.main.async { completion(nil) }
+                try controller.start(onFailure: { [weak self] message in
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.request == current, self.requested else { return }
+                        self.requested = false
+                        gate.close()
+                        onFailure(L10n.text(message))
+                    }
+                }, onDiagnostics: { [weak self] diagnostics in
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.request == current else { return }
+                        onDiagnostics?(diagnostics)
+                    }
+                })
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.request == current, self.requested else { return }
+                    completion(nil)
+                }
             } catch {
-                DispatchQueue.main.async { [self] in
-                    // A later start/stop request owns the state; only reset our own.
-                    if request == current { requested = false }
+                IMicLog.write("iphone.audio", "start failed generation=\(current) error=\(error.localizedDescription)")
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.request == current else { return }
+                    self.requested = false
+                    gate.close()
                     completion(error)
                 }
             }
         }
     }
 
-    private func startEngine(
-        onChunk: @escaping (Data) -> Void,
-        onBuffer: ((AVAudioPCMBuffer) -> Void)?,
-        onFailure: @escaping (String) -> Void
-    ) throws {
-        let session = AVAudioSession.sharedInstance()
-        do {
-            try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
-            try session.setPreferredSampleRate(16_000)
-            try session.setPreferredIOBufferDuration(0.01)
-            try session.setActive(true, options: [])
-            // Preserve touch feedback and bow playback while capturing.
-            try? session.setAllowHapticsAndSystemSoundsDuringRecording(true)
-
-            // Every generation owns a fresh engine, sink and queue: no old IO callback
-            // can enter the next recording's converter or audio callbacks.
-            let engine = AVAudioEngine()
-            let input = engine.inputNode
-            let format = input.outputFormat(forBus: 0)
-            guard format.sampleRate > 0, format.channelCount > 0 else {
-                throw CaptureError.format
-            }
-            let bridge = try IMicAudioInputBridge(
-                format: format,
-                onChunk: onChunk,
-                onBuffer: onBuffer,
-                onFailure: onFailure,
-                onLog: { IMicLog.write("iphone.audio", $0) }
-            )
-            self.engine = engine
-            self.inputBridge = bridge
-            engine.attach(bridge.sinkNode)
-            // AVAudioSinkNode cannot convert formats: match the input output scope.
-            engine.connect(input, to: bridge.sinkNode, format: format)
-            engine.prepare()
-            try engine.start()
-            try? session.setAllowHapticsAndSystemSoundsDuringRecording(true)
-            IMicLog.write(
-                "iphone.audio",
-                "sink engine running nativeRate=\(format.sampleRate) channels=\(format.channelCount) sessionRate=\(session.sampleRate) IOBufferDuration=\(session.ioBufferDuration)"
-            )
-        } catch {
-            tearDownInput()
-            try? session.setActive(false, options: .notifyOthersOnDeactivation)
-            throw error
-        }
+    /// Only active holds/self-test run the silence watchdog; idle warm leases
+    /// retain pre-roll without spending a retry on a quiet room.
+    func setMonitoring(_ enabled: Bool) {
+        lifecycle.async { [self] in controller.setMonitoring(enabled) }
     }
 
-    /// Returns at once; teardown runs after any pending start on the lifecycle queue.
     func stop() {
-        guard requested else { return }
+        delivery?.close()
+        delivery = nil
         requested = false
         request &+= 1
+        let current = request
         lifecycle.async { [self] in
-            guard engine != nil else { return }
-            IMicLog.write("iphone.audio", "sink engine stop; draining worker")
-            tearDownInput()
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            IMicLog.write("iphone.audio", "stop generation=\(current)")
+            controller.stop()
+            chunk = { _ in }; buffer = nil
         }
-    }
-
-    private func tearDownInput() {
-        // First synchronously stop hardware IO. Only then drain the SPSC queue and
-        // converter tail before releasing buffers, closures or the sink's C state.
-        if let engine = engine {
-            engine.stop()
-            if let bridge = inputBridge {
-                engine.disconnectNodeInput(bridge.sinkNode)
-                engine.detach(bridge.sinkNode)
-            }
-        }
-        inputBridge?.finish()
-        inputBridge = nil
-        engine = nil
     }
 
     deinit {
-        lifecycle.sync {
-            guard engine != nil else { return }
-            tearDownInput()
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        delivery?.close()
+        if DispatchQueue.getSpecific(key: queueKey) == true { controller.stop() }
+        else { lifecycle.sync { controller.stop() } }
+    }
+}
+
+private final class AVMicHardware: CaptureHardware {
+    private let engine = AVAudioEngine()
+    private var bridge: IMicAudioInputBridge?
+    private var nativeRate: Double = 0
+    private var channels: UInt32 = 0
+    private let onChunk: (Data) -> Void
+    private let onBuffer: ((AVAudioPCMBuffer) -> Void)?
+    var notificationObject: AnyObject { engine }
+    var inputIdentity: String {
+        let session = AVAudioSession.sharedInstance()
+        return session.currentRoute.inputs.map { "\($0.uid):\($0.portType.rawValue)" }.joined(separator: ",")
+            + ":\(session.sampleRate):\(session.inputNumberOfChannels)"
+    }
+    var diagnostics: CaptureDiagnostics {
+        let session = AVAudioSession.sharedInstance()
+        return CaptureDiagnostics(input: session.currentRoute.inputs.map(\.portName).joined(separator: ", "),
+            route: session.currentRoute.inputs.map { $0.portType.rawValue }.joined(separator: ","),
+            sampleRate: session.sampleRate, nativeRate: nativeRate, channels: channels, running: engine.isRunning)
+    }
+    init(onChunk: @escaping (Data) -> Void, onBuffer: ((AVAudioPCMBuffer) -> Void)?) {
+        self.onChunk = onChunk; self.onBuffer = onBuffer
+    }
+    func start(meter: @escaping (CaptureMeter) -> Void, failure: @escaping (String) -> Void) throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
+        try session.setPreferredSampleRate(16_000)
+        try session.setPreferredIOBufferDuration(0.01)
+        try session.setActive(true)
+        try? session.setAllowHapticsAndSystemSoundsDuringRecording(true)
+        // Preferences are hints. Read actual native format AFTER activation, connect
+        // the sink at that format, then convert on the non-realtime bridge worker.
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else { throw AudioCapture.CaptureError.format }
+        nativeRate = format.sampleRate; channels = format.channelCount
+        let bridge = try IMicAudioInputBridge(format: format, onChunk: onChunk,
+            onBuffer: onBuffer, onFailure: { message in
+                IMicLog.write("iphone.audio", "bridge failure: \(message)")
+                failure("Microphone input failed. Hold again to record.")
+            },
+            onMeter: { rms, peak, callbacks, samples, zero, elapsed in
+                meter(CaptureMeter(rms: rms, peak: peak, callbacks: callbacks,
+                                   hasSamples: samples, allZero: zero, elapsed: elapsed))
+            }, onLog: { IMicLog.write("iphone.audio", $0) })
+        self.bridge = bridge
+        engine.attach(bridge.sinkNode)
+        engine.connect(input, to: bridge.sinkNode, format: format)
+        engine.prepare()
+        try engine.start()
+        try? session.setAllowHapticsAndSystemSoundsDuringRecording(true)
+        IMicLog.write("iphone.audio", "sink engine running \(diagnostics.report)")
+    }
+    func stop() {
+        engine.stop()
+        if let bridge {
+            engine.disconnectNodeInput(bridge.sinkNode)
+            engine.detach(bridge.sinkNode)
+            bridge.finish()
         }
+        bridge = nil
     }
 }

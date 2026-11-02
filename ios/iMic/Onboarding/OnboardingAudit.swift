@@ -18,9 +18,12 @@ struct OnboardingAudit: View {
                     let lines = interval.split(separator: "\n")
                     let link = lines.filter { $0.contains("[iphone.link]") }.count
                     let sends = lines.filter { $0.contains("[iphone.content] send kind=") }.count
+                    let captureStarts = lines.filter {
+                        $0.contains("[iphone.audio]") && ($0.contains("start requested generation=") || $0.contains("silent-capture retry="))
+                    }.count
                     let mic = AVAudioSession.sharedInstance().recordPermission == .undetermined ? "undetermined" : "determined"
                     let speech = SFSpeechRecognizer.authorizationStatus() == .notDetermined ? "undetermined" : "determined"
-                    result = "link=\(link) send=\(sends) mic=\(mic) speech=\(speech) practice=\(session.practiceActive) phase=\(session.phase) text=\(session.transcript.count) deferred=\(connection.startDeferred) idle=\(connection.phase == .idle)"
+                    result = "link=\(link) send=\(sends) mic=\(mic) speech=\(speech) practice=\(session.practiceActive) phase=\(session.phase) text=\(session.transcript.count) deferred=\(connection.startDeferred) idle=\(connection.phase == .idle) captureStarts=\(captureStarts)"
                     if ProcessInfo.processInfo.arguments.contains("--ui-preview=onboarding-mac") {
                         clipboard = UIPasteboard.general.url?.absoluteString
                     }

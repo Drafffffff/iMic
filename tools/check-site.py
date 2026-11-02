@@ -16,6 +16,7 @@ ANALYTICS_HOSTS = {'cloud.umami.is', 'gateway.umami.is'}
 EXTERNAL_HOSTS = {
     'api.github.com', 'github.com', 'drafffffff.github.io',
     'bailian.console.aliyun.com', 'modelstudio.console.alibabacloud.com',
+    'testflight.apple.com',
 } | ANALYTICS_HOSTS
 ANALYTICS_URLS = {'https://cloud.umami.is/script.js', 'https://gateway.umami.is'}
 

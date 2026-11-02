@@ -34,12 +34,30 @@ final class OnboardingUITests: XCTestCase {
         drag(app, dy: 180)
         XCTAssertTrue(app.buttons["onboarding.more"].waitForExistence(timeout: 8))
     }
+    private func connectLater(_ app: XCUIApplication) {
+        let button = app.buttons["onboarding.connectLater"]
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+        // Nearby discovery can focus the pairing keyboard and move this footer.
+        // Tap only after its frame has settled, then require the cover to close.
+        var previousFrame = CGRect.zero
+        let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard button.exists else { return false }
+            let frame = button.frame
+            defer { previousFrame = frame }
+            return !frame.isEmpty && frame == previousFrame && button.isHittable
+        }, object: button)
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 10), .completed)
+        button.tap()
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: button)
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 12), .completed)
+    }
     private func isolation(_ app: XCUIApplication) {
         app.buttons["onboarding.auditCheck"].tap()
         let audit = app.staticTexts["onboarding.audit"]
         XCTAssertTrue(audit.waitForExistence(timeout: 5))
         print("PRACTICE AUDIT: \(audit.label)")
         XCTAssertTrue(audit.label.contains("link=0 send=0 mic=undetermined speech=undetermined practice=true"), audit.label)
+        XCTAssertTrue(audit.label.contains("captureStarts=0"), audit.label)
     }
     func testCoreAndAllOptionalGesturesAreOffline() {
         let app = launch()
@@ -57,8 +75,7 @@ final class OnboardingUITests: XCTestCase {
         isolation(app)
         let bar = app.buttons["home.hold"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         bar.press(forDuration: 0.6, thenDragTo: bar.withOffset(CGVector(dx: 0, dy: -100)))
-        XCTAssertTrue(app.buttons["onboarding.connectLater"].waitForExistence(timeout: 10))
-        app.buttons["onboarding.connectLater"].tap()
+        connectLater(app)
         XCTAssertFalse(app.staticTexts["onboarding.prompt"].exists)
         XCTAssertTrue(app.buttons["home.hold"].waitForExistence(timeout: 5))
         app.buttons["onboarding.auditCheck"].tap()
@@ -78,8 +95,7 @@ final class OnboardingUITests: XCTestCase {
         app.buttons["onboarding.skip"].tap()
         XCTAssertTrue(app.buttons["onboarding.later"].waitForExistence(timeout: 5))
         app.buttons["onboarding.later"].tap()
-        XCTAssertTrue(app.buttons["onboarding.connectLater"].waitForExistence(timeout: 8))
-        app.buttons["onboarding.connectLater"].tap()
+        connectLater(app)
         app.terminate(); app.launch()
         XCTAssertTrue(app.buttons["home.hold"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["onboarding.start"].exists)
@@ -92,8 +108,7 @@ final class OnboardingUITests: XCTestCase {
         for text in ["Pull up to delete", "Slide sideways to move the cursor", "Pull to the top to clear", "Hold, then slide up to cancel"] {
             prompt(text, app); app.buttons["onboarding.skip"].tap()
         }
-        XCTAssertTrue(app.buttons["onboarding.connectLater"].waitForExistence(timeout: 10))
-        app.buttons["onboarding.connectLater"].tap()
+        connectLater(app)
         app.buttons["Settings"].tap()
         let tutorial = app.buttons["Practice gestures again"]
         for _ in 0..<9 {

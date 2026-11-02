@@ -155,6 +155,7 @@
 "Copied · Enter %@ on your iPhone" = "Copied · Enter %@ on your iPhone";
 "Copied. Paste on your Mac with Universal Clipboard enabled." = "Copied. Paste on your Mac with Universal Clipboard enabled.";
 "Copy" = "Copy";
+"Copy diagnostics" = "Copy diagnostics";
 "Copy link" = "Copy link";
 "Copy pairing code" = "Copy pairing code";
 "Copy text" = "Copy text";
@@ -263,6 +264,7 @@
 "Hold to speak on your iPhone" = "Hold to speak on your iPhone";
 "Hold to speak, release to type" = "Hold to speak, release to type";
 "How to use iMic" = "How to use iMic";
+"If the level stays empty, close this test and hold to record again. If it still fails, copy diagnostics and share them with the log." = "If the level stays empty, close this test and hold to record again. If it still fails, copy diagnostics and share them with the log.";
 "If your Mac and iPhone use the same Apple ID, a Safari icon will appear on the left of your Mac's Dock. Click it to open the download page." = "If your Mac and iPhone use the same Apple ID, a Safari icon will appear on the left of your Mac's Dock. Click it to open the download page.";
 "Incomplete audio frame" = "Incomplete audio frame";
 "Incorrect pairing code" = "Incorrect pairing code";
@@ -320,8 +322,15 @@
 "Mark as understood" = "Mark as understood";
 "Meeting today at three" = "Meeting today at three";
 "Microphone access is off" = "Microphone access is off";
+"Microphone configuration changed. Hold again to record." = "Microphone configuration changed. Hold again to record.";
 "Microphone failed to start" = "Microphone failed to start";
 "Microphone format unavailable" = "Microphone format unavailable";
+"Microphone input changed. Hold again to record." = "Microphone input changed. Hold again to record.";
+"Microphone input failed. Hold again to record." = "Microphone input failed. Hold again to record.";
+"Microphone interrupted. Hold again to record." = "Microphone interrupted. Hold again to record.";
+"Microphone lease expired. Hold again to record." = "Microphone lease expired. Hold again to record.";
+"Microphone level" = "Microphone level";
+"Microphone services reset. Hold again to record." = "Microphone services reset. Hold again to record.";
 "Model" = "Model";
 "Model Studio" = "Model Studio";
 "Model Studio (recommended)" = "Model Studio (recommended)";
@@ -357,6 +366,7 @@
 "No Model Studio API Key configured on your Mac" = "No Model Studio API Key configured on your Mac";
 "No Model Studio API Key yet" = "No Model Studio API Key yet";
 "No app available for typing" = "No app available for typing";
+"No audio received" = "No audio received";
 "No automatic typing. Check the target and permissions." = "No automatic typing. Check the target and permissions.";
 "No iPhone paired yet" = "No iPhone paired yet";
 "No speech recognized" = "No speech recognized";
@@ -385,6 +395,7 @@
 "Open iMic on your iPhone to connect automatically.\nKeep both devices on the same network." = "Open iMic on your iPhone to connect automatically.\nKeep both devices on the same network.";
 "Open iMic on your iPhone to connect automatically. New devices use the pairing code above." = "Open iMic on your iPhone to connect automatically. New devices use the pairing code above.";
 "Open iMic on your iPhone, tap the computer name at the top, and enter this pairing code." = "Open iMic on your iPhone, tap the computer name at the top, and enter this pairing code.";
+"Open microphone test" = "Open microphone test";
 "Open setup and paste your Model Studio Key to get started." = "Open setup and paste your Model Studio Key to get started.";
 "Optional · Connect when the local network is unavailable." = "Optional · Connect when the local network is unavailable.";
 "Optional · Locate the polish highlight. Processed only on this Mac." = "Optional · Locate the polish highlight. Processed only on this Mac.";
@@ -537,6 +548,8 @@
 "Some editors use keyboard compatibility mode, which may duplicate or delete text by mistake. Keypresses, clicks, or app switches stop automatic revisions for this session." = "Some editors use keyboard compatibility mode, which may duplicate or delete text by mistake. Keypresses, clicks, or app switches stop automatic revisions for this session.";
 "Some gestures are disabled in Settings. You can skip them. Re-enable them in iMic on your Mac." = "Some gestures are disabled in Settings. You can skip them. Re-enable them in iMic on your Mac.";
 "Source: %@ · iMic configuration takes priority over environment variables and shell files." = "Source: %@ · iMic configuration takes priority over environment variables and shell files.";
+"Speak normally and watch the level. Audio stays on this device and is not saved or sent." = "Speak normally and watch the level. Audio stays on this device and is not saved or sent.";
+"Start microphone test" = "Start microphone test";
 "Start using iMic" = "Start using iMic";
 "Starting connection…" = "Starting connection…";
 "Starts in the menu bar when you log in to your Mac." = "Starts in the menu bar when you log in to your Mac.";
@@ -560,6 +573,7 @@
 "Test speech generation failed" = "Test speech generation failed";
 "Test text delivered" = "Test text delivered";
 "Test typing" = "Test typing";
+"Test your microphone" = "Test your microphone";
 "Text" = "Text";
 "Text attachment" = "Text attachment";
 "Text attachment: %@" = "Text attachment: %@";

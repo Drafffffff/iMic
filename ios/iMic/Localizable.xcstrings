@@ -11866,6 +11866,230 @@
         }
       },
       "comment": "ios-only"
+    },
+    "No audio received": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No audio received"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有收到声音"
+          }
+        }
+      }
+    },
+    "Microphone interrupted. Hold again to record.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microphone interrupted. Hold again to record."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麦克风被中断，请重新按住录音。"
+          }
+        }
+      }
+    },
+    "Microphone configuration changed. Hold again to record.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microphone configuration changed. Hold again to record."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麦克风配置已变化，请重新按住录音。"
+          }
+        }
+      }
+    },
+    "Microphone input changed. Hold again to record.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microphone input changed. Hold again to record."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麦克风输入设备已变化，请重新按住录音。"
+          }
+        }
+      }
+    },
+    "Microphone services reset. Hold again to record.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microphone services reset. Hold again to record."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麦克风服务已重置，请重新按住录音。"
+          }
+        }
+      }
+    },
+    "Microphone lease expired. Hold again to record.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microphone lease expired. Hold again to record."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麦克风热启动已失效，请重新按住录音。"
+          }
+        }
+      }
+    },
+    "Speak normally and watch the level. Audio stays on this device and is not saved or sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speak normally and watch the level. Audio stays on this device and is not saved or sent."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请正常说话并观察电平。音频仅在本机处理，不保存、不发送。"
+          }
+        }
+      }
+    },
+    "Microphone level": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microphone level"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麦克风电平"
+          }
+        }
+      }
+    },
+    "If the level stays empty, close this test and hold to record again. If it still fails, copy diagnostics and share them with the log.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If the level stays empty, close this test and hold to record again. If it still fails, copy diagnostics and share them with the log."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果电平始终为空，请关闭自检后重新按住录音。如果仍然无声，请复制诊断信息并连同日志反馈。"
+          }
+        }
+      }
+    },
+    "Copy diagnostics": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy diagnostics"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制诊断信息"
+          }
+        }
+      }
+    },
+    "Test your microphone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test your microphone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麦克风自检"
+          }
+        }
+      }
+    },
+    "Open microphone test": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open microphone test"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开麦克风自检"
+          }
+        }
+      }
+    },
+    "Start microphone test": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start microphone test"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开始麦克风自检"
+          }
+        }
+      }
+    },
+    "Microphone input failed. Hold again to record.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microphone input failed. Hold again to record."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麦克风输入失败，请重新按住录音。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

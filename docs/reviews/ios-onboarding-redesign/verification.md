@@ -1,5 +1,7 @@
 # 验证与合并说明
 
+后续与 PR #23 / #24 的合并验证见 [合并验证记录](merge-validation.md)；下文保留首次引导交付的验收记录。
+
 基线：`269ad67`（`codex/ui-phosphor-wireframe`）。工作分支：`codex/ios-onboarding-redesign`。
 
 ## 实现
