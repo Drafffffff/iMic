@@ -401,38 +401,100 @@ const SHARE_URL = document.querySelector("#share-manual").href;
   copy.className = "crt-copy";
   canvas.append(copy);
   title.before(canvas);
-  title.classList.add("crt-lit");
   const ctx = canvas.getContext("2d");
   const glow = document.createElement("canvas");
   const glowCtx = glow.getContext("2d");
   const pad = parseFloat(getComputedStyle(canvas).getPropertyValue("--crt-pad")) || 24;
-  let dpr = 1, width = 0, height = 0, visible = true, frame = 0, band = 0, glitchUntil = 0;
+  let dpr = 1, width = 0, height = 0, titleWidth = 0, titleHeight = 0, padX = pad;
+  let visible = true, frame = 0, band = 0, glitchUntil = 0, failed = false, resolution;
   const buffer = document.createElement("canvas");
   const bufferCtx = buffer.getContext("2d");
+  if (!ctx || !glowCtx || !bufferCtx) { canvas.remove(); return; }
+  const listeners = new AbortController();
+  const options = { signal: listeners.signal };
 
-  function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    width = title.offsetWidth + pad * 2;
-    height = title.offsetHeight + pad * 2;
-    Object.assign(canvas.style, { left: title.offsetLeft - pad + "px", top: title.offsetTop - pad + "px", width: width + "px", height: height + "px" });
-    copy.style.width = title.offsetWidth + "px";
-    canvas.width = glow.width = buffer.width = Math.round(width * dpr);
-    canvas.height = glow.height = buffer.height = Math.round(height * dpr);
-    paint();
+  function fallback() {
+    failed = true;
+    cancelAnimationFrame(frame);
+    frame = 0;
+    resizeObserver.disconnect();
+    visibilityObserver.disconnect();
+    resolution?.removeEventListener("change", changeResolution);
+    listeners.abort();
+    canvas.remove();
+    title.classList.remove("crt-lit");
+    document.documentElement.dataset.crt = "css";
   }
 
-  function drawTitle(target) {
-    // The copy is never hit-tested (the canvas ignores pointer events), so the DOMMatrix
-    // returned before Chrome 155 can be ignored.
-    target.drawElementImage(copy, pad, pad);
+  function requestPaint() {
+    if (failed) return;
+    if (canvas.requestPaint) canvas.requestPaint(); else paint();
+  }
+
+  function resize() {
+    if (failed) return;
+    dpr = window.devicePixelRatio || 1;
+    const rect = title.getBoundingClientRect();
+    titleWidth = rect.width;
+    titleHeight = rect.height;
+    // The mobile gutter can be narrower than the bloom padding. Keep the canvas
+    // itself within the viewport so the effect cannot add horizontal scrolling.
+    padX = Math.max(0, Math.min(pad, rect.left, innerWidth - rect.right));
+    width = titleWidth + padX * 2;
+    height = titleHeight + pad * 2;
+    Object.assign(canvas.style, { left: title.offsetLeft - padX + "px", top: title.offsetTop - pad + "px", width: width + "px", height: height + "px" });
+    copy.style.width = titleWidth + "px";
+    canvas.width = glow.width = buffer.width = Math.round(width * dpr);
+    canvas.height = glow.height = buffer.height = Math.round(height * dpr);
+    // Wait for the drawable subtree's paint record, including its new line wrapping.
+    requestPaint();
+  }
+
+  function changeResolution() {
+    resolution?.removeEventListener("change", changeResolution);
+    resolution = matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+    resolution.addEventListener("change", changeResolution);
+    resize();
+  }
+
+  function drawTitle() {
+    // Chrome rasterizes the natural element image at device resolution. Use explicit
+    // destination bounds in backing pixels with an identity transform: scaling the
+    // context by DPR as well doubles the text on Retina. The 5-argument overload also
+    // normalizes legacy implementations whose natural image uses CSS pixels.
+    const result = ctx.drawElementImage(copy, padX * dpr, pad * dpr, titleWidth * dpr, titleHeight * dpr);
+    let drawnWidth, drawnHeight;
+    if (result && typeof result.a === "number" && typeof result.d === "number") {
+      // Legacy DOMMatrix return: CSS-space geometry is NOT applied automatically.
+      // Measure its linear part without transforming the hidden, noninteractive copy.
+      drawnWidth = Math.abs(result.a) * copy.offsetWidth + Math.abs(result.c) * copy.offsetHeight;
+      drawnHeight = Math.abs(result.b) * copy.offsetWidth + Math.abs(result.d) * copy.offsetHeight;
+    } else {
+      // New void-return API synchronizes the drawn CSS bounds automatically.
+      const rect = copy.getBoundingClientRect();
+      drawnWidth = rect.width;
+      drawnHeight = rect.height;
+    }
+    const rect = title.getBoundingClientRect();
+    // Check actual post-draw geometry every frame, before glow/glitch obscure it.
+    // Do not hide readable text if an experimental API changes its sizing again.
+    return [drawnWidth / rect.width, drawnHeight / rect.height].every((ratio) => Number.isFinite(ratio) && Math.abs(ratio - 1) <= 0.1);
   }
 
   function paint() {
-    if (!width) return;
+    if (failed || !titleWidth || !titleHeight) return;
+    // A paint can arrive before the resolution media-query change callback.
+    if (dpr !== (window.devicePixelRatio || 1)) { resize(); return; }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawTitle(ctx);
+    try {
+      if (!drawTitle()) { fallback(); return; }
+    } catch {
+      fallback();
+      return;
+    }
+    title.classList.add("crt-lit");
+    document.documentElement.dataset.crt = "canvas";
     // Bloom: blur a copy of the drawn text and add it back as light.
     glowCtx.setTransform(1, 0, 0, 1, 0, 0);
     glowCtx.clearRect(0, 0, glow.width, glow.height);
@@ -451,8 +513,8 @@ const SHARE_URL = document.querySelector("#share-manual").href;
     ctx.save();
     ctx.globalCompositeOperation = "source-atop";
     ctx.fillStyle = "rgba(0, 0, 0, 0.34)";
-    const step = Math.max(2, Math.round(3 * dpr));
-    for (let y = 0; y < canvas.height; y += step) ctx.fillRect(0, y, canvas.width, Math.max(1, Math.round(dpr)));
+    const step = 3 * dpr;
+    for (let y = 0; y < canvas.height; y += step) ctx.fillRect(0, y, canvas.width, dpr);
     if (!reducedMotion.matches) {
       const y = (band % 1) * (canvas.height + 120 * dpr) - 60 * dpr;
       const gradient = ctx.createLinearGradient(0, y - 40 * dpr, 0, y + 40 * dpr);
@@ -499,28 +561,30 @@ const SHARE_URL = document.querySelector("#share-manual").href;
     }
   }
   document.addEventListener("imic:glitch-title", (event) => {
-    if (reducedMotion.matches) return;
+    if (failed || reducedMotion.matches) return;
     glitchUntil = performance.now() + (event.detail?.duration || 320);
-    const loop = () => { if (canvas.requestPaint) canvas.requestPaint(); else paint(); if (performance.now() < glitchUntil + 60) setTimeout(loop, 55); };
+    const loop = () => { requestPaint(); if (!failed && performance.now() < glitchUntil + 60) setTimeout(loop, 55); };
     loop();
-  });
+  }, options);
 
   function tick(time) {
     frame = 0;
-    if (!visible || document.hidden || reducedMotion.matches) return;
+    if (failed || !visible || document.hidden || reducedMotion.matches) return;
     band = time / 5200;
-    if (canvas.requestPaint) canvas.requestPaint(); else paint();
+    requestPaint();
     frame = requestAnimationFrame(tick);
   }
-  function start() { if (!frame && !reducedMotion.matches) frame = requestAnimationFrame(tick); }
+  function start() { if (!failed && !frame && !reducedMotion.matches) frame = requestAnimationFrame(tick); }
 
-  canvas.addEventListener("paint", paint);
-  new ResizeObserver(resize).observe(title);
-  new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; if (visible) start(); }).observe(canvas);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) start(); });
-  reducedMotion.addEventListener("change", () => { paint(); start(); });
-  document.documentElement.dataset.crt = "canvas";
-  resize();
+  canvas.addEventListener("paint", paint, options);
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(title);
+  const visibilityObserver = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; if (visible) start(); });
+  visibilityObserver.observe(canvas);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) start(); }, options);
+  reducedMotion.addEventListener("change", () => { requestPaint(); start(); }, options);
+  addEventListener("resize", resize, options);
+  changeResolution();
   start();
 })();
 
