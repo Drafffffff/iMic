@@ -84,6 +84,21 @@ final class LinkClient: ObservableObject {
         practiceLock.unlock()
     }
 
+    /// Stop discovery and every transport before entering local practice, including replay.
+    func suspendForPractice() {
+        startDeferred = true
+        running = false
+        guard !isPreview else { return }
+        queue.sync {
+            closeConnectionLocked()
+            graceWork?.cancel(); graceWork = nil
+            browser?.cancel(); browser = nil
+            discoveredMacs.removeAll()
+        }
+        phase = .idle; transport = nil; gestureReady = false
+        macs = []; pairing = false; pairingError = nil
+    }
+
     private func permitsSend(_ kind: String) -> Bool {
         practiceLock.lock()
         let blocked = practiceDepth > 0
@@ -260,8 +275,8 @@ final class LinkClient: ObservableObject {
                 .first { $0.hasPrefix("--ui-preview=") }?
                 .replacingOccurrences(of: "--ui-preview=", with: "") ?? "idle"
             if mode.hasPrefix("onboarding-") {
-                macs = mode == "onboarding-pair" ? [mac] : []
-                phase = mode == "onboarding-pair" ? .needsCode(name) : .idle
+                macs = ["onboarding-pair", "onboarding-found"].contains(mode) ? [mac] : []
+                phase = mode == "onboarding-pair" ? .needsCode(name) : (["onboarding-ready", "onboarding-complete"].contains(mode) ? .ready(name) : .searching)
                 localNetworkDenied = mode == "onboarding-link-denied"
             } else {
                 switch mode {
@@ -333,7 +348,7 @@ final class LinkClient: ObservableObject {
 
     /// Keep a live session available for final results; foreground will verify it afresh.
     func enterBackground() {
-        guard !isPreview else { return }
+        guard !startDeferred, !isPreview else { return }
         queue.async {
             self.backgroundAt = ProcessInfo.processInfo.systemUptime
             self.foregroundProbeWork?.cancel()
@@ -397,7 +412,7 @@ final class LinkClient: ObservableObject {
     }
 
     func retry() {
-        guard !isPreview else { return }
+        guard !startDeferred, !isPreview else { return }
         queue.async {
             guard !self.ready else { return }
             self.closeConnectionLocked()
@@ -422,7 +437,7 @@ final class LinkClient: ObservableObject {
 
     /// 仅在空闲时主动离开蓝牙；绝不打断录音、补传或等待结果的会话。
     func reconnectUsingNetwork() {
-        guard !isPreview else { return }
+        guard !startDeferred, !isPreview else { return }
         queue.async {
             guard self.running, self.ready, self.usingBLE, !self.forceBLE,
                   self.activeLinkSession == nil else { return }
@@ -443,7 +458,7 @@ final class LinkClient: ObservableObject {
 
     /// 调用前由 SessionModel 停止当前会话；换设备不删除任何配对令牌。
     func connect(to mac: DiscoveredMac) {
-        guard !isPreview else { return }
+        guard !startDeferred, !isPreview else { return }
         invalidateEpoch()
         queue.async {
             self.manualSelection = true
@@ -462,7 +477,7 @@ final class LinkClient: ObservableObject {
     }
 
     func selectRememberedMac(_ mac: RememberedMac) {
-        guard !isPreview else { return }
+        guard !startDeferred, !isPreview else { return }
         if let nearby = macs.first(where: { $0.id == mac.id }) {
             connect(to: nearby)
             return
@@ -493,7 +508,7 @@ final class LinkClient: ObservableObject {
     }
 
     func forgetMac() {
-        guard !isPreview else { return }
+        guard !startDeferred, !isPreview else { return }
         invalidateEpoch()
         queue.async {
             if let id = self.currentMacID ?? self.preferredMacID {

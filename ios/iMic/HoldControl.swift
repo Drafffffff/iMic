@@ -8,6 +8,7 @@ struct HoldControl: UIViewRepresentable {
     var onMoved: (CGFloat) -> Void
     var onEnded: (Bool) -> Void
     var onPositionChanged: (CGFloat) -> Void = { _ in }
+    var onDurationMeasured: (TimeInterval) -> Void = { _ in }
 
     func makeUIView(context: Context) -> Control {
         let view = Control()
@@ -21,6 +22,7 @@ struct HoldControl: UIViewRepresentable {
         view.onMoved = onMoved
         view.onEnded = onEnded
         view.onPositionChanged = onPositionChanged
+        view.onDurationMeasured = onDurationMeasured
         return view
     }
 
@@ -29,6 +31,7 @@ struct HoldControl: UIViewRepresentable {
         view.onMoved = onMoved
         view.onEnded = onEnded
         view.onPositionChanged = onPositionChanged
+        view.onDurationMeasured = onDurationMeasured
     }
 
     final class Control: UIView {
@@ -36,12 +39,15 @@ struct HoldControl: UIViewRepresentable {
         var onMoved: ((CGFloat) -> Void)?
         var onEnded: ((Bool) -> Void)?
         var onPositionChanged: ((CGFloat) -> Void)?
+        var onDurationMeasured: ((TimeInterval) -> Void)?
+        private var beganTimestamp: TimeInterval?
         private var startPoint: CGPoint?
         private var translation: CGFloat = 0
 
         override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
             super.touchesBegan(touches, with: event)
             guard let touch = touches.first else { return }
+            beganTimestamp = touch.timestamp
             startPoint = touch.location(in: self)
             translation = 0
             updatePosition(touch)
@@ -59,13 +65,18 @@ struct HoldControl: UIViewRepresentable {
         override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
             super.touchesEnded(touches, with: event)
             let cancelled = translation < -64
-            if let touch = touches.first { updatePosition(touch) }
+            if let touch = touches.first {
+                updatePosition(touch)
+                if let beganTimestamp { onDurationMeasured?(max(0, touch.timestamp - beganTimestamp)) }
+            }
+            beganTimestamp = nil
             startPoint = nil
             onEnded?(cancelled)
         }
 
         override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
             super.touchesCancelled(touches, with: event)
+            beganTimestamp = nil
             startPoint = nil
             onEnded?(true)
         }

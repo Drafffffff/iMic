@@ -4,6 +4,11 @@ import SwiftUI
 struct DeviceSelectionView: View {
     @EnvironmentObject private var link: LinkClient
     @EnvironmentObject private var session: SessionModel
+    @EnvironmentObject private var onboarding: OnboardingCoordinator
+    @Environment(\.openURL) private var openURL
+    var onboardingMode = false
+    @State private var searchExpired = false
+    @State private var showDownload = false
     @State private var pendingSelection: RememberedMac?
     @State private var confirmSwitch = false
 
@@ -17,11 +22,19 @@ struct DeviceSelectionView: View {
             VStack(alignment: .leading, spacing: 30) {
                 VStack(alignment: .leading, spacing: 10) {
                     PixelText(text: "LINK", cell: 5, color: Theme.ivory, tracking: 3)
-                    Text(L10n.text("Choose the Mac that receives your voice"))
+                    Text(onboardingMode ? L10n.text("Open iMic on your Mac") : L10n.text("Choose the Mac that receives your voice"))
                         .font(.system(size: 14))
                         .foregroundStyle(Theme.muted)
                 }
-                currentTarget
+                if onboardingMode {
+                    Text(L10n.text("Allow Local Network to find your Mac"))
+                        .font(.footnote).foregroundStyle(Theme.muted)
+                    if link.localNetworkDenied {
+                        Button(L10n.text("Open Settings")) {
+                            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                        }.frame(minHeight: 44)
+                    }
+                } else { currentTarget }
                 if needsPairing {
                     PairingSheet(embedded: true)
                         .id(link.selectedMacID)
@@ -29,7 +42,8 @@ struct DeviceSelectionView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     sectionTitle(L10n.text("Nearby Macs"), suffix: "\(link.macs.count)")
                     if link.macs.isEmpty {
-                        Text(L10n.text("No Mac found. Open iMic on your computer. Connect over the same Wi-Fi or nearby Bluetooth."))
+                        if onboardingMode { ProgressView().tint(Theme.orange).accessibilityIdentifier("onboarding.searching") }
+                        Text(onboardingMode ? L10n.text("Looking for a Mac…") : L10n.text("No Mac found. Open iMic on your computer. Connect over the same Wi-Fi or nearby Bluetooth."))
                             .font(.system(size: 13))
                             .foregroundStyle(Theme.muted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -48,10 +62,17 @@ struct DeviceSelectionView: View {
                         }
                     }
                 }
+                if onboardingMode {
+                    if searchExpired && link.macs.isEmpty {
+                        Button(L10n.text("No iMic on your Mac yet?")) { showDownload = true }
+                            .frame(minHeight: 44).accessibilityIdentifier("onboarding.download")
+                    }
+                } else {
                 Text(L10n.text("Switching keeps your pairings. iMic will reconnect only to the selected Mac and will not switch to another computer automatically."))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.horizontal, 24)
             .padding(.top, 22)
@@ -62,7 +83,37 @@ struct DeviceSelectionView: View {
         .modifier(PhosphorNativeGlass())
         .navigationTitle(L10n.text("Connect to a computer"))
         .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            if onboardingMode {
+                Button(L10n.text("Connect later")) { onboarding.connectLater() }
+                    .font(.callout).foregroundStyle(Theme.ivory)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .padding(.horizontal, 24).padding(.bottom, 12)
+                    .background(Theme.ink)
+                    .accessibilityIdentifier("onboarding.connectLater")
+            }
+        }
         .tint(Theme.orange)
+        .sheet(isPresented: $showDownload) { MacDownloadView() }
+        .task {
+            guard onboardingMode else { return }
+            link.startDeferred = false
+            link.start()
+            if link.phase.isReady { onboarding.go(.ready); return }
+            #if DEBUG
+            if onboarding.preview == "download" {
+                searchExpired = true
+                try? await Task.sleep(for: .seconds(1))
+                if !Task.isCancelled { showDownload = true }
+                return
+            }
+            #endif
+            try? await Task.sleep(for: .seconds(5))
+            if !Task.isCancelled { searchExpired = true }
+        }
+        .onChange(of: link.phase) { _, phase in
+            if onboardingMode, phase.isReady { onboarding.go(.ready) }
+        }
         .confirmationDialog(L10n.text("Cancel this voice session and switch Macs?"), isPresented: $confirmSwitch, titleVisibility: .visible) {
             Button(L10n.text("Cancel session and switch"), role: .destructive) {
                 if let mac = pendingSelection { performSelection(mac) }

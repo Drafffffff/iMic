@@ -1,268 +1,124 @@
+import Foundation
 import SwiftUI
 
-/// A local command sink. No AudioCapture, SpeechPreview or transport is owned here.
+/// Local data source for the real HomeView. Owns no audio, transport or gesture physics.
 @MainActor
-final class PracticeSession: ObservableObject {
-    let spectrum = SpectrumStore()
-    @Published var card = 0
-    @Published var completed = false
-    @Published var passed = false
-    @Published var deleted = false
-    @Published var moved = false
-    @Published var holding = false
-    @Published var cancelArmed = false
-    @Published var text = ""
-    @Published var cursor = 0
-    private var beganAt: Date?
-    private var horizontal: Bool?
-    private var cursorStep = 0
-    private var cleared = false
-    let phrase = L10n.text("Meeting today at three")
-    var motion: StringMotionStore { spectrum.stringMotion }
-    static let titles = ["HOLD", "CANCEL", "RETURN", "EDIT", "CLEAR"]
-    static let instructions = [L10n.text("Hold the bar below, speak for at least half a second, then release to send"), L10n.text("Hold the bar, slide up, then release to cancel without sending"), L10n.text("Pull the string down and release. It sends Return as it springs back."), L10n.text("Pull up to delete. Slide left or right to move the cursor."), L10n.text("Pull the string all the way to the top to clear the current text")]
+final class PracticeSession {
+    struct Snapshot {
+        var phase: SessionModel.Phase = .idle
+        var elapsed: TimeInterval = 0
+        var text = ""
+        var live = ""
+        var cursor = 0
+    }
+    private(set) var state = Snapshot()
+    var changed: ((Snapshot) -> Void)?
+    var performed: ((String) -> Void)?
+    private var playback: Task<Void, Never>?
+    private var began: Date?
+    private var heldEnough = false
+    var cancelGestureArmed = false
+    var measuredHoldDuration: TimeInterval = 0
+    private var generation = 0
+    private var phrase: String { L10n.text("Meeting tomorrow at three") }
 
-    init() {
-        motion.onFireReturn = { [weak self] in self?.apply("return") ?? false }
-        motion.onRepeatDelete = { [weak self] in
-            let applied = self?.apply("delete") ?? false
-            if applied { SoundDesign.shared.play(.delete) }
-            return applied
-        }
+    func reset(seed: Bool = false) {
+        generation += 1
+        playback?.cancel(); playback = nil; began = nil; heldEnough = false
+        state = Snapshot()
+        cancelGestureArmed = false
+        measuredHoldDuration = 0
+        if seed { state.text = phrase; state.live = phrase; state.cursor = phrase.count; state.phase = .result }
+        changed?(state)
     }
-    func configure(reducedMotion: Bool) {
-        motion.reduceMotion = reducedMotion
-        spectrum.configureAmbientMotion(enabled: true, reducedMotion: reducedMotion)
-        spectrum.setVisible(true)
-    }
-    func prepareCard() {
-        motion.cancel()
-        passed = false; deleted = false; moved = false; horizontal = nil; cursorStep = 0; cleared = false
-        text = card >= 2 ? phrase : ""
-        cursor = text.count
-    }
-    func beginHold() {
-        holding = true; beganAt = Date()
+    func begin(spectrum: SpectrumStore) {
+        reset()
+        began = Date()
+        state.phase = .listening
+        changed?(state)
         Haptics.shared.play(.press)
         Haptics.shared.play(.recordingStarted)
-    }
-    func moveHold(_ dy: CGFloat) {
-        let armed = dy < -64
-        if armed != cancelArmed {
-            cancelArmed = armed
-            Haptics.shared.play(armed ? .cancelArmed : .cancelDisarmed)
-        }
-    }
-    func endHold(cancelled: Bool) {
-        guard holding else { return }
-        let wasArmed = cancelArmed
-        holding = false; cancelArmed = false
-        let duration = beganAt.map { Date().timeIntervalSince($0) } ?? 0
-        if cancelled {
-            Haptics.shared.play(.cancelled)
-            if card == 1, wasArmed { succeed() }
-        } else if duration >= 0.6 {
-            Haptics.shared.play(.release)
-            text = phrase; cursor = text.count
-            if card == 0 { succeed() }
-        } else { Haptics.shared.play(.tooShort) }
-    }
-    @discardableResult
-    func apply(_ action: String) -> Bool {
-        switch action {
-        case "return": text += " ↵"; cursor = text.count; if card == 2 { succeed() }
-        case "delete":
-            if cursor > 0, cursor <= text.count {
-                text.remove(at: text.index(text.startIndex, offsetBy: cursor - 1)); cursor -= 1
-            }
-            deleted = true
-        case "left", "right": cursor = min(text.count, max(0, cursor + (action == "left" ? -1 : 1))); moved = true
-        case "clear": text = ""; cursor = 0; if card == 4 { succeed() }
-        default: return false
-        }
-        if card == 3, deleted, moved { succeed() }
-        return true
-    }
-    func succeed() {
-        guard !passed else { return }
-        passed = true
-        Haptics.shared.play(.selection)
-    }
-    func next() {
-        if card == 4 { completed = true; motion.cancel() }
-        else { card += 1; prepareCard() }
-    }
-    func drag(_ value: DragGesture.Value, frame: CGRect, returnEnabled: Bool, deleteEnabled: Bool, cursorEnabled: Bool) {
-        guard !cleared, !motion.isClearing else { return }
-        if horizontal == nil {
-            motion.cancelPendingReturn()
-            horizontal = abs(value.translation.width) > abs(value.translation.height) * 1.35
-            if horizontal == false {
-                motion.begin(anchor: TorusGeometry.touchAnchor(x: value.startLocation.x, width: frame.width), height: frame.height,
-                    clearStretch: deleteEnabled ? StringClearStretch(distance: frame.minY + value.startLocation.y - 84, depth: frame.midY - 84) : nil)
-            }
-        }
-        if horizontal == true {
-            let step = Int(value.translation.width / 30)
-            if step != cursorStep, cursorEnabled {
-                let delta = step - cursorStep
-                for _ in 0..<min(4, abs(delta)) { apply(delta > 0 ? "right" : "left") }
-                Haptics.shared.play(.selection)
-            }
-            cursorStep = step
-        } else {
-            motion.moveAnchor(to: TorusGeometry.touchAnchor(x: value.location.x, width: frame.width))
-            if deleteEnabled, value.translation.height < -80, frame.minY + value.location.y <= 84 {
-                cleared = true; motion.completeClearContact(); apply("clear"); Haptics.shared.play(.cancelArmed)
-            } else {
-                motion.drag(translation: value.translation.height, velocity: value.velocity.height,
-                            returnEnabled: returnEnabled, deleteEnabled: deleteEnabled)
-            }
-        }
-    }
-    func endDrag(_ value: DragGesture.Value, returnEnabled: Bool, deleteEnabled: Bool) {
-        if horizontal == false, !cleared {
-            if let action = motion.finish(translation: value.translation.height, velocity: value.velocity.height,
-                                           returnEnabled: returnEnabled, deleteEnabled: deleteEnabled) {
-                apply(action); Haptics.shared.play(.deleteChar)
-            }
-        }
-        horizontal = nil; cursorStep = 0; cleared = false
-    }
-}
-
-struct PracticeView: View {
-    @EnvironmentObject private var link: LinkClient
-    @EnvironmentObject private var session: SessionModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
-    @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var practice = PracticeSession()
-    var preview: String? = nil
-    var onInteractionChanged: (Bool) -> Void = { _ in }
-    var onComplete: () -> Void
-    private var disabled: Bool {
-        switch practice.card {
-        case 2: return !session.snapReturnEnabled
-        case 3: return !session.pullDeleteEnabled || !session.swipeCursorEnabled
-        case 4: return !session.pullDeleteEnabled
-        default: return false
-        }
-    }
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if practice.completed {
-                GuideTitle(text: "PRACTICE COMPLETE", cell: 1.7, color: Theme.orange)
-                    .accessibilityLabel(L10n.text("Practice complete"))
-                Text(L10n.text("✓ You know the core gestures. Practice did not record audio or send anything to your Mac."))
-                GuideButton(title: L10n.text("Finish practice"), action: onComplete)
-            } else {
-                HStack {
-                    GuideTitle(text: PracticeSession.titles[practice.card], cell: 3, color: Theme.ivory)
-                    Spacer()
-                    Text("\(practice.card + 1) / 5").foregroundStyle(Theme.muted)
+        let words = Array(phrase)
+        playback = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, let began = self.began else { return }
+                self.state.elapsed = Date().timeIntervalSince(began)
+                let count = min(words.count, Int(self.state.elapsed / 0.09))
+                self.state.live = String(words.prefix(count))
+                self.changed?(self.state)
+                let t = self.state.elapsed
+                spectrum.set((0..<44).map { i in
+                    CGFloat(0.08 + 0.65 * abs(sin(t * 5 + Double(i) * 0.21)) * abs(cos(t * 2 + Double(i) * 0.07)))
+                }, level: CGFloat(0.3 + 0.4 * abs(sin(t * 4))))
+                if t >= 0.5, !self.heldEnough {
+                    self.heldEnough = true
+                    self.performed?("hold")
                 }
-                Text(PracticeSession.instructions[practice.card])
-                if disabled { Text(L10n.text("Some gestures are disabled in Settings. You can skip them. Re-enable them in iMic on your Mac.")) .foregroundStyle(Theme.muted) }
-                GestureDemonstration(card: practice.card)
-                VStack(alignment: .leading, spacing: 8) {
-                    MetaLabel(text: "MAC / PRACTICE ONLY")
-                    Text(practice.text.isEmpty ? L10n.text("Waiting for your gesture…") : practice.text)
-                        .foregroundStyle(practice.text.isEmpty ? Theme.muted : Theme.ivory)
-                        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-                        .accessibilityIdentifier("practice.text")
-                    Text(L10n.text("Cursor position %@", L10n.argument(practice.cursor))).font(.caption).foregroundStyle(Theme.muted)
-                }.padding(14).background(Theme.panel).overlay(Rectangle().stroke(Theme.line))
-                if practice.card == 3 {
-                    Text(L10n.text("%@ Delete    %@ Move cursor", L10n.argument(practice.deleted ? "✓" : "○"), L10n.argument(practice.moved ? "✓" : "○")))
-                        .foregroundStyle(Theme.orange).accessibilityIdentifier("practice.edit-checks")
-                }
-                GeometryReader { geometry in
-                    ZStack {
-                        TorusView(store: practice.spectrum, instrumentHUD: true, channelLabel: "PRACTICE")
-                            .allowsHitTesting(false)
-                        Color.clear.contentShape(Rectangle())
-                            .highPriorityGesture(DragGesture(minimumDistance: 6)
-                                .onChanged { onInteractionChanged(true); practice.drag($0, frame: geometry.frame(in: .global), returnEnabled: session.snapReturnEnabled,
-                                                          deleteEnabled: session.pullDeleteEnabled, cursorEnabled: session.swipeCursorEnabled) }
-                                .onEnded { practice.endDrag($0, returnEnabled: session.snapReturnEnabled, deleteEnabled: session.pullDeleteEnabled); onInteractionChanged(false) })
-                    }
-                    .accessibilityElement(children: .ignore).accessibilityLabel(L10n.text("Practice string controls"))
-                    .accessibilityIdentifier("practice.string")
-                }.frame(height: 170)
-                ZStack {
-                    RecordingBarShape().fill(practice.holding ? Theme.orange : Theme.panelRaised)
-                    PixelText(text: practice.cancelArmed ? "CANCEL" : "HOLD TO SPEAK", cell: 1.8,
-                              color: practice.holding ? Theme.ink : Theme.ivory)
-                    HoldControl(onBegan: { onInteractionChanged(true); practice.beginHold() }, onMoved: practice.moveHold,
-                                onEnded: { practice.endHold(cancelled: $0); onInteractionChanged(false) })
-                }
-                .frame(height: HoldBarLayout.height)
-                .accessibilityElement(children: .ignore).accessibilityLabel(L10n.text("Practice recording bar"))
-                .accessibilityIdentifier("practice.hold")
-                if practice.passed {
-                    Text(L10n.text("✓ Complete")).foregroundStyle(Theme.orange).accessibilityIdentifier("practice.passed")
-                    GuideButton(title: L10n.text("Next card")) { practice.next() }
-                }
-                if voiceOver {
-                    Button(L10n.text("Mark as understood")) { practice.succeed() }
-                }
-                Button(L10n.text("Skip")) { practice.next() }.frame(minHeight: 44)
-            }
-        }
-        .font(.body).foregroundStyle(Theme.ivory)
-        .onAppear {
-            link.setPracticeActive(true)
-            if let preview {
-                if preview == "practice-complete" { practice.completed = true }
-                else if let number = Int(preview.suffix(1)), (1...5).contains(number) { practice.card = number - 1 }
-            }
-            practice.prepareCard(); practice.configure(reducedMotion: reduceMotion)
-        }
-        .onChange(of: practice.completed) { _, complete in
-            if complete { UserDefaults.standard.set(1, forKey: OnboardingCoordinator.tutorialKey) }
-        }
-        .onDisappear { onInteractionChanged(false); practice.motion.cancel(); practice.spectrum.setVisible(false); link.setPracticeActive(false) }
-        .onChange(of: reduceMotion) { _, value in practice.configure(reducedMotion: value) }
-        .onChange(of: scenePhase) { _, value in
-            if value != .active { onInteractionChanged(false); practice.endHold(cancelled: true); practice.motion.cancel() }
-            practice.spectrum.setVisible(value == .active)
-        }
-        .task(id: practice.holding && !reduceMotion) {
-            while !Task.isCancelled, practice.holding, !reduceMotion {
-                let t = Date().timeIntervalSinceReferenceDate
-                practice.spectrum.set((0..<44).map { CGFloat(0.2 + 0.5 * abs(sin(t * 2 + Double($0) * 0.2))) }, level: 0.6)
                 try? await Task.sleep(for: .milliseconds(40))
             }
-            practice.spectrum.set([], level: 0)
         }
     }
-}
-
-struct GestureDemonstration: View {
-    let card: Int
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 0.05, paused: reduceMotion)) { timeline in
-            let progress = reduceMotion ? 0.65 : timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2) / 2
-            let travel = CGFloat(sin(progress * .pi))
-            HStack(spacing: 16) {
-                Text(card == 0 ? "↓  ·  ↑" : (card == 2 ? "↓  ↵" : (card == 3 ? "↑  ← →" : "↑")))
-                    .font(.system(.title2, design: .monospaced))
-                Canvas { context, _ in
-                    let rows = ["00110000", "00110000", "00110000", "00111110", "11111111", "11111111", "01111110", "01111110", "00111100"]
-                    for (y, row) in rows.enumerated() {
-                        for (x, cell) in row.enumerated() where cell == "1" {
-                            context.fill(Path(CGRect(x: x * 3, y: y * 3, width: 3, height: 3)), with: .color(Theme.orange))
-                        }
-                    }
-                }.frame(width: 24, height: 27)
-                    .offset(x: card == 3 ? travel * 24 : 0, y: (card == 2 ? 1 : -1) * travel * 14)
-                Spacer()
-                MetaLabel(text: "TRY IT BELOW")
-            }
+    func end(cancelled: Bool, spectrum: SpectrumStore) {
+        guard state.phase == .listening else { return }
+        let duration = max(measuredHoldDuration, began.map { Date().timeIntervalSince($0) } ?? 0)
+        if duration >= 0.5, !cancelled, !heldEnough {
+            heldEnough = true
+            performed?("hold")
         }
-        .foregroundStyle(Theme.orange).frame(height: 42)
-        .accessibilityElement(children: .ignore).accessibilityLabel(PracticeSession.instructions[card])
+        playback?.cancel(); began = nil
+        spectrum.set([], level: 0)
+        if cancelled || duration < 0.5 {
+            let gesture = cancelGestureArmed
+            reset()
+            Haptics.shared.play(cancelled ? .cancelled : .tooShort)
+            performed?(cancelled ? (gesture ? "cancel" : "interrupt") : "short")
+            return
+        }
+        Haptics.shared.play(.release)
+        state.phase = .transcribing
+        changed?(state)
+        let stamp = generation
+        playback = Task { [weak self] in
+            guard let self else { return }
+            // Any remaining glyphs enter the same receiver stream, one at a time.
+            let words = Array(self.phrase)
+            var count = self.state.live.count
+            while count < words.count {
+                try? await Task.sleep(for: .milliseconds(60))
+                guard !Task.isCancelled, self.generation == stamp else { return }
+                count += 1; self.state.live = String(words.prefix(count)); self.changed?(self.state)
+            }
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, self.generation == stamp else { return }
+            self.state.text = self.phrase; self.state.cursor = self.state.text.count
+            self.state.phase = .result; self.changed?(self.state)
+            Haptics.shared.play(.result)
+            self.performed?("release")
+        }
+    }
+    @discardableResult
+    func input(_ action: String) -> Bool {
+        guard state.phase != .listening, state.phase != .transcribing else { return false }
+        switch action {
+        case "return": break // The real receiver fires; the result stays available, as in normal use.
+        case "delete":
+            if state.cursor > 0 {
+                state.text.remove(at: state.text.index(state.text.startIndex, offsetBy: state.cursor - 1))
+                state.cursor -= 1
+            }
+        case "left", "right": state.cursor = min(state.text.count, max(0, state.cursor + (action == "left" ? -1 : 1)))
+        case "clear": state.text = ""; state.cursor = 0; state.phase = .idle
+        default: return false
+        }
+        state.live = state.text
+        changed?(state)
+        IMicLog.write("iphone.practice", "input=\(action) cursor=\(state.cursor) text=\(state.text.count)")
+        performed?(action)
+        return true
+    }
+    var cursorText: String {
+        var text = state.text
+        text.insert("│", at: text.index(text.startIndex, offsetBy: min(state.cursor, text.count)))
+        return text
     }
 }

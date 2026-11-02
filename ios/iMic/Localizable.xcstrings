@@ -11475,6 +11475,397 @@
           }
         }
       }
+    },
+    "Allow Local Network to find your Mac": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Local Network to find your Mac"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许本地网络，才能找到你的 Mac"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Click your Mac's input, then hold to speak": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click your Mac's input, then hold to speak"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Mac 点进输入框，按住说话"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Hold the bar and speak": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold the bar and speak"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按住横条，说一句话"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Hold, then slide up to cancel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold, then slide up to cancel"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按住横条，上滑取消"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "I've used iMic before": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I've used iMic before"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我已经用过 iMic"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Later": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "之后再说"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Meeting tomorrow at three": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting tomorrow at three"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "明天下午三点开会"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Microphone access is needed when you speak": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microphone access is needed when you speak"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "说话时需要允许麦克风访问"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "More gestures": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More gestures"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还有更多手势"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "No iMic on your Mac yet?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No iMic on your Mac yet?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac 上还没有 iMic？"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "One phone. Every input.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One phone. Every input."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一只手机，接管所有输入。"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Open iMic on your Mac##onboarding": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open iMic on your Mac"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开 Mac 上的 iMic"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Open the Safari Handoff icon on your Mac": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the Safari Handoff icon on your Mac"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Mac 打开 Safari 接力图标"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Pull the string to send": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull the string to send"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下拉弦再松开，发送"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Pull to the top to clear": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull to the top to clear"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拉到顶部，清空文字"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Pull up to delete##onboarding": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull up to delete"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上拨弦，删除文字"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Release to send": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release to send"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "松手，文字飞向电脑"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Return here after installing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return here after installing"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "装好后回到这里"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Show me": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show me"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "看看"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Skip this step": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip this step"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跳过此步"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Slide sideways to move the cursor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slide sideways to move the cursor"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "左右滑动，移动光标"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "That's it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That's it."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成。以后就这样用。"
+          }
+        }
+      },
+      "comment": "ios-only"
+    },
+    "Typed in practice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typed in practice"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已填入练习"
+          }
+        }
+      },
+      "comment": "ios-only"
     }
   },
   "version": "1.0"

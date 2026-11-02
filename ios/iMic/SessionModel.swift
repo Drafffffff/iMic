@@ -136,7 +136,7 @@ final class SessionModel: ObservableObject {
         }
         link.onInputResult = { [weak self] result in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, !self.practiceActive else { return }
                 if result.status == "applied" {
                     self.transcript = ""
                     self.liveTranscript = ""
@@ -166,11 +166,46 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    // Practice is a local data source; all visuals and gestures remain in HomeView.
+    @Published private(set) var practiceActive = false
+    let practice = PracticeSession()
+
+    func setPracticeActive(_ active: Bool) {
+        guard active != practiceActive else { return }
+        if active {
+            if phase == .listening { endListening(cancelled: true) }
+            reset()
+            deactivateAudio()
+            link.setPracticeActive(true)
+            practiceActive = true
+            practice.changed = { [weak self] state in
+                guard let self, self.practiceActive else { return }
+                self.elapsed = state.elapsed
+                self.transcript = state.text
+                self.liveTranscript = state.live
+                self.pasted = state.phase == .result
+                self.target = nil
+                self.phase = state.phase
+            }
+            practice.reset()
+        } else {
+            practice.reset()
+            practice.changed = nil
+            practice.performed = nil
+            practiceActive = false
+            link.setPracticeActive(false)
+            reset()
+            elapsed = 0
+            copied = false
+        }
+        IMicLog.write("iphone.practice", "active=\(active) source=local noCapture noTransport")
+    }
+
     // MARK: - Permissions / first press
 
     /// Prepare permission only. Foreground standby must not open the input device.
     func activateAudio() {
-        guard !isPreview else { return }
+        guard !practiceActive, !isPreview else { return }
         #if DEBUG
         // 模拟器联调用合成语音，不需要也不应该弹麦克风授权。
         if debugTTSText != nil || debugBufferText != nil { return }
@@ -322,6 +357,7 @@ final class SessionModel: ObservableObject {
     }
 
     func beginListening() {
+        if practiceActive { practice.begin(spectrum: spectrumStore); return }
         guard !link.clearPending, !spectrumStore.stringMotion.isClearing else { return }
         if isPreview {
             if phase == .listening {
@@ -379,9 +415,9 @@ final class SessionModel: ObservableObject {
     }
 
     var livePreviewEnabled: Bool { remoteFeatures & 0b0001 != 0 }
-    var snapReturnEnabled: Bool { remoteFeatures & 0b0010 != 0 }
-    var pullDeleteEnabled: Bool { remoteFeatures & 0b0100 != 0 }
-    var swipeCursorEnabled: Bool { remoteFeatures & 0b1000 != 0 }
+    var snapReturnEnabled: Bool { practiceActive || remoteFeatures & 0b0010 != 0 }
+    var pullDeleteEnabled: Bool { practiceActive || remoteFeatures & 0b0100 != 0 }
+    var swipeCursorEnabled: Bool { practiceActive || remoteFeatures & 0b1000 != 0 }
 
     private func applyRemoteFeatures(_ features: Int) {
         remoteFeatures = features
@@ -565,6 +601,7 @@ final class SessionModel: ObservableObject {
     }
 
     func endListening(cancelled: Bool) {
+        if practiceActive { practice.end(cancelled: cancelled, spectrum: spectrumStore); return }
         wantsRecording = false
         guard phase == .listening else { return }
         #if DEBUG
@@ -1038,6 +1075,7 @@ final class SessionModel: ObservableObject {
     }
 
     private func handle(_ message: LinkMessage) {
+        guard !practiceActive else { return }
         guard let active = activeSession else {
             IMicLog.write("iphone.session", "\(message.t) ignored no active session session=\(message.session ?? -1)")
             return
@@ -1097,6 +1135,7 @@ final class SessionModel: ObservableObject {
     }
 
     private func handleLinkLost() {
+        guard !practiceActive else { return }
         guard phase == .listening || phase == .transcribing else { return }
         failActiveSession(L10n.text("Disconnected from your Mac. Local recognition text is kept."), cancelRemote: false)
     }
@@ -1164,6 +1203,11 @@ final class SessionModel: ObservableObject {
     /// 中心弦手势：回车 / 删除 / 左右移动光标。Mac 端设置关闭时会忽略。
     @discardableResult
     func sendInput(_ action: String) -> Bool {
+        if practiceActive {
+            let applied = practice.input(action)
+            if applied, action == "clear" { clearGeneration += 1 }
+            return applied
+        }
         guard link.phase.isReady, phase != .listening, phase != .transcribing, !isUploading,
               link.gestureReady, !link.clearPending else { return false }
         return link.sendInput(action)
@@ -1204,6 +1248,7 @@ final class SessionModel: ObservableObject {
 
     func handleForeground() {
         Haptics.shared.prepare(force: true)
+        guard !practiceActive else { return }
         link.activate()
         if AudioCapture.permissionGranted { micDenied = false }
         activateAudio()
@@ -1211,7 +1256,7 @@ final class SessionModel: ObservableObject {
 
     func handleBackground() {
         if phase == .listening { endListening(cancelled: true) }
-        link.enterBackground()
+        if !practiceActive { link.enterBackground() }
         deactivateAudio()
         Haptics.shared.stop()
     }
