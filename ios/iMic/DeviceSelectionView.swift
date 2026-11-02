@@ -68,7 +68,7 @@ struct DeviceSelectionView: View {
                             InstrumentIdentity()
                             Spacer()
                             Button { onboarding.connectLater() } label: {
-                                HUDLabel(text: "GUIDE · " + L10n.text("Connect later"), color: Theme.ivory).frame(minHeight: 44)
+                                HUDLabel(text: "GUIDE · " + L10n.text("Connect later"), color: Theme.ivory).frame(minHeight: 44).contentShape(Rectangle())
                             }.buttonStyle(.plain).offset(y: -9)
                                 .accessibilityIdentifier("onboarding.connectLater")
                         }.frame(height: 62, alignment: .top)

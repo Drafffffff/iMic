@@ -1,12 +1,12 @@
 # iPhone 主页引导验收
 
-本目录是任务书第 8 节的截图与报告。截图由本任务创建的专用模拟器、真实 HomeView / DeviceSelectionView / PairingSheet 组件生成；预览只提供可重复的状态数据。录屏与 UI 测试直接走正式引导状态机。
+本目录是任务书第 8 节的截图与报告。截图由本任务创建的专用模拟器、真实 HomeView / DeviceSelectionView / PairingSheet 组件生成；预览只提供可重复的状态数据。录屏与手势 UI 测试走正式引导状态机；视觉回归使用可重复的预览状态。
 
 - [最新 HUD 视觉修订、逐项对照与测试](visual-pass.md)
 - [改前 / 改后对照拼图](before-after.png)
 - [初次交付的测试、隔离与合并说明](verification.md)
 - [新旧屏数与逐屏字数](copy-counts.md)
-- 录屏：仓库本地 `build/onboarding-redesign/release-journey.mp4`，在 Release 模拟器包中从欢迎、三步练习、更多手势卡、连接页到“稍后再连接”返回主页。文件不纳入 Git。
+- 录屏：仓库本地 `build/onboarding-redesign/release-journey.mp4`，在 Release 模拟器包中从欢迎、三步练习、更多手势 HUD 面板、连接页到“稍后再连接”返回主页。文件不纳入 Git。
 
 ## 截图矩阵
 

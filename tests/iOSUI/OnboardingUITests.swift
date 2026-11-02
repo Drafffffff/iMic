@@ -120,8 +120,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(tutorial.isHittable); tutorial.tap()
         prompt("Hold the bar and speak", app)
         isolation(app)
-        app.buttons["onboarding.skip"].tap()
+        // Replay stays offline when entered after choosing "Connect later".
+        app.buttons["home.hold"].press(forDuration: 1.0)
         prompt("Pull the string to send", app)
+        isolation(app)
         app.buttons["onboarding.skip"].tap()
         XCTAssertTrue(app.buttons["onboarding.later"].waitForExistence(timeout: 5))
         app.buttons["onboarding.later"].tap()

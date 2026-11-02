@@ -14,6 +14,9 @@ final class OnboardingVisualUITests: XCTestCase {
             XCTAssertFalse(app.buttons["onboarding.start"].exists, step)
             XCTAssertTrue(bar.isHittable, step)
             XCTAssertTrue(app.frame.contains(bar.frame), step)
+            // Account only for CGFloat round-off (e.g. 43.99999999999994pt).
+            let hud = app.buttons[step == "welcome" ? "onboarding.existing" : "onboarding.skip"]
+            XCTAssertGreaterThanOrEqual(hud.frame.height + 0.001, 44, step)
             if step == "welcome" { XCTAssertEqual(bar.label, "HOLD TO START") }
             // Allow the compositor to finish its first raster; check actual pixels, not a color flag.
             let orange = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -27,6 +30,7 @@ final class OnboardingVisualUITests: XCTestCase {
                 XCTAssertFalse(panel.frame.intersects(app.otherElements["home.string"].frame))
                 for id in ["onboarding.more", "onboarding.try.cursor", "onboarding.try.clear", "onboarding.try.cancel", "onboarding.later"] {
                     XCTAssertTrue(app.buttons[id].isHittable, id)
+                    XCTAssertGreaterThanOrEqual(app.buttons[id].frame.height + 0.001, 44, id)
                     XCTAssertTrue(panel.frame.contains(app.buttons[id].frame), id)
                 }
             }

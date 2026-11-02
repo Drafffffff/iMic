@@ -253,9 +253,9 @@ final class SessionModel: ObservableObject {
                 // AudioCapture delivers this on the main queue.
                 MainActor.assumeIsolated {
                     guard let self, self.audioGeneration == generation else { return }
-                    if error != nil {
+                    if let error {
                         self.audioGeneration &+= 1
-                        self.handleAudioFailure(L10n.text("Microphone failed to start"))
+                        self.handleAudioFailure(error is CaptureRouteError ? error.localizedDescription : L10n.text("Microphone failed to start"))
                         return
                     }
                     // 重启触感引擎，但不更改已运行的 playAndRecord 音频会话。

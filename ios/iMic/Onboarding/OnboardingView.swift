@@ -22,13 +22,13 @@ struct MacDownloadView: View {
             Hairline()
             Text(L10n.text("Return here after installing")).modifier(InstrumentHint(color: Theme.ivory))
             ShareLink(item: OnboardingLinks.download) {
-                HStack { Text(L10n.text("Share link")).modifier(InstrumentHint(color: Theme.ivory)); Spacer(); HUDLabel(text: "SHARE ›") }.frame(minHeight: 44).overlay(alignment: .bottom) { Hairline() }
+                HStack { Text(L10n.text("Share link")).modifier(InstrumentHint(color: Theme.ivory)); Spacer(); HUDLabel(text: "SHARE ›") }.frame(minHeight: 44).contentShape(Rectangle()).overlay(alignment: .bottom) { Hairline() }
             }
             Button {
                 UIPasteboard.general.url = OnboardingLinks.download
                 copied = true; Haptics.shared.play(.copy)
             } label: {
-                HStack { Text(copied ? L10n.text("Copied") : L10n.text("Copy link")).modifier(InstrumentHint(color: Theme.ivory)); Spacer(); HUDLabel(text: "COPY ›") }.frame(minHeight: 44).overlay(alignment: .bottom) { Hairline() }
+                HStack { Text(copied ? L10n.text("Copied") : L10n.text("Copy link")).modifier(InstrumentHint(color: Theme.ivory)); Spacer(); HUDLabel(text: "COPY ›") }.frame(minHeight: 44).contentShape(Rectangle()).overlay(alignment: .bottom) { Hairline() }
             }.accessibilityIdentifier("download.copy")
             Text(L10n.text("Open the Safari Handoff icon on your Mac"))
                 .modifier(InstrumentHint())
@@ -100,7 +100,7 @@ struct OnboardingView: View {
                 }
             }.scrollIndicators(.hidden)
             Button { onboarding.finishPractice() } label: {
-                HStack { HUDLabel(text: "LATER"); Spacer(); HUDLabel(text: "›") }.frame(minHeight: 44)
+                HStack { HUDLabel(text: "LATER"); Spacer(); HUDLabel(text: "›") }.frame(minHeight: 44).contentShape(Rectangle())
             }.accessibilityIdentifier("onboarding.later")
         }
         .buttonStyle(.plain).padding(.horizontal, 12).padding(.vertical, 4)
@@ -118,7 +118,7 @@ struct OnboardingView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 4)
                 HUDLabel(text: "TRY ›", color: Theme.orange)
-            }.frame(minHeight: 44).contentShape(Rectangle())
+            }.frame(minHeight: 44).contentShape(Rectangle()).contentShape(Rectangle())
                 .overlay(alignment: .bottom) { Hairline() }
         }.accessibilityIdentifier(action == .delete ? "onboarding.more" : "onboarding.try." + action.rawValue)
     }
@@ -203,8 +203,8 @@ struct GuideSettingsSection: View {
             Button(L10n.text("Practice gestures again")) {
                 dismiss()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { onboarding.startPractice(replay: true) }
-            }.frame(minHeight: 44)
-            Button(L10n.text("Get the Mac app")) { download = true }.frame(minHeight: 44)
+            }.frame(minHeight: 44).contentShape(Rectangle())
+            Button(L10n.text("Get the Mac app")) { download = true }.frame(minHeight: 44).contentShape(Rectangle())
         }
         .onChange(of: download) { _, value in onPresentationChanged(value) }
         .sheet(isPresented: $download) { MacDownloadView() }

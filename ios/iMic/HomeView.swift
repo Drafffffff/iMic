@@ -57,9 +57,9 @@ struct HomeView: View {
                 TechBackground()
                 let width = max(1, geometry.size.width - contentInset * 2)
                 let height = geometry.size.height
-                let instrumentHeight = moreGestures ? min(90, height * 0.12) : dynamicType.isAccessibilitySize ? min(80, height * 0.11) : min(300, height * 0.40)
+                let instrumentHeight = moreGestures ? min(90, height * (height < 700 ? 0.085 : 0.12)) : dynamicType.isAccessibilitySize ? min(80, height * 0.11) : min(300, height * 0.40)
                 // Large teaching copy keeps the real instrument compact and below the status block.
-                let instrumentCenter = height * (moreGestures ? 0.77 : dynamicType.isAccessibilitySize ? 0.75 : 0.52)
+                let instrumentCenter = height * (moreGestures ? (height < 700 ? 0.75 : 0.77) : dynamicType.isAccessibilitySize ? 0.75 : 0.52)
                 Group {
                     header
                         .frame(width: width, height: 62, alignment: .top)
@@ -505,7 +505,7 @@ struct HomeView: View {
                 Button {
                     if onboarding.step == .welcome { onboarding.go(.link) } else { onboarding.skip() }
                 } label: {
-                    HUDLabel(text: guideHeader ?? "GUIDE", color: Theme.ivory).frame(minWidth: 44, minHeight: 44)
+                    HUDLabel(text: guideHeader ?? "GUIDE", color: Theme.ivory).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).offset(y: -9)
                 .accessibilityIdentifier(onboarding.step == .welcome ? "onboarding.existing" : "onboarding.skip")
@@ -856,7 +856,7 @@ struct HomeView: View {
         if onboarding.localHome && onboarding.step == .practice && !onboarding.action.bar { return }
         if onboarding.presented && onboarding.step == .welcome { onboarding.startPractice() }
         interactionStart = true
-        if onboarding.connectionDeferred { startConnection() }
+        if !session.practiceActive && onboarding.connectionDeferred { startConnection() }
         if !canRecordNow {
             Haptics.shared.play(.pairingRequired)
             showPairing = true

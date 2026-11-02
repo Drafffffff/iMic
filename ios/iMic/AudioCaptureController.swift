@@ -9,6 +9,39 @@ struct CaptureMeter {
     var elapsed: TimeInterval = 0
 }
 
+struct CaptureInputPort: Equatable {
+    var uid: String
+    var type: String
+    var name: String
+    var description: String { "\(type):\(uid) (\(name))" }
+}
+
+struct CaptureInputRoute {
+    var inputs: [CaptureInputPort] = []
+    var available: [CaptureInputPort]? = nil
+    var invalidReason: String? {
+        guard !inputs.isEmpty else { return "empty-input-route" }
+        guard let available else { return "available-inputs-unavailable" }
+        guard inputs.allSatisfy({ input in available.contains { $0.uid == input.uid && $0.type == input.type } }) else {
+            return "input-port-no-longer-available"
+        }
+        return nil
+    }
+    var report: String {
+        "inputs=[\(inputs.map(\.description).joined(separator: "; "))] availableInputs=\(available.map { "[" + $0.map(\.description).joined(separator: "; ") + "]" } ?? "nil") validity=\(invalidReason ?? "valid")"
+    }
+}
+
+enum CaptureRouteError: Error {
+    case invalidInputRoute
+    case recoveryFailed
+    static let message = "System audio input is unavailable. Try playing any audio, then record again."
+}
+
+enum CaptureRecoveryResult: String {
+    case none, rebuilding, awaitingSignal, signalDetected, failed
+}
+
 struct CaptureDiagnostics {
     var meter = CaptureMeter()
     var input = "—"
@@ -19,9 +52,11 @@ struct CaptureDiagnostics {
     var running = false
     var attempt = 0
     var event = "idle"
+    var inputRoute = CaptureInputRoute()
+    var recoveryResult: CaptureRecoveryResult = .none
 
     var report: String {
-        "iMic MIC TEST\ninput=\(input) route=\(route)\nsessionRate=\(sampleRate) nativeRate=\(nativeRate) channels=\(channels)\nengineRunning=\(running) attempt=\(attempt) event=\(event)\nRMS=\(meter.rms) peak=\(meter.peak) callbacks=\(meter.callbacks) interval=\(meter.elapsed) allZero=\(meter.allZero)"
+        "iMic MIC TEST\ninput=\(input) route=\(route)\nsessionRate=\(sampleRate) nativeRate=\(nativeRate) channels=\(channels)\nengineRunning=\(running) recoveries=\(attempt) recoveryResult=\(recoveryResult.rawValue) event=\(event)\n\(inputRoute.report)\nRMS=\(meter.rms) peak=\(meter.peak) callbacks=\(meter.callbacks) interval=\(meter.elapsed) allZero=\(meter.allZero)"
     }
 }
 
@@ -43,6 +78,7 @@ struct CaptureNotifications {
     var reset: Notification.Name
     var foreground: Notification.Name
     var interruptionBegan: (Notification) -> Bool
+    var oldDeviceUnavailable: (Notification) -> Bool = { _ in false }
 }
 
 final class AudioCaptureController {
@@ -50,17 +86,21 @@ final class AudioCaptureController {
     private let center: NotificationCenter
     private let names: CaptureNotifications
     private let makeHardware: () -> CaptureHardware
-    private let deactivate: () -> Void
+    private let deactivate: (Bool) -> Void
+    private let rebuildRoute: () throws -> Void
     private let log: (String) -> Void
     private let now: () -> TimeInterval
     private var measuredAt: TimeInterval = 0
     private var observers: [NSObjectProtocol] = []
     private var hardware: CaptureHardware?
     private var active = false
+    private var allowsManualRecovery = false
     private var identity = ""
     private var epoch: UInt64 = 0
     private var retried = false
     private var monitoring = false
+    private var hasMonitored = false
+    private var recoveryResult: CaptureRecoveryResult = .none
     private var noCallbacks: TimeInterval = 0
     private var zeroSamples: TimeInterval = 0
     private var interrupted = false
@@ -69,10 +109,11 @@ final class AudioCaptureController {
     private var last = CaptureDiagnostics()
 
     init(queue: DispatchQueue, center: NotificationCenter, names: CaptureNotifications,
-         makeHardware: @escaping () -> CaptureHardware, deactivate: @escaping () -> Void,
+         makeHardware: @escaping () -> CaptureHardware, deactivate: @escaping (Bool) -> Void,
+         rebuildRoute: @escaping () throws -> Void,
          log: @escaping (String) -> Void, now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.queue = queue; self.center = center; self.names = names
-        self.makeHardware = makeHardware; self.deactivate = deactivate; self.log = log; self.now = now
+        self.makeHardware = makeHardware; self.deactivate = deactivate; self.log = log; self.now = now; self.rebuildRoute = rebuildRoute
         for name in [names.interruption, names.route, names.configuration, names.reset, names.foreground] {
             observers.append(center.addObserver(forName: name, object: nil, queue: nil) { [weak self] note in
                 // Capture the originating engine, never substitute whichever engine is
@@ -82,15 +123,27 @@ final class AudioCaptureController {
         }
     }
 
-    func start(onFailure: @escaping (String) -> Void,
+    func start(rebuildFirst: Bool = false, onFailure: @escaping (String) -> Void,
                onDiagnostics: @escaping (CaptureDiagnostics) -> Void) throws {
         stop()
         self.onFailure = onFailure; self.onDiagnostics = onDiagnostics
         retried = false
+        hasMonitored = false
+        recoveryResult = .none
         guard !interrupted else { throw NSError(domain: "iMic.Audio", code: 1) }
         active = true
+        allowsManualRecovery = true
+        if rebuildFirst {
+            do { try recoverRoute(reason: "mic-test-new-manual-test") }
+            catch { stop(keepManualRecovery: true); throw error }
+            return
+        }
         do { try build() }
-        catch { stop(); throw error }
+        catch CaptureRouteError.invalidInputRoute {
+            do { try recoverRoute(reason: "invalid-route-at-start") }
+            catch { stop(keepManualRecovery: true); throw error }
+        }
+        catch { stop(keepManualRecovery: true); throw error }
     }
 
     private func build() throws {
@@ -98,6 +151,7 @@ final class AudioCaptureController {
         let token = epoch
         noCallbacks = 0; zeroSamples = 0
         measuredAt = now()
+        last.meter = CaptureMeter()
         let new = makeHardware()
         hardware = new
         do {
@@ -112,12 +166,12 @@ final class AudioCaptureController {
                     self.invalidate(message)
                 }
             })
+            guard new.diagnostics.inputRoute.invalidReason == nil else { throw CaptureRouteError.invalidInputRoute }
             identity = new.inputIdentity
             publish(event: retried ? "retry" : "started")
         } catch {
             log("engine start failed: \(error.localizedDescription)")
             publish(event: "start-failed: \(error.localizedDescription)")
-            releaseHardware()
             throw error
         }
     }
@@ -129,16 +183,34 @@ final class AudioCaptureController {
         monitoring = enabled
         measuredAt = now()
         noCallbacks = 0; zeroSamples = 0
-        if enabled { retried = false }
+        if enabled {
+            // Initial activation may already have spent the budget on an invalid
+            // route. Only a subsequent hold re-arms it, never the first arm.
+            if hasMonitored { retried = false; recoveryResult = .none }
+            hasMonitored = true
+            if let hardware, hardware.diagnostics.inputRoute.invalidReason != nil {
+                do { try recoverRoute(reason: "invalid-route-at-hold") }
+                catch { invalidate(CaptureRouteError.message) }
+            }
+        }
     }
 
     private func measure(_ meter: CaptureMeter) {
         guard let hardware else { return }
         last = hardware.diagnostics
         last.meter = meter
+        if recoveryResult == .awaitingSignal, last.inputRoute.invalidReason == nil, meter.hasSamples, !meter.allZero, meter.peak > 0 {
+            recoveryResult = .signalDetected
+            log("route-recovery signal-detected rms=\(meter.rms) peak=\(meter.peak)")
+        }
         publish(event: "meter")
         log("level rms=\(meter.rms) peak=\(meter.peak) callbacks=\(meter.callbacks) route=\(last.route) sessionRate=\(last.sampleRate) nativeRate=\(last.nativeRate) channels=\(last.channels) running=\(last.running)")
         guard monitoring else { return }
+        if last.inputRoute.invalidReason != nil {
+            do { try recoverRoute(reason: "invalid-route-at-meter") }
+            catch { invalidate(CaptureRouteError.message) }
+            return
+        }
         guard last.running else {
             log("engine-stopped; cancel current capture")
             invalidate("Microphone configuration changed. Hold again to record.")
@@ -154,14 +226,51 @@ final class AudioCaptureController {
         guard noCallbacks >= 1 || zeroSamples >= 1 else { return }
         let reason = noCallbacks >= 1 ? (meter.callbacks == 0 ? "no-callbacks" : "no-samples") : "digital-zero"
         log("silent-capture reason=\(reason) retry=\(retried)")
-        if !retried {
-            retried = true
-            log("silent-capture retry=1 fresh-engine reactivate-session")
+        do { try recoverRoute(reason: reason) }
+        catch { invalidate(CaptureRouteError.message) }
+    }
+
+    /// Manual self-test recovery shares the current test's automatic budget. A
+    /// failed initial format/start can still be diagnosed without creating a new
+    /// automatic retry budget. Explicit Start test opens a new user-run test.
+    @discardableResult
+    func recoverManually() -> Bool {
+        guard allowsManualRecovery, !interrupted, !retried else {
+            log("route-recovery manual rejected interrupted=\(interrupted) used=\(retried)")
+            return false
+        }
+        active = true
+        monitoring = true
+        hasMonitored = true
+        do { try recoverRoute(reason: "mic-test-manual") }
+        catch { invalidate(CaptureRouteError.message) }
+        return true
+    }
+
+    private func recoverRoute(reason: String) throws {
+        guard !retried, !interrupted else { throw CaptureRouteError.recoveryFailed }
+        retried = true
+        recoveryResult = .rebuilding
+        last.meter = CaptureMeter()
+        log("route-recovery attempt=1 reason=\(reason) \(last.inputRoute.report)")
+        publish(event: "route-rebuilding")
+        // No notify-others between the two categories: don't resume and then
+        // immediately interrupt someone else's playback during our own recovery.
+        releaseHardware(notifyOthers: false)
+        do {
+            try rebuildRoute()
+            try build() // Hardware validates the post-activation route again.
+            recoveryResult = .awaitingSignal
+            publish(event: "route-rebuilt-awaiting-signal")
+            log("route-recovery route-valid; awaiting native input level")
+        } catch {
+            recoveryResult = .failed
+            let hadHardware = hardware != nil
             releaseHardware()
-            do { try build() }
-            catch { invalidate("No audio received") }
-        } else {
-            invalidate("No audio received")
+            if !hadHardware { deactivate(true) } // A playback activation may have failed halfway.
+            publish(event: "route-recovery-failed")
+            log("route-recovery failed error=\(error) \(last.inputRoute.report)")
+            throw CaptureRouteError.recoveryFailed
         }
     }
 
@@ -179,10 +288,24 @@ final class AudioCaptureController {
         guard let hardware else { return }
         if note.name == names.configuration {
             guard let object = note.object as AnyObject?, object === hardware.notificationObject else { return }
+            if monitoring, hardware.diagnostics.inputRoute.invalidReason != nil {
+                do { try recoverRoute(reason: "invalid-route-at-configuration-change") }
+                catch { invalidate(CaptureRouteError.message) }
+                return
+            }
             invalidate("Microphone configuration changed. Hold again to record.")
         } else if note.name == names.route {
             // setCategory/setActive may emit a route notification for our own start.
             // Ignore it only if actual input identity, format and running state agree.
+            let route = hardware.diagnostics.inputRoute
+            log("route-change oldDeviceUnavailable=\(names.oldDeviceUnavailable(note)) \(route.report)")
+            if route.invalidReason != nil {
+                if monitoring {
+                    do { try recoverRoute(reason: names.oldDeviceUnavailable(note) ? "old-device-unavailable" : "invalid-route-change") }
+                    catch { invalidate(CaptureRouteError.message) }
+                } else { invalidate("Microphone input changed. Hold again to record.") }
+                return
+            }
             log("route-change current=\(hardware.inputIdentity) leased=\(identity) running=\(hardware.diagnostics.running)")
             guard hardware.inputIdentity != identity || !hardware.diagnostics.running else { return }
             invalidate("Microphone input changed. Hold again to record.")
@@ -197,9 +320,10 @@ final class AudioCaptureController {
 
     private func invalidate(_ message: String) {
         guard active else { return }
+        if message == CaptureRouteError.message { recoveryResult = .failed }
         log("invalidate event=\(message); release warm lease")
         let failure = onFailure
-        stop()
+        stop(keepManualRecovery: true)
         publish(event: message)
         failure?(message)
     }
@@ -211,19 +335,21 @@ final class AudioCaptureController {
             last.meter = meter
         } else { last.running = false }
         last.attempt = retried ? 1 : 0
+        last.recoveryResult = recoveryResult
         last.event = event
         onDiagnostics?(last)
     }
 
-    private func releaseHardware() {
+    private func releaseHardware(notifyOthers: Bool = true) {
         epoch &+= 1 // Reject meter/failure callbacks queued during stop/drain.
         guard let old = hardware else { return }
         hardware = nil
         old.stop()
-        deactivate()
+        deactivate(notifyOthers)
     }
 
-    func stop() {
+    func stop(keepManualRecovery: Bool = false) {
+        if !keepManualRecovery { allowsManualRecovery = false }
         active = false
         releaseHardware()
         monitoring = false
