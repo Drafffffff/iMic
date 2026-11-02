@@ -181,6 +181,7 @@
 "Cursor →" = "光标 →";
 "Custom OpenAI-compatible service" = "自定义 OpenAI 兼容服务";
 "Custom service" = "自定义服务";
+"Cut" = "剪切";
 "DeepSeek API" = "DeepSeek 官方 API";
 "Delete" = "删除";
 "Delete is disabled on your Mac" = "删除已在 Mac 关闭";
@@ -205,6 +206,7 @@
 "Download and install updates automatically" = "自动下载并安装更新";
 "Drag here to clear the text field" = "拉入清空输入框";
 "Drag iMic to Applications and open it from there first. Otherwise, permission will be lost the next time you open it." = "请先把 iMic 拖到「应用程序」文件夹，再从那里打开，否则授权在下次打开时会失效。";
+"Edit" = "编辑";
 "Enable AI polish" = "启用 AI 润色";
 "Enable AI polish and conversion" = "启用 AI 润色与转换";
 "Enabled the switch but it still doesn't work?" = "已经打开开关，仍未生效？";
@@ -415,6 +417,7 @@
 "Pairing has expired" = "配对信息已失效";
 "Pairing required" = "需要配对";
 "Paste" = "粘贴";
+"Paste any address from the console's API Quick Access dialog: API Host (hostname only), OpenAI-compatible URL (/compatible-mode/v1), or DashScope URL (/api/v1). URLs must use HTTPS. Leave blank to detect automatically." = "可直接粘贴控制台「API 快捷接入」给出的任一地址：API Host（裸主机名）、OpenAI 兼容地址（/compatible-mode/v1）或 DashScope 地址（/api/v1）。网址须使用 HTTPS；留空自动识别。";
 "Paste the pay-as-you-go Base URL from the console. Leave blank to detect automatically." = "粘贴控制台提供的按量付费 Base URL；留空自动识别。";
 "Paste your Key to detect its region and verify it. One Model Studio Key handles recognition and polish." = "粘贴 Key 后自动识别地域并验证；一个百炼 Key 用于识别和润色。";
 "Pause" = "暂停";
@@ -483,6 +486,7 @@
 "Recording too short. Ignored." = "录音太短，已忽略";
 "Recording too short. Please try again." = "录音太短，再说一次";
 "Recordings can be up to %@ minutes" = "单次录音最长 %@ 分钟";
+"Redo" = "重做";
 "Regenerate" = "重新生成";
 "Release on your iPhone to recognize. Slide up to cancel." = "在 iPhone 上松开会自动识别。上滑即可取消。";
 "Release to cancel" = "松开取消";
@@ -514,6 +518,7 @@
 "Search again" = "重新搜索";
 "Searching for Macs. Choose a computer below." = "正在搜索 Mac，可从下方选择电脑";
 "Searching… Keep iMic open on your Mac." = "正在寻找… 请保持 Mac 上的 iMic 打开。";
+"Select All" = "全选";
 "Select iMic in System Settings and click − to remove it. Then return here and click Open Settings. This is common after reinstalling or updating." = "在系统设置的列表里选中 iMic，点「−」删除，再回到这里点「去开启」。重新安装或更新后常会遇到。";
 "Selected" = "已选择";
 "Send failed" = "发送失败";
@@ -601,6 +606,7 @@
 "This build has no update public key. Wait for an official build from the publisher." = "此构建尚未配置更新公钥，请等待发布者提供正式版本。";
 "This change was not confirmed" = "本次更改未获确认";
 "This development build has no update public key. Automatic checks are off." = "此开发构建尚未配置更新公钥，自动检查已关闭。";
+"This doesn't look like a Model Studio API Key. Check that you copied all of it." = "这不像百炼 API Key，请检查是否复制完整。";
 "This input was canceled" = "本次输入已取消";
 "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. iMic needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page." = "这看起来是 Token Plan 或 Coding Plan 套餐的 Key。套餐 Key 只能用于 Claude Code 等编程工具，iMic 需要按量付费的 API Key。请在百炼控制台的「API Key」页面创建一个新的 Key。";
 "This provider has no valid Key. Polish will keep the original text." = "此来源缺少有效 Key，润色将保留原文。";
@@ -624,8 +630,10 @@
 "Typing in 3 seconds. Click the target text field." = "3 秒后输入，请点击目标文本框";
 "Typing permission has not taken effect" = "输入授权尚未生效";
 "US (Virginia)" = "美国（弗吉尼亚）";
+"Undo" = "撤销";
 "Unknown link frame type" = "链路帧类型未知";
 "Unsupported service address. Paste the official Model Studio pay-as-you-go Base URL (HTTPS, port 443, /compatible-mode/v1). Plan endpoints and other hosts are not supported." = "服务地址不受支持。请粘贴百炼官方按量付费 Base URL（HTTPS、443 端口、/compatible-mode/v1），不要填写套餐地址或其他主机。";
+"Unsupported service address. Use an allowed Model Studio API Host (hostname only) or an HTTPS URL ending in /compatible-mode/v1 or /api/v1 (port 443). Plan addresses and other hosts are not supported." = "服务地址不受支持。请输入白名单内的百炼 API Host（裸主机名），或路径为 /compatible-mode/v1、/api/v1 的 HTTPS 地址（443 端口）。不支持套餐地址或其他主机。";
 "Update iMic on your Mac to enable string controls" = "请更新 Mac 端启用弦控制";
 "Update iMic on your Mac to set mode, tone, and output language from your phone." = "请更新 Mac 端 iMic，以支持模式、语气和输出语言设置。";
 "Uploading audio…" = "正在上传音频…";

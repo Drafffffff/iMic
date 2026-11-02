@@ -30,4 +30,7 @@ cp -R "$ROOT/mac/Resources/"*.lproj "$APP/Contents/Resources/"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0"><dict><key>CFBundleIdentifier</key><string>imic.settings.tests</string><key>CFBundleExecutable</key><string>settings-tests</string><key>CFBundleDevelopmentRegion</key><string>en</string><key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string></array></dict></plist>
 PLIST
-"$APP/Contents/MacOS/settings-tests" --ui-preview=settings-external-key "$@"
+# Exercise both translations with the same compiled native harness.
+for language in en zh-Hans; do
+  "$APP/Contents/MacOS/settings-tests" --ui-preview=settings-external-key -AppleLanguages "($language)" "$@"
+done
