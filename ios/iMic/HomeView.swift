@@ -57,9 +57,9 @@ struct HomeView: View {
                 TechBackground()
                 let width = max(1, geometry.size.width - contentInset * 2)
                 let height = geometry.size.height
-                let instrumentHeight = min(300, height * (dynamicType.isAccessibilitySize ? 0.24 : 0.40))
-                // Keep the entire interaction area together and about 24pt lower than the draft.
-                let instrumentCenter = height * (dynamicType.isAccessibilitySize ? 0.40 : 0.52)
+                let instrumentHeight = moreGestures ? min(90, height * 0.12) : dynamicType.isAccessibilitySize ? min(80, height * 0.11) : min(300, height * 0.40)
+                // Large teaching copy keeps the real instrument compact and below the status block.
+                let instrumentCenter = height * (moreGestures ? 0.77 : dynamicType.isAccessibilitySize ? 0.75 : 0.52)
                 Group {
                     header
                         .frame(width: width, height: 62, alignment: .top)
@@ -119,7 +119,6 @@ struct HomeView: View {
                         .zIndex(10)
                 }
             }
-            .accessibilityHidden(onboarding.presented && (onboarding.step == .welcome || onboarding.action == .more && onboarding.step == .practice))
             .coordinateSpace(name: "home")
             .animation(.easeOut(duration: 0.22), value: showResult)
             .overlayPreferenceValue(ReceiverAnchorsKey.self) { anchors in
@@ -493,23 +492,24 @@ struct HomeView: View {
             canRecord:canRecordNow,listening:session.phase == .listening,
             elapsed:String(format: "%.1f s", locale: L10n.locale,session.elapsed),hasResult:hasResultText,
             notice:cancelArmed ? L10n.text("Release to cancel"):session.notice,
-            noticeColor:cancelArmed ? Theme.ivory:Theme.muted)
+            noticeColor:cancelArmed ? Theme.ivory:Theme.muted,
+            teaching:guideStatus, guideHeader:guideHeader, statusDetail:statusDetail,
+            celebrating:onboarding.celebrating, dynamicType:dynamicType)
     }
 
     private var header: some View {
         HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                Image("Wordmark")
-                    .renderingMode(.original)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: HoldBarLayout.wordmark.width, height: HoldBarLayout.wordmark.height,
-                           alignment: .leading)
-                    .blendMode(.screen)
-                    .accessibilityLabel("iMic")
-                HUDLabel(text: "SYS 01")
-            }
+            InstrumentIdentity()
             Spacer(minLength: 12)
+            if guideStatus {
+                Button {
+                    if onboarding.step == .welcome { onboarding.go(.link) } else { onboarding.skip() }
+                } label: {
+                    HUDLabel(text: guideHeader ?? "GUIDE", color: Theme.ivory).frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.plain).offset(y: -9)
+                .accessibilityIdentifier(onboarding.step == .welcome ? "onboarding.existing" : "onboarding.skip")
+            } else {
             HStack(spacing: 5) {
                 Button {
                     Haptics.shared.play(.tap)
@@ -551,29 +551,32 @@ struct HomeView: View {
             // Align the visible glyph, rather than its 44pt touch target, to the content edge.
             .padding(.trailing, -12)
             .offset(y: -9)
+            }
         }
     }
 
     // MARK: - Status
 
     private func statusBlock(width: CGFloat) -> some View {
-        VStack(alignment: .center, spacing: 0) {
-            HUDLabel(text: "VOICE / INPUT")
-                .padding(.bottom, 13)
-            PixelText(text: statusWord, cell: statusCell(width: width),
-                      color: statusColor, tracking: 2.8)
-                .modifier(PhosphorReadout(color: statusColor))
-                .frame(height: 30, alignment: .center)
-            Text(statusLine)
-                .modifier(InstrumentHint())
-                .lineLimit(session.phase == .error ? nil : 2)
-                .multilineTextAlignment(.center)
-                .lineSpacing(3)
-                .frame(minHeight: 34, alignment: .top)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 13)
-        }
-        .frame(width: width, alignment: .center)
+        InstrumentStatus(word: statusWord, description: statusLine, detail: statusDetail,
+                         cell: statusCell(width: width), color: statusColor, teaching: guideStatus,
+                         celebrating: onboarding.celebrating)
+            .frame(width: width)
+    }
+
+    private var moreGestures: Bool { onboarding.localHome && onboarding.step == .practice && onboarding.action == .more }
+    private var guideStatus: Bool {
+        onboarding.presented && !onboardingConnection && !(onboarding.step == .ready && session.phase == .error)
+    }
+    private var guideHeader: String? {
+        guard guideStatus else { return nil }
+        if onboarding.step == .welcome { return "GUIDE · " + L10n.text("Used iMic") }
+        let progress = onboarding.step == .practice ? onboarding.action.progress.replacingOccurrences(of: " / ", with: "/0") : "3/03"
+        return "GUIDE 0" + progress + " · " + L10n.text("Skip")
+    }
+    private var statusDetail: String? {
+        guideStatus && onboarding.step == .ready && !onboarding.celebrating
+            ? L10n.text("Microphone access is needed when you speak") : nil
     }
 
     // MARK: - Result
@@ -850,6 +853,8 @@ struct HomeView: View {
 
     private func beginInteraction() {
         guard !interactionStart else { return }
+        if onboarding.localHome && onboarding.step == .practice && !onboarding.action.bar { return }
+        if onboarding.presented && onboarding.step == .welcome { onboarding.startPractice() }
         interactionStart = true
         if onboarding.connectionDeferred { startConnection() }
         if !canRecordNow {
@@ -968,6 +973,23 @@ struct HomeView: View {
     }
 
     private var statusWord: String {
+        if guideStatus {
+            if onboarding.celebrating { return "DONE" }
+            if onboarding.step == .welcome { return "READY" }
+            if onboarding.step == .practice {
+                if session.phase == .transcribing { return "POLISH" }
+                switch onboarding.action {
+                case .hold: return "HOLD"
+                case .release: return "RELEASE"
+                case .send: return "PULL"
+                case .more: return "DONE"
+                case .delete: return "DELETE"
+                case .cursor: return "SLIDE"
+                case .clear: return "CLEAR"
+                case .cancel: return "CANCEL"
+                }
+            }
+        }
         switch session.phase {
         case .listening: return "LISTEN"
         case .transcribing: return session.isUploading ? "SENDING" : "POLISH"
@@ -992,6 +1014,12 @@ struct HomeView: View {
     }
 
     private var statusLine: String {
+        if guideStatus {
+            if onboarding.celebrating { return L10n.text("That's it.") }
+            if onboarding.step == .welcome { return L10n.text("One phone. Every input.") }
+            if onboarding.step == .practice { return onboarding.action.prompt }
+            if session.phase == .idle { return L10n.text("Click your Mac's input, then hold to speak") }
+        }
         if session.practiceActive {
             if session.phase == .result {
                 if [.delete, .cursor, .clear].contains(onboarding.action) { return session.practice.cursorText }
@@ -1034,6 +1062,7 @@ struct HomeView: View {
     }
 
     private var barFill: Color {
+        if guideStatus { return Theme.orange }
         if macFinishing { return Theme.orangeDeep }
         switch session.phase {
         case .transcribing: return Theme.orangeDeep
@@ -1043,6 +1072,7 @@ struct HomeView: View {
     }
 
     private var barTextColor: Color {
+        if guideStatus { return Theme.ink }
         if session.phase == .listening || stringProcessing {
             return stringProcessing ? Theme.ivory : Theme.ink
         }
@@ -1050,7 +1080,8 @@ struct HomeView: View {
     }
 
     private var barLabel: String {
-        if session.micDenied { return "ENABLE MIC" }
+        if guideStatus && onboarding.step == .welcome { return "HOLD TO START" }
+        if !session.practiceActive && session.micDenied { return "ENABLE MIC" }
         switch session.phase {
         case .listening: return cancelArmed ? "RELEASE TO CANCEL" : "RELEASE TO SEND"
         case .transcribing: return "TRANSCRIBING"

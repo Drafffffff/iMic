@@ -15,16 +15,18 @@ struct HUDLabel: View {
 }
 
 struct InstrumentHint: ViewModifier {
+    var color: Color = Theme.muted
+    @ScaledMetric(relativeTo: .caption2) private var size: CGFloat = 10
     func body(content: Content) -> some View {
         content
-            .font(.system(size: 10, weight: .regular))
+            .font(.system(size: size, weight: .regular))
             .tracking(0.2)
-            .foregroundStyle(Theme.muted)
+            .foregroundStyle(color)
     }
 }
 
 struct PixelSymbol: View {
-    enum Kind { case settings, microphone }
+    enum Kind { case settings, microphone, computer, check, up, sideways, clear, cancel }
     let kind: Kind
     var color: Color = Theme.ivory
 
@@ -42,7 +44,17 @@ struct PixelSymbol: View {
 
     var body: some View {
         Canvas { context, size in
-            let rows = kind == .settings ? Self.settings : Self.microphone
+            let rows: [String]
+            switch kind {
+            case .settings: rows = Self.settings
+            case .microphone: rows = Self.microphone
+            case .computer: rows = ["111111111", "100000001", "100000001", "100000001", "111111111", "000010000", "001111100"]
+            case .check: rows = ["0000001", "0000010", "1000100", "0101000", "0010000"]
+            case .up: rows = ["0001000", "0011100", "0101010", "1001001", "0001000", "0001000", "0001000"]
+            case .sideways: rows = ["0010100", "0100010", "1111111", "0100010", "0010100"]
+            case .clear: rows = ["1111111", "0000000", "0001000", "0011100", "0101010", "0001000", "0001000"]
+            case .cancel: rows = ["1000001", "0100010", "0010100", "0001000", "0010100", "0100010", "1000001"]
+            }
             let columns = rows.first?.count ?? 1
             let cell = min(size.width / CGFloat(columns), size.height / CGFloat(rows.count))
             let left = (size.width - CGFloat(columns) * cell) / 2
@@ -139,5 +151,60 @@ struct HUDDivider: View {
                          with: .color((connected ? Theme.orange : Theme.muted).opacity(0.7)))
         }
         .accessibilityHidden(true)
+    }
+}
+
+/// The instrument's identity and status are shared by native UI and Metal artwork.
+struct InstrumentIdentity: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image("Wordmark").renderingMode(.original).resizable().scaledToFit()
+                .frame(width: HoldBarLayout.wordmark.width, height: HoldBarLayout.wordmark.height, alignment: .leading)
+                .blendMode(.screen).accessibilityLabel("iMic")
+            HUDLabel(text: "SYS 01")
+        }
+    }
+}
+
+struct InstrumentStatus: View {
+    var label = "VOICE / INPUT"
+    let word: String
+    let description: String
+    var detail: String? = nil
+    var cell: CGFloat = 4.2
+    var color: Color = Theme.orange
+    var teaching = false
+    var celebrating = false
+    var body: some View {
+        VStack(spacing: 0) {
+            HUDLabel(text: label).padding(.bottom, 13)
+            PixelText(text: word, cell: cell, color: color, tracking: 2.8)
+                .modifier(PhosphorReadout(color: color)).frame(height: 30)
+                .accessibilityElement(children: .ignore).accessibilityLabel(word)
+            Text(description).modifier(InstrumentHint(color: teaching ? Theme.ivory : Theme.muted))
+                .multilineTextAlignment(.center).lineSpacing(3)
+                .frame(minHeight: 34, alignment: .top).fixedSize(horizontal: false, vertical: true).padding(.top, 13)
+                .accessibilityIdentifier(teaching ? (celebrating ? "onboarding.complete" : "onboarding.prompt") : "home.status")
+            if let detail {
+                Text(detail).modifier(InstrumentHint()).multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true).padding(.top, 4)
+            }
+        }.fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Square scan indicators use motion only while this loading state is visible.
+struct PixelScan: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.25, paused: reduceMotion || scenePhase != .active)) { timeline in
+            let active = Int(timeline.date.timeIntervalSinceReferenceDate * 3) % 3
+            HStack(spacing: 6) {
+                ForEach(0..<3) { index in
+                    Rectangle().fill(Theme.orange.opacity(reduceMotion || index == active ? 1 : 0.25)).frame(width: 4, height: 4)
+                }
+            }
+        }.accessibilityHidden(true)
     }
 }

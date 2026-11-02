@@ -9,10 +9,10 @@ final class ShippingPracticeUITests: XCTestCase {
         // Run on a fresh installation in this task's dedicated simulator.
         app.launchArguments = ["-AppleLanguages", "(en)"]
         app.launch()
-        XCTAssertTrue(app.buttons["onboarding.start"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["home.hold"].waitForExistence(timeout: 20))
+        XCTAssertEqual(app.buttons["home.hold"].label, "HOLD TO START")
+        XCTAssertFalse(app.buttons["onboarding.start"].exists)
         Thread.sleep(forTimeInterval: 1)
-        app.buttons["onboarding.start"].tap()
-        XCTAssertTrue(app.buttons["home.hold"].waitForExistence(timeout: 5))
         app.buttons["home.hold"].press(forDuration: 2.2)
         let prompt = app.staticTexts["onboarding.prompt"]
         let wait = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Pull the string to send"), object: prompt)

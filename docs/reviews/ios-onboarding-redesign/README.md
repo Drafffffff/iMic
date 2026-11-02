@@ -2,7 +2,9 @@
 
 本目录是任务书第 8 节的截图与报告。截图由本任务创建的专用模拟器、真实 HomeView / DeviceSelectionView / PairingSheet 组件生成；预览只提供可重复的状态数据。录屏与 UI 测试直接走正式引导状态机。
 
-- [测试、隔离与合并说明](verification.md)
+- [最新 HUD 视觉修订、逐项对照与测试](visual-pass.md)
+- [改前 / 改后对照拼图](before-after.png)
+- [初次交付的测试、隔离与合并说明](verification.md)
 - [新旧屏数与逐屏字数](copy-counts.md)
 - 录屏：仓库本地 `build/onboarding-redesign/release-journey.mp4`，在 Release 模拟器包中从欢迎、三步练习、更多手势卡、连接页到“稍后再连接”返回主页。文件不纳入 Git。
 
@@ -22,6 +24,6 @@
 | 首次真实输入提示 | [PNG](pro-zh-Hans-10-ready.png) | [PNG](pro-en-10-ready.png) | [PNG](se-zh-Hans-10-ready.png) | [PNG](se-en-10-ready.png) |
 | 完成提示 | [PNG](pro-zh-Hans-11-complete.png) | [PNG](pro-en-11-complete.png) | [PNG](se-zh-Hans-11-complete.png) | [PNG](se-en-11-complete.png) |
 
-另附 [SE 最大辅助功能字号](se-en-accessibility-xxxl.png)。普通提示为系统 17pt 动态字体；辅助功能字号下真实主页为提示留出仪器间距，极端长提示可滚动，录音条与弦仍保持原生操作。
+另附 [SE 最大辅助功能字号](se-en-accessibility-xxxl.png)。说明复用主页 InstrumentHint 的系统 10pt 基准并随动态字体放大；辅助功能字号下真实弦缩小并让开状态区，录音条与弦仍保持原生操作。
 
 “发现 Mac / 配对 / 首次输入 / 完成”截图使用 DEBUG 可视化数据，未向真实 Mac 输入；系统配对输入框和下载共享面板仍是正式组件。练习功能和录屏使用的 Release 流程不依赖这些预览参数。

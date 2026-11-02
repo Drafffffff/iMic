@@ -8,8 +8,10 @@ final class OnboardingUITests: XCTestCase {
         app.resetAuthorizationStatus(for: .microphone)
         app.launchArguments = ["--debug-reset-onboarding", "--debug-onboarding-audit", "-AppleLanguages", "(en)"]
         app.launch()
-        XCTAssertTrue(app.buttons["onboarding.start"].waitForExistence(timeout: 20))
-        app.buttons["onboarding.start"].tap()
+        XCTAssertTrue(app.buttons["home.hold"].waitForExistence(timeout: 20))
+        XCTAssertEqual(app.buttons["home.hold"].label, "HOLD TO START")
+        XCTAssertFalse(app.buttons["onboarding.start"].exists)
+        app.buttons["home.hold"].press(forDuration: 0.12)
         prompt("Hold the bar and speak", app)
         return app
     }

@@ -18,19 +18,20 @@ struct MacDownloadView: View {
     @State private var activity: NSUserActivity?
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            GuideTitle(text: "iMic", cell: 4, color: Theme.ivory)
-            Text(L10n.text("Return here after installing")).font(.body)
+            InstrumentIdentity()
+            Hairline()
+            Text(L10n.text("Return here after installing")).modifier(InstrumentHint(color: Theme.ivory))
             ShareLink(item: OnboardingLinks.download) {
-                Label(L10n.text("Share link"), systemImage: "square.and.arrow.up").frame(minHeight: 44)
+                HStack { Text(L10n.text("Share link")).modifier(InstrumentHint(color: Theme.ivory)); Spacer(); HUDLabel(text: "SHARE ›") }.frame(minHeight: 44).overlay(alignment: .bottom) { Hairline() }
             }
             Button {
                 UIPasteboard.general.url = OnboardingLinks.download
                 copied = true; Haptics.shared.play(.copy)
             } label: {
-                Label(copied ? L10n.text("Copied") : L10n.text("Copy link"), systemImage: "doc.on.doc").frame(minHeight: 44)
+                HStack { Text(copied ? L10n.text("Copied") : L10n.text("Copy link")).modifier(InstrumentHint(color: Theme.ivory)); Spacer(); HUDLabel(text: "COPY ›") }.frame(minHeight: 44).overlay(alignment: .bottom) { Hairline() }
             }.accessibilityIdentifier("download.copy")
             Text(L10n.text("Open the Safari Handoff icon on your Mac"))
-                .font(.footnote).foregroundStyle(Theme.muted)
+                .modifier(InstrumentHint())
         }
         .padding(24).frame(maxWidth: .infinity, alignment: .leading)
         .foregroundStyle(Theme.ivory).tint(Theme.orange)
@@ -45,68 +46,37 @@ struct MacDownloadView: View {
     }
 }
 
-/// Cutouts use the real HomeView anchors, after the Metal compositor has rendered.
+/// Only target decoration lives above the compositor. All teaching copy is Home's status.
 struct OnboardingView: View {
     @EnvironmentObject private var onboarding: OnboardingCoordinator
     @EnvironmentObject private var session: SessionModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
-    @Environment(\.dynamicTypeSize) private var dynamicType
-    @ScaledMetric(relativeTo: .body) private var promptGap: CGFloat = 85
-    @AccessibilityFocusState private var promptFocused: Bool
     let source: CGRect
     let torus: CGRect
     let size: CGSize
     let topInset: CGFloat
 
-    private var focus: CGRect {
-        if onboarding.step == .welcome || onboarding.celebrating || onboarding.action == .more && onboarding.step == .practice { return .zero }
-        return onboarding.step == .ready || onboarding.action.bar ? source.insetBy(dx: -4, dy: -4) : torus
+    private var moreVisible: Bool { onboarding.step == .practice && onboarding.action == .more }
+    private var target: CGRect {
+        onboarding.step == .welcome || onboarding.step == .ready || onboarding.action.bar ? source.insetBy(dx: -4, dy: -4) : torus
     }
     var body: some View {
         ZStack {
-            CoachShade(hole: focus)
-                .fill(.black.opacity(0.60), style: FillStyle(eoFill: true))
-                .allowsHitTesting(false)
-            // Outside the focused component touches stop here; the cutout passes through.
-            Color.clear.contentShape(CoachShade(hole: focus), eoFill: true)
-                .onTapGesture { }
-                .accessibilityHidden(true)
-            if onboarding.step == .welcome {
-                welcome
-            } else if onboarding.celebrating {
-                Text(L10n.text("That's it.")).font(.body).foregroundStyle(Theme.ivory)
-                    .accessibilityIdentifier("onboarding.complete")
-                    .position(x: size.width / 2, y: size.height * 0.40)
-            } else if onboarding.action == .more && onboarding.step == .practice {
-                more
-            } else {
-                coach
-            }
-            if onboarding.step != .welcome && !onboarding.celebrating {
-                HStack {
-                    Button(L10n.text("Skip")) { onboarding.skip() }
-                        .accessibilityIdentifier("onboarding.skip").frame(minWidth: 44, minHeight: 44)
-                    Spacer()
-                    if onboarding.step == .practice {
-                        PixelText(text: onboarding.action.progress, cell: 1.3, color: Theme.ivory)
-                            .fixedSize()
-                            .accessibilityHidden(false)
-                            .accessibilityLabel(onboarding.action.progress)
-                    }
+            if moreVisible { more }
+            else if !onboarding.celebrating {
+                HUDTarget(store: session.spectrumStore, target: target)
+                    .allowsHitTesting(false).accessibilityHidden(true)
+                if onboarding.step == .practice {
+                    CoachTouch(action: onboarding.action, source: source, torus: torus, reduceMotion: reduceMotion)
+                        .allowsHitTesting(false).accessibilityHidden(true)
                 }
-                .foregroundStyle(Theme.ivory).font(.callout)
-                .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                .padding(.horizontal, 24)
-                .frame(width: size.width, height: 64)
-                .position(x: size.width / 2, y: topInset + 69)
             }
             #if DEBUG
             OnboardingAudit().position(x: size.width / 2, y: 100)
             #endif
         }
         .task(id: onboarding.action) {
-            promptFocused = true
             if voiceOver { UIAccessibility.post(notification: .announcement, argument: onboarding.action.prompt) }
         }
         .task(id: onboarding.celebrating) {
@@ -115,78 +85,63 @@ struct OnboardingView: View {
             if !Task.isCancelled { onboarding.complete() }
         }
     }
-    private var welcome: some View {
-        VStack(spacing: 26) {
-            Image("Wordmark").resizable().scaledToFit().frame(width: 120, height: 45).accessibilityLabel("iMic")
-            Text(L10n.text("One phone. Every input.")).font(.body).multilineTextAlignment(.center)
-            Button(L10n.text("Get started")) { onboarding.startPractice() }
-                .font(.headline).frame(minWidth: 140, minHeight: 48)
-                .foregroundStyle(Theme.ink).background(Theme.ivory)
-                .accessibilityIdentifier("onboarding.start")
-        }
-        .foregroundStyle(Theme.ivory).padding(24)
-        .position(x: size.width / 2, y: size.height * 0.43)
-        .overlay(alignment: .bottom) {
-            Button(L10n.text("I've used iMic before")) { onboarding.go(.link) }
-                .font(.callout).foregroundStyle(Theme.ivory).frame(minHeight: 44)
-                .position(x: size.width / 2, y: size.height - (dynamicType.isAccessibilitySize ? 90 : 42))
-        }
-    }
     private var more: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.text("More gestures")).font(.body)
-            HStack {
-                Button(L10n.text("Show me")) { onboarding.setAction(.delete) }.accessibilityIdentifier("onboarding.more")
-                Spacer()
-                Button(L10n.text("Later")) { onboarding.finishPractice() }.accessibilityIdentifier("onboarding.later")
-            }.font(.callout).frame(minHeight: 44)
+        let height = source.minY + 100 - topInset
+        let top = topInset + height * 0.145 + 110
+        let panelHeight = min(240, max(0, torus.minY - top - 10))
+        return VStack(alignment: .leading, spacing: 0) {
+            HUDLabel(text: "MORE / GESTURES").frame(height: 12, alignment: .leading)
+            ScrollView {
+                VStack(spacing: 0) {
+                    gestureRow(.delete, symbol: .up)
+                    gestureRow(.cursor, symbol: .sideways)
+                    gestureRow(.clear, symbol: .clear)
+                    gestureRow(.cancel, symbol: .cancel)
+                }
+            }.scrollIndicators(.hidden)
+            Button { onboarding.finishPractice() } label: {
+                HStack { HUDLabel(text: "LATER"); Spacer(); HUDLabel(text: "›") }.frame(minHeight: 44)
+            }.accessibilityIdentifier("onboarding.later")
         }
-        .foregroundStyle(Theme.ivory).padding(20).background(Theme.panel)
-        .overlay(Rectangle().stroke(Theme.line))
-        .padding(.horizontal, 24).frame(maxWidth: 420)
-        .position(x: size.width / 2, y: min(size.height - 100, source.minY - 32))
+        .buttonStyle(.plain).padding(.horizontal, 12).padding(.vertical, 4)
+        .frame(width: source.width, height: panelHeight)
+        .background(Theme.ink).overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("onboarding.morePanel")
+        .position(x: source.midX, y: top + panelHeight / 2)
     }
-    private var coach: some View {
-        let bar = onboarding.step == .ready || onboarding.action.bar
-        let prompt = onboarding.step == .ready
-            ? L10n.text("Click your Mac's input, then hold to speak") : onboarding.action.prompt
-        let promptHeight = max(44, bar ? min(promptGap * 1.8, source.minY - topInset - 140) : source.minY - torus.maxY - 32)
-        return ZStack {
-            ScrollView(.vertical) {
-            VStack(spacing: 8) {
-                Text(prompt).font(.body).foregroundStyle(Theme.ivory)
-                    .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("onboarding.prompt")
-                    .accessibilityFocused($promptFocused)
-                    .accessibilityAddTraits(.updatesFrequently)
-                if onboarding.step == .ready {
-                    Text(L10n.text("Microphone access is needed when you speak"))
-                        .font(.footnote).foregroundStyle(Theme.ivory.opacity(0.8))
-                }
-                if voiceOver {
-                    Button(L10n.text("Skip this step")) { onboarding.skip() }.frame(minHeight: 44)
-                }
-            }
-            .padding(.horizontal, 28)
-            .frame(maxWidth: .infinity, minHeight: promptHeight)
-            }
-            .scrollIndicators(.hidden)
-            .frame(height: promptHeight)
-            .position(x: size.width / 2, y: bar ? max(topInset + 120, source.minY - promptGap) : (torus.maxY + source.minY) / 2)
-            if onboarding.step == .practice {
-                CoachTouch(action: onboarding.action, source: source, torus: torus, reduceMotion: reduceMotion)
-                    .allowsHitTesting(false).accessibilityHidden(true)
-            }
-        }
+    private func gestureRow(_ action: OnboardingCoordinator.Action, symbol: PixelSymbol.Kind) -> some View {
+        Button { onboarding.setAction(action) } label: {
+            HStack(spacing: 12) {
+                PixelSymbol(kind: symbol, color: Theme.muted).frame(width: 12, height: 12)
+                Text(action.prompt).modifier(InstrumentHint(color: Theme.ivory))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 4)
+                HUDLabel(text: "TRY ›", color: Theme.orange)
+            }.frame(minHeight: 44).contentShape(Rectangle())
+                .overlay(alignment: .bottom) { Hairline() }
+        }.accessibilityIdentifier(action == .delete ? "onboarding.more" : "onboarding.try." + action.rawValue)
     }
 }
 
-private struct CoachShade: Shape {
-    var hole: CGRect
-    func path(in rect: CGRect) -> Path {
-        var path = Path(rect)
-        if !hole.isEmpty { path.addRoundedRect(in: hole, cornerSize: CGSize(width: 5, height: 5)) }
-        return path
+private struct HUDTarget: View {
+    @ObservedObject var store: SpectrumStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let target: CGRect
+    var body: some View {
+        Canvas { context, _ in
+            let opacity = reduceMotion ? 1 : 0.8 + 0.2 * sin(CACurrentMediaTime() * 2 * .pi / 1.6)
+            var brackets = Path()
+            for (x, y, dx, dy) in [(target.minX, target.minY, 1.0, 1.0),
+                                   (target.maxX, target.minY, -1.0, 1.0),
+                                   (target.minX, target.maxY, 1.0, -1.0),
+                                   (target.maxX, target.maxY, -1.0, -1.0)] {
+                brackets.move(to: CGPoint(x: x + dx * 9, y: y))
+                brackets.addLine(to: CGPoint(x: x, y: y))
+                brackets.addLine(to: CGPoint(x: x, y: y + dy * 9))
+            }
+            context.stroke(brackets, with: .color(Theme.ivory.opacity(opacity)), lineWidth: 0.7)
+        }
     }
 }
 
@@ -210,13 +165,16 @@ private struct CoachTouch: View {
         }
     }
     var body: some View {
-        Group {
+        ZStack {
             if reduceMotion {
-                Image(systemName: action == .send ? "arrow.down" : action == .cursor ? "arrow.right" : action == .hold ? "hand.tap" : "arrow.up")
-                    .font(.title2).foregroundStyle(Theme.ivory.opacity(0.65))
+                PixelSymbol(kind: action == .cursor ? .sideways : .up, color: Theme.ivory)
+                    .rotationEffect(.degrees(action == .send ? 180 : 0)).frame(width: 9, height: 9)
                     .position(x: start.x + 48, y: start.y)
             } else {
-                Circle().fill(Theme.ivory.opacity(0.32)).frame(width: 44, height: 44)
+                Rectangle().fill(Theme.ivory).frame(width: 4, height: 4)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(Theme.ivory.opacity(0.4)).frame(width: 2, height: 12).offset(y: 12)
+                    }
                     .position(x: start.x + (moved ? delta.width : 0), y: start.y + (moved ? delta.height : 0))
                     .opacity(visible ? 1 : 0)
             }
