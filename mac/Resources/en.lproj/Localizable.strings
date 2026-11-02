@@ -181,6 +181,7 @@
 "Cursor →" = "Cursor →";
 "Custom OpenAI-compatible service" = "Custom OpenAI-compatible service";
 "Custom service" = "Custom service";
+"Cut" = "Cut";
 "DeepSeek API" = "DeepSeek API";
 "Delete" = "Delete";
 "Delete is disabled on your Mac" = "Delete is disabled on your Mac";
@@ -205,6 +206,7 @@
 "Download and install updates automatically" = "Download and install updates automatically";
 "Drag here to clear the text field" = "Drag here to clear the text field";
 "Drag iMic to Applications and open it from there first. Otherwise, permission will be lost the next time you open it." = "Drag iMic to Applications and open it from there first. Otherwise, permission will be lost the next time you open it.";
+"Edit" = "Edit";
 "Enable AI polish" = "Enable AI polish";
 "Enable AI polish and conversion" = "Enable AI polish and conversion";
 "Enabled the switch but it still doesn't work?" = "Enabled the switch but it still doesn't work?";
@@ -415,6 +417,7 @@
 "Pairing has expired" = "Pairing has expired";
 "Pairing required" = "Pairing required";
 "Paste" = "Paste";
+"Paste any address from the console's API Quick Access dialog: API Host (hostname only), OpenAI-compatible URL (/compatible-mode/v1), or DashScope URL (/api/v1). URLs must use HTTPS. Leave blank to detect automatically." = "Paste any address from the console's API Quick Access dialog: API Host (hostname only), OpenAI-compatible URL (/compatible-mode/v1), or DashScope URL (/api/v1). URLs must use HTTPS. Leave blank to detect automatically.";
 "Paste the pay-as-you-go Base URL from the console. Leave blank to detect automatically." = "Paste the pay-as-you-go Base URL from the console. Leave blank to detect automatically.";
 "Paste your Key to detect its region and verify it. One Model Studio Key handles recognition and polish." = "Paste your Key to detect its region and verify it. One Model Studio Key handles recognition and polish.";
 "Pause" = "Pause";
@@ -483,6 +486,7 @@
 "Recording too short. Ignored." = "Recording too short. Ignored.";
 "Recording too short. Please try again." = "Recording too short. Please try again.";
 "Recordings can be up to %@ minutes" = "Recordings can be up to %@ minutes";
+"Redo" = "Redo";
 "Regenerate" = "Regenerate";
 "Release on your iPhone to recognize. Slide up to cancel." = "Release on your iPhone to recognize. Slide up to cancel.";
 "Release to cancel" = "Release to cancel";
@@ -514,6 +518,7 @@
 "Search again" = "Search again";
 "Searching for Macs. Choose a computer below." = "Searching for Macs. Choose a computer below.";
 "Searching… Keep iMic open on your Mac." = "Searching… Keep iMic open on your Mac.";
+"Select All" = "Select All";
 "Select iMic in System Settings and click − to remove it. Then return here and click Open Settings. This is common after reinstalling or updating." = "Select iMic in System Settings and click − to remove it. Then return here and click Open Settings. This is common after reinstalling or updating.";
 "Selected" = "Selected";
 "Send failed" = "Send failed";
@@ -601,6 +606,7 @@
 "This build has no update public key. Wait for an official build from the publisher." = "This build has no update public key. Wait for an official build from the publisher.";
 "This change was not confirmed" = "This change was not confirmed";
 "This development build has no update public key. Automatic checks are off." = "This development build has no update public key. Automatic checks are off.";
+"This doesn't look like a Model Studio API Key. Check that you copied all of it." = "This doesn't look like a Model Studio API Key. Check that you copied all of it.";
 "This input was canceled" = "This input was canceled";
 "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. iMic needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page." = "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. iMic needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page.";
 "This provider has no valid Key. Polish will keep the original text." = "This provider has no valid Key. Polish will keep the original text.";
@@ -624,8 +630,10 @@
 "Typing in 3 seconds. Click the target text field." = "Typing in 3 seconds. Click the target text field.";
 "Typing permission has not taken effect" = "Typing permission has not taken effect";
 "US (Virginia)" = "US (Virginia)";
+"Undo" = "Undo";
 "Unknown link frame type" = "Unknown link frame type";
 "Unsupported service address. Paste the official Model Studio pay-as-you-go Base URL (HTTPS, port 443, /compatible-mode/v1). Plan endpoints and other hosts are not supported." = "Unsupported service address. Paste the official Model Studio pay-as-you-go Base URL (HTTPS, port 443, /compatible-mode/v1). Plan endpoints and other hosts are not supported.";
+"Unsupported service address. Use an allowed Model Studio API Host (hostname only) or an HTTPS URL ending in /compatible-mode/v1 or /api/v1 (port 443). Plan addresses and other hosts are not supported." = "Unsupported service address. Use an allowed Model Studio API Host (hostname only) or an HTTPS URL ending in /compatible-mode/v1 or /api/v1 (port 443). Plan addresses and other hosts are not supported.";
 "Update iMic on your Mac to enable string controls" = "Update iMic on your Mac to enable string controls";
 "Update iMic on your Mac to set mode, tone, and output language from your phone." = "Update iMic on your Mac to set mode, tone, and output language from your phone.";
 "Uploading audio…" = "Uploading audio…";

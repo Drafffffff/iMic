@@ -41,6 +41,7 @@ final class SettingsField: NSStackView, NSTextFieldDelegate {
         for field in [concealed, revealed] {
             field.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
             field.bezelStyle = .roundedBezel; field.delegate = self
+            field.configureSingleLineInput()
             field.target = self; field.action = #selector(saveAction)
             field.setAccessibilityLabel(title)
             field.heightAnchor.constraint(equalToConstant: 28).isActive = true
@@ -104,5 +105,19 @@ final class SettingsField: NSStackView, NSTextFieldDelegate {
         eye.image = NSImage(systemSymbolName: showing ? "eye.slash" : "eye", accessibilityDescription: nil)
         eye.setAccessibilityLabel(L10n.text("%@ %@", L10n.argument(showing ? L10n.text("Hide") : L10n.text("Show")), L10n.argument(title)))
         window?.makeFirstResponder(showing ? revealed : concealed)
+    }
+}
+
+// Configure the cell as well as the field: secure cells otherwise wrap long masks.
+extension NSTextField {
+    func configureSingleLineInput() {
+        maximumNumberOfLines = 1
+        cell?.wraps = false
+        cell?.isScrollable = true
+        cell?.usesSingleLineMode = true
+        cell?.lineBreakMode = .byClipping
+        textColor = .imicIvory
+        drawsBackground = true
+        backgroundColor = .imicCard
     }
 }

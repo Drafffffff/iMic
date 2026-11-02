@@ -33,9 +33,13 @@ struct ShellCredentials {
         return value
     }
     static func valid(_ key:String)->Bool {
-        key.hasPrefix("sk-") && key.count>10 && key.unicodeScalars.allSatisfy {
-            CharacterSet(charactersIn:"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_").contains($0)
+        // Literal ASCII only: safe in a shell assignment and a Bearer header.
+        key.hasPrefix("sk-") && (11...512).contains(key.utf8.count) && key.unicodeScalars.allSatisfy {
+            CharacterSet(charactersIn:"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.+/=").contains($0)
         }
+    }
+    static var formatMessage: String {
+        L10n.text("This doesn't look like a Model Studio API Key. Check that you copied all of it.")
     }
     static func validToken(_ key:String)->Bool {
         // A Bearer token is a literal header value, never shell or header syntax.
@@ -55,7 +59,7 @@ struct ShellCredentials {
     }
     private func literal(_ value:String)->String? {
         // Read literal assignments only. Never execute or source shell files.
-        let pattern="^(?:'([^']*)'|\"([^\"\\\\$`]*)\"|([A-Za-z0-9_-]+))\\s*(?:#.*)?$"
+        let pattern="^(?:'([^']*)'|\"([^\"\\\\$`]*)\"|([A-Za-z0-9_.+/=-]+))\\s*(?:#.*)?$"
         let regex=try! NSRegularExpression(pattern:pattern)
         guard let match=regex.firstMatch(in:value,range:NSRange(value.startIndex...,in:value)) else{return nil}
         for i in 1...3 {if let range=Range(match.range(at:i),in:value) {return String(value[range])}}

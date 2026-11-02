@@ -31,6 +31,7 @@ private final class SettingsPanel: NSWindow {
 
 final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     weak var app: AppDelegate?
+    private let validationSession: URLSession?
     let window: NSWindow
     private let tabs = SettingsTabs()
     private var stacks: [SettingsPane: NSStackView] = [:]
@@ -52,8 +53,9 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     private var defaults: UserDefaults { MacPreferences.defaults }
     private var preview: Bool { app?.preview != nil }
 
-    init(app: AppDelegate) {
+    init(app: AppDelegate, validationSession: URLSession? = nil) {
         self.app = app
+        self.validationSession = validationSession
         window = SettingsPanel(contentRect: NSRect(x: 0, y: 0, width: 560, height: 420),
             styleMask: [.titled, .closable], backing: .buffered, defer: false)
         super.init()
@@ -250,9 +252,11 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         app.polishFields = choices; choices.isHidden = !DeepSeekConfiguration.enabled
         activeProvider.font = .systemFont(ofSize: 11); activeProvider.textColor = .imicMuted
         let base = field("bailian.base", L10n.text("Set service address manually (Base URL, optional)"), "")
-        let advanced = NSStackView(views: [base])
+        let addressHint = note(L10n.text("Paste any address from the console's API Quick Access dialog: API Host (hostname only), OpenAI-compatible URL (/compatible-mode/v1), or DashScope URL (/api/v1). URLs must use HTTPS. Leave blank to detect automatically."))
+        let advanced = NSStackView(views: [addressHint, base])
         advanced.orientation = .vertical; advanced.alignment = .leading; advanced.isHidden = true
         base.widthAnchor.constraint(equalTo: advanced.widthAnchor).isActive = true
+        addressHint.widthAnchor.constraint(equalTo: advanced.widthAnchor).isActive = true
         let toggle = action(L10n.text("Advanced options · Set service address manually"), #selector(toggleBailianAdvanced(_:)))
         toggle.identifier = NSUserInterfaceItemIdentifier("bailianAdvancedToggle")
         toggle.target = self
@@ -530,6 +534,11 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         let credential = resolved(.bailian)
         let originalEndpoint = app!.endpoint.stringValue
         let key = row.id == "bailian.key" ? value : fields["bailian.key"]?.value ?? credential?.key ?? ""
+        guard ShellCredentials.valid(key) else {
+            row.message(BailianAddress.isPlan(key) ? BailianIssue.plan.message : ShellCredentials.formatMessage, error: true)
+            resize(); completion(false); return
+        }
+        if row.id == "bailian.key" { row.value = key }
         let base = bailianAdvanced?.isHidden == false ? fields["bailian.base"]?.value ?? "" : ""
         let keyDraft = fields["bailian.key"]?.value
         let baseDraft = fields["bailian.base"]?.value
@@ -563,12 +572,13 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
                 self.configurationChanged(); completion(true)
             }
         }
-        if preview {
+        if preview && validationSession == nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 finish(key.contains("bad") ? .failure(.invalidKey) : .success(.init(host: BailianAddress.hosts[0], asrListed: false, polishListed: true)))
             }
         } else {
-            row.discovery = BailianDiscovery.start(key: key, baseURL: base, progress: { [weak self, weak row] text in
+            row.discovery = BailianDiscovery.start(key: key, baseURL: base,
+                session: validationSession ?? SettingsValidation.session, progress: { [weak self, weak row] text in
                 guard let row, row.generation == generation else { return }
                 row.message(text); self?.resize()
             }, completion: finish)
