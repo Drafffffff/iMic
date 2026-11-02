@@ -12460,6 +12460,193 @@
           }
         }
       }
+    },
+    "Voice processing (recommended)": {
+      "comment": "ios-only",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice processing (recommended)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语音处理（推荐）"
+          }
+        }
+      }
+    },
+    "Noise reduction, echo cancellation, and automatic gain. Turning this off may prevent recording on some system versions.": {
+      "comment": "ios-only",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noise reduction, echo cancellation, and automatic gain. Turning this off may prevent recording on some system versions."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "降噪、回声消除与自动增益。部分系统版本上关闭后可能录不到声音。"
+          }
+        }
+      }
+    },
+    "Voice processing was enabled automatically to restore recording.": {
+      "comment": "ios-only",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice processing was enabled automatically to restore recording."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已自动开启语音处理以恢复录音。"
+          }
+        }
+      }
+    },
+    "No audio received. Open MIC TEST to check your microphone.": {
+      "comment": "ios-only",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No audio received. Open MIC TEST to check your microphone."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有收到声音，请打开 MIC TEST 检查麦克风。"
+          }
+        }
+      }
+    },
+    "Test without VPIO": {
+      "comment": "ios-only",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test without VPIO"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭 VPIO 对照测试"
+          }
+        }
+      }
+    },
+    "Test with VPIO": {
+      "comment": "ios-only",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test with VPIO"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启 VPIO 对照测试"
+          }
+        }
+      }
+    },
+    "Temporary comparison only. Your saved voice processing setting is unchanged.": {
+      "comment": "ios-only",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temporary comparison only. Your saved voice processing setting is unchanged."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅用于临时对照，不会更改已保存的语音处理设置。"
+          }
+        }
+      }
+    },
+    "Normal input level": {
+      "comment": "ios-only",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normal input level"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电平正常"
+          }
+        }
+      }
+    },
+    "Almost silent": {
+      "comment": "ios-only",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Almost silent"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "几乎无声"
+          }
+        }
+      }
+    },
+    "All zero": {
+      "comment": "ios-only",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All zero"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全零"
+          }
+        }
+      }
+    },
+    "Waiting for input": {
+      "comment": "ios-only",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for input"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待输入"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

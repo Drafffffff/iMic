@@ -11,6 +11,7 @@ final class AudioCapture {
     private let lifecycle = DispatchQueue(label: "imic.audio.lifecycle", qos: .userInitiated)
     private let queueKey = DispatchSpecificKey<Bool>()
     private var requested = false
+    private var configuredPreference = true
     private var request: UInt64 = 0
     private var delivery: CaptureDeliveryGate?
     private var chunk: (Data) -> Void = { _ in }
@@ -25,7 +26,7 @@ final class AudioCapture {
             foreground: UIApplication.didBecomeActiveNotification,
             interruptionBegan: { ($0.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) == AVAudioSession.InterruptionType.began.rawValue },
             oldDeviceUnavailable: { ($0.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt) == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue }),
-        makeHardware: { [unowned self] in AVMicHardware(onChunk: chunk, onBuffer: buffer) },
+        makeHardware: { [unowned self] vpio in AVMicHardware(voiceProcessing: vpio, onChunk: chunk, onBuffer: buffer) },
         deactivate: { notifyOthers in
             do { try AVAudioSession.sharedInstance().setActive(false, options: notifyOthers ? .notifyOthersOnDeactivation : []) }
             catch { IMicLog.write("iphone.audio", "deactivate failed: \(error.localizedDescription)") }
@@ -38,6 +39,7 @@ final class AudioCapture {
     }
 
     var isRunning: Bool { requested }
+    var matchesPreferredConfiguration: Bool { configuredPreference == VoiceProcessingPreference.enabled() }
     static var permissionGranted: Bool { AVAudioApplication.shared.recordPermission == .granted }
     static func requestPermission() async -> Bool {
         await withCheckedContinuation { continuation in
@@ -45,13 +47,16 @@ final class AudioCapture {
         }
     }
 
-    func start(rebuildFirst: Bool = false, onChunk: @escaping (Data) -> Void,
+    func start(rebuildFirst: Bool = false, voiceProcessingOverride: Bool? = nil, microphoneTest: Bool = false,
+               onVoiceProcessingRecovered: (() -> Void)? = nil, onChunk: @escaping (Data) -> Void,
                onBuffer: ((AVAudioPCMBuffer) -> Void)? = nil,
                onFailure: @escaping (String) -> Void,
                onDiagnostics: ((CaptureDiagnostics) -> Void)? = nil,
                completion: @escaping (Error?) -> Void) {
         guard !requested else { return }
         requested = true
+        let vpio = voiceProcessingOverride ?? VoiceProcessingPreference.enabled()
+        configuredPreference = vpio
         request &+= 1
         let current = request
         let gate = CaptureDeliveryGate()
@@ -61,7 +66,16 @@ final class AudioCapture {
             chunk = { data in gate.deliver { onChunk(data) } }
             buffer = onBuffer.map { callback in { pcm in gate.deliver { callback(pcm) } } }
             do {
-                try controller.start(rebuildFirst: rebuildFirst, onFailure: { [weak self] message in
+                try controller.start(rebuildFirst: rebuildFirst, voiceProcessing: vpio, microphoneTest: microphoneTest,
+                    onVoiceProcessingRecovered: { [weak self] in
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self, self.request == current, self.requested, !microphoneTest else { return }
+                            // Persist only after NORMAL input confirms the fallback.
+                            UserDefaults.standard.set(true, forKey: VoiceProcessingPreference.key)
+                            self.configuredPreference = true
+                            onVoiceProcessingRecovered?()
+                        }
+                    }, onFailure: { [weak self] message in
                     DispatchQueue.main.async { [weak self] in
                         guard let self, self.request == current, self.requested else { return }
                         self.requested = false
@@ -71,6 +85,7 @@ final class AudioCapture {
                 }, onDiagnostics: { [weak self] diagnostics in
                     DispatchQueue.main.async { [weak self] in
                         guard let self, self.request == current else { return }
+                        if diagnostics.running { self.configuredPreference = diagnostics.voiceProcessing }
                         onDiagnostics?(diagnostics)
                     }
                 })
@@ -137,6 +152,10 @@ private final class AVMicHardware: CaptureHardware {
     private var bridge: IMicAudioInputBridge?
     private var nativeRate: Double = 0
     private var channels: UInt32 = 0
+    private let voiceProcessing: Bool
+    private var actualVoiceProcessing = false
+    private var actualFormat = "unavailable"
+    private var ducking = "not-applied"
     private let onChunk: (Data) -> Void
     private let onBuffer: ((AVAudioPCMBuffer) -> Void)?
     var notificationObject: AnyObject { engine }
@@ -150,26 +169,49 @@ private final class AVMicHardware: CaptureHardware {
         return CaptureDiagnostics(input: session.currentRoute.inputs.map(\.portName).joined(separator: ", "),
             route: session.currentRoute.inputs.map { $0.portType.rawValue }.joined(separator: ","),
             sampleRate: session.sampleRate, nativeRate: nativeRate, channels: channels, running: engine.isRunning,
-            inputRoute: AVMicSession.inputRoute())
+            inputRoute: AVMicSession.inputRoute(), voiceProcessing: actualVoiceProcessing,
+            mode: session.mode.rawValue, format: actualFormat, ducking: ducking)
     }
-    init(onChunk: @escaping (Data) -> Void, onBuffer: ((AVAudioPCMBuffer) -> Void)?) {
+    init(voiceProcessing: Bool, onChunk: @escaping (Data) -> Void, onBuffer: ((AVAudioPCMBuffer) -> Void)?) {
+        self.voiceProcessing = voiceProcessing
         self.onChunk = onChunk; self.onBuffer = onBuffer
     }
     func start(meter: @escaping (CaptureMeter) -> Void, failure: @escaping (String) -> Void) throws {
         let session = AVAudioSession.sharedInstance()
-        try AVMicSession.configureCapture()
-        try session.setActive(true)
-        let route = AVMicSession.inputRoute()
-        IMicLog.write("iphone.audio", "activated input-route \(route.report)")
-        guard route.invalidReason == nil else {
-            IMicLog.write("iphone.audio", "invalid-input-route \(route.report)")
-            throw CaptureRouteError.invalidInputRoute
-        }
-        try? session.setAllowHapticsAndSystemSoundsDuringRecording(true)
-        // Preferences are hints. Read actual native format AFTER activation, connect
-        // the sink at that format, then convert on the non-realtime bridge worker.
+        let format = try CaptureStartup.prepare(voiceProcessing: voiceProcessing,
+            configureSession: { try AVMicSession.configureCapture($0) },
+            activate: {
+                try session.setActive(true)
+                let route = AVMicSession.inputRoute()
+                IMicLog.write("iphone.audio", "activated requested-vpio=\(self.voiceProcessing) mode=\(session.mode.rawValue) input-route \(route.report)")
+                guard route.invalidReason == nil else { throw CaptureRouteError.invalidInputRoute }
+                try? session.setAllowHapticsAndSystemSoundsDuringRecording(true)
+            }, enableVoiceProcessing: {
+                // Materialize the output side required by VPIO. No player/source
+                // is connected: microphone samples only flow into our sink.
+                let hardwareInput = self.engine.inputNode.inputFormat(forBus: 0)
+                let outputFormat = self.engine.outputNode.inputFormat(forBus: 0)
+                IMicLog.write("iphone.audio", "vpio preflight sessionRate=\(session.sampleRate) inputChannels=\(session.inputNumberOfChannels) hardwareInput=\(hardwareInput) outputFormat=\(outputFormat)")
+                // AVAudioEngine can raise an Objective-C graph assertion (rather
+                // than throw NSError) when VPIO has no usable hardware I/O.
+                guard session.sampleRate > 0, session.inputNumberOfChannels > 0,
+                      hardwareInput.sampleRate > 0, hardwareInput.channelCount > 0,
+                      outputFormat.sampleRate > 0, outputFormat.channelCount > 0 else {
+                    throw AudioCapture.CaptureError.format
+                }
+                _ = self.engine.mainMixerNode
+                try self.engine.inputNode.setVoiceProcessingEnabled(true)
+                self.actualVoiceProcessing = self.engine.inputNode.isVoiceProcessingEnabled
+            }, configureProcessing: { configuration in
+                let input = self.engine.inputNode
+                input.isVoiceProcessingBypassed = configuration.bypass
+                input.isVoiceProcessingAGCEnabled = configuration.automaticGain
+                input.voiceProcessingOtherAudioDuckingConfiguration = .init(enableAdvancedDucking: ObjCBool(configuration.advancedDucking), duckingLevel: .min)
+                let applied = input.voiceProcessingOtherAudioDuckingConfiguration
+                self.ducking = "advanced=\(applied.enableAdvancedDucking.boolValue) level=\(applied.duckingLevel.rawValue) minApplied=\(!applied.enableAdvancedDucking.boolValue && applied.duckingLevel == .min) AGC=\(input.isVoiceProcessingAGCEnabled) bypass=\(input.isVoiceProcessingBypassed)"
+            }, readFormat: { self.engine.inputNode.outputFormat(forBus: 0) })
         let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
+        actualFormat = format.description
         guard format.sampleRate > 0, format.channelCount > 0 else { throw AudioCapture.CaptureError.format }
         nativeRate = format.sampleRate; channels = format.channelCount
         let bridge = try IMicAudioInputBridge(format: format, onChunk: onChunk,
@@ -214,9 +256,10 @@ private enum AVMicSession {
         return CaptureInputRoute(inputs: session.currentRoute.inputs.map(port), available: session.availableInputs?.map(port))
     }
 
-    static func configureCapture() throws {
+    static func configureCapture(_ configuration: CaptureProcessingConfiguration) throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
+        try session.setCategory(.playAndRecord, mode: configuration.mode == .voiceChat ? .voiceChat : .measurement,
+                                options: configuration.defaultToSpeaker ? [.defaultToSpeaker] : [])
         try session.setPreferredSampleRate(16_000)
         try session.setPreferredIOBufferDuration(0.01)
     }
@@ -231,11 +274,9 @@ private enum AVMicSession {
             try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try session.setActive(true)
             try session.setActive(false)
-            try configureCapture()
-            IMicLog.write("iphone.audio", "route-recovery restored capture configuration; next build reactivates and validates")
+            IMicLog.write("iphone.audio", "route-recovery playback complete; next build configures current VPIO preference, reactivates and validates")
         } catch {
             try? session.setActive(false)
-            try? configureCapture()
             throw error
         }
     }

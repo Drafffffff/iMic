@@ -40,6 +40,9 @@ struct PairingSheet: View {
                                 Hairline()
                                 microphoneTestEntry
                                     .padding(.vertical, 16)
+                                VoiceProcessingPreferencesSection()
+                                    .padding(.vertical, 24)
+                                Hairline()
                                 PolishPreferencesSection()
                                     .padding(.vertical, 24)
                                 Hairline()
