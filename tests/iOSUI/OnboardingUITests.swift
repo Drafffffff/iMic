@@ -1,167 +1,133 @@
 import XCTest
 
+/// These tests start the shipping onboarding path, without --ui-preview or demo scripts.
 final class OnboardingUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
-    private func launch(_ arguments: [String]) -> XCUIApplication {
+    private func launch() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = arguments
+        app.resetAuthorizationStatus(for: .microphone)
+        app.launchArguments = ["--debug-reset-onboarding", "--debug-onboarding-audit", "-AppleLanguages", "(en)"]
         app.launch()
-        XCTAssertTrue(app.staticTexts["onboarding.title"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["home.hold"].waitForExistence(timeout: 20))
+        XCTAssertEqual(app.buttons["home.hold"].label, "HOLD TO START")
+        XCTAssertFalse(app.buttons["onboarding.start"].exists)
+        app.buttons["home.hold"].press(forDuration: 0.12)
+        prompt("Hold the bar and speak", app)
         return app
     }
-    private func shot(_ app: XCUIApplication, _ name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+    private func prompt(_ text: String, _ app: XCUIApplication) {
+        let target = app.staticTexts["onboarding.prompt"]
+        let wait = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", text), object: target)
+        XCTAssertEqual(XCTWaiter.wait(for: [wait], timeout: 10), .completed, target.debugDescription)
     }
-    private func tap(_ title: String, in app: XCUIApplication) {
-        let button = app.buttons[title].firstMatch
-        for _ in 0..<4 {
-            if button.isHittable { break }
-            app.scrollViews.firstMatch.swipeUp()
-        }
-        XCTAssertTrue(button.waitForExistence(timeout: 5)); button.tap()
+    private func drag(_ app: XCUIApplication, dx: CGFloat = 0, dy: CGFloat, hold: TimeInterval = 0.1) {
+        let string = app.otherElements["home.string"]
+        XCTAssertTrue(string.waitForExistence(timeout: 5))
+        let center = string.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        center.press(forDuration: 0.08, thenDragTo: center.withOffset(CGVector(dx: dx, dy: dy)),
+                     withVelocity: 650, thenHoldForDuration: hold)
     }
-    private func element(_ id: String, in app: XCUIApplication) -> XCUIElement {
-        let target = app.descendants(matching: .any)[id].firstMatch
-        for _ in 0..<3 {
-            if target.isHittable { break }
-            app.scrollViews.firstMatch.swipeUp()
-        }
-        XCTAssertTrue(target.isHittable)
-        return target
+    private func core(_ app: XCUIApplication) {
+        // Short presses must not advance the lesson.
+        app.buttons["home.hold"].press(forDuration: 0.12)
+        prompt("Hold the bar and speak", app)
+        app.buttons["home.hold"].press(forDuration: 1.0)
+        prompt("Pull the string to send", app)
+        drag(app, dy: 180)
+        XCTAssertTrue(app.buttons["onboarding.more"].waitForExistence(timeout: 8))
     }
-    func testOfflinePracticeRecognizesAllGesturesWithoutPermissionsOrTransport() {
-        let app = XCUIApplication()
-        app.resetAuthorizationStatus(for: .microphone)
-        app.launchArguments = ["--debug-reset-onboarding", "--debug-onboarding-audit"]
-        app.launch()
-        XCTAssertTrue(app.buttons["开始"].waitForExistence(timeout: 20))
-        shot(app, "01 Welcome fresh install")
-        tap("开始", in: app)
-        tap("先看看怎么用", in: app)
-        let hold = element("practice.hold", in: app)
-        hold.press(forDuration: 0.8)
-        XCTAssertTrue(app.staticTexts["practice.passed"].waitForExistence(timeout: 5))
-        shot(app, "Practice 1 hold completed")
-        tap("下一张", in: app)
-        let cancel = element("practice.hold", in: app)
-        let start = cancel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        start.press(forDuration: 0.2, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -110)))
-        XCTAssertTrue(app.staticTexts["practice.passed"].waitForExistence(timeout: 5))
-        shot(app, "Practice 2 cancel completed")
-        tap("下一张", in: app)
-        var string = element("practice.string", in: app)
-        var center = string.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        center.press(forDuration: 0.15, thenDragTo: center.withOffset(CGVector(dx: 0, dy: 90)))
-        XCTAssertTrue(app.staticTexts["practice.passed"].waitForExistence(timeout: 5))
-        shot(app, "Practice 3 snap return completed")
-        tap("下一张", in: app)
-        string = element("practice.string", in: app)
-        center = string.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        center.press(forDuration: 0.15, thenDragTo: center.withOffset(CGVector(dx: 0, dy: -70)))
-        center.press(forDuration: 0.15, thenDragTo: center.withOffset(CGVector(dx: 80, dy: 0)))
-        XCTAssertTrue(app.staticTexts["practice.passed"].waitForExistence(timeout: 5))
-        shot(app, "Practice 4 delete and cursor completed")
-        tap("下一张", in: app)
-        string = element("practice.string", in: app)
-        center = string.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        let top = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: app.frame.midX, dy: 70))
-        center.press(forDuration: 0.15, thenDragTo: top)
-        XCTAssertTrue(app.staticTexts["practice.passed"].waitForExistence(timeout: 5))
-        shot(app, "Practice 5 clear completed")
-        tap("下一张", in: app)
-        shot(app, "Practice complete")
-        tap("完成练习", in: app)
-        XCTAssertTrue(app.buttons["已经装好了"].waitForExistence(timeout: 5))
-        XCUIDevice.shared.press(.home)
-        app.activate()
-        XCTAssertTrue(app.buttons["已经装好了"].waitForExistence(timeout: 5))
-        tap("检查练习隔离", in: app)
+    private func connectLater(_ app: XCUIApplication) {
+        let button = app.buttons["onboarding.connectLater"]
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+        // Nearby discovery can focus the pairing keyboard and move this footer.
+        // Tap only after its frame has settled, then require the cover to close.
+        var previousFrame = CGRect.zero
+        let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard button.exists else { return false }
+            let frame = button.frame
+            defer { previousFrame = frame }
+            return !frame.isEmpty && frame == previousFrame && button.isHittable
+        }, object: button)
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 10), .completed)
+        button.tap()
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: button)
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 12), .completed)
+    }
+    private func isolation(_ app: XCUIApplication) {
+        app.buttons["onboarding.auditCheck"].tap()
         let audit = app.staticTexts["onboarding.audit"]
         XCTAssertTrue(audit.waitForExistence(timeout: 5))
-        XCTAssertEqual(audit.label, "link=0 send=0 mic=undetermined speech=undetermined tutorial=1")
-        XCTAssertEqual(XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.count, 0)
-        shot(app, "Returned to Mac without network audio or permission")
+        print("PRACTICE AUDIT: \(audit.label)")
+        XCTAssertTrue(audit.label.contains("link=0 send=0 mic=undetermined speech=undetermined practice=true"), audit.label)
+        XCTAssertTrue(audit.label.contains("captureStarts=0"), audit.label)
     }
-    func testDownloadSharingAndClipboard() {
-        let app = launch(["--ui-preview=onboarding-mac", "--debug-onboarding-audit"])
-        tap("还没有，发送到我的 Mac", in: app)
-        XCTAssertTrue(app.buttons["共享链接"].exists)
-        tap("共享链接", in: app)
-        shot(app, "System share sheet")
-        let close = app.buttons["Close"].firstMatch
-        if close.waitForExistence(timeout: 3) { close.tap() }
-        else { app.swipeDown() }
-        tap("复制链接", in: app)
-        XCTAssertTrue(app.staticTexts["download.copied"].waitForExistence(timeout: 5))
-        tap("检查练习隔离", in: app)
-        XCTAssertTrue(app.staticTexts["https://drafffffff.github.io/iMic/?from=ios#download"].exists)
-        shot(app, "Download and copied URL")
+    func testCoreAndAllOptionalGesturesAreOffline() {
+        let app = launch()
+        core(app)
+        isolation(app)
+        app.buttons["onboarding.more"].tap()
+        prompt("Pull up to delete", app)
+        drag(app, dy: -80, hold: 0.3)
+        prompt("Slide sideways to move the cursor", app)
+        drag(app, dx: 90, dy: 0)
+        prompt("Pull to the top to clear", app)
+        let center = app.otherElements["home.string"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        center.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: app.frame.midX, dy: 65)))
+        prompt("Hold, then slide up to cancel", app)
+        isolation(app)
+        let bar = app.buttons["home.hold"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        bar.press(forDuration: 0.6, thenDragTo: bar.withOffset(CGVector(dx: 0, dy: -100)))
+        connectLater(app)
+        XCTAssertFalse(app.staticTexts["onboarding.prompt"].exists)
+        XCTAssertTrue(app.buttons["home.hold"].waitForExistence(timeout: 5))
+        app.buttons["onboarding.auditCheck"].tap()
+        print("PRACTICE CLEANUP: \(app.staticTexts["onboarding.audit"].label)")
+        XCTAssertTrue(app.staticTexts["onboarding.audit"].label.contains("practice=false phase=idle text=0"))
+        XCTAssertTrue(app.staticTexts["onboarding.audit"].label.contains("deferred=true idle=true"))
+        XCTAssertEqual(app.buttons["home.hold"].label, "LINK TO MAC")
     }
-    func testPracticeFromMacRestoresItsReturnDestination() {
-        let app = launch(["--debug-reset-onboarding"])
-        tap("开始", in: app)
-        tap("先看看怎么用", in: app)
+    func testSkipRestoreAndConnectLater() {
+        let app = launch()
+        app.buttons["onboarding.skip"].tap()
+        prompt("Pull the string to send", app)
         app.terminate()
-        app.launchArguments = []
+        app.launchArguments = ["-AppleLanguages", "(en)"]
         app.launch()
-        XCTAssertTrue(app.staticTexts["HOLD"].waitForExistence(timeout: 15))
-        for _ in 0..<5 { tap("跳过", in: app) }
-        tap("完成练习", in: app)
-        XCTAssertTrue(app.buttons["已经装好了"].waitForExistence(timeout: 5))
-        shot(app, "Restored practice returns to Mac setup")
+        prompt("Pull the string to send", app)
+        app.buttons["onboarding.skip"].tap()
+        XCTAssertTrue(app.buttons["onboarding.later"].waitForExistence(timeout: 5))
+        app.buttons["onboarding.later"].tap()
+        connectLater(app)
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.buttons["home.hold"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["onboarding.start"].exists)
+        XCTAssertEqual(app.buttons["home.hold"].label, "LINK TO MAC")
     }
-    func testReadyRequestsPermissionsInOrderAndCompletesWhenDenied() {
-        let app = XCUIApplication()
-        app.resetAuthorizationStatus(for: .microphone)
-        app.launchArguments = ["--ui-preview=onboarding-ready"]
-        app.launch()
-        XCTAssertTrue(app.buttons["开始使用"].waitForExistence(timeout: 20))
-        XCTAssertEqual(XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.count, 0)
-        tap("开始使用", in: app)
-        let alert = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 10))
-        let microphone = alert.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
-        XCTAssertTrue(microphone.localizedCaseInsensitiveContains("microphone") || microphone.contains("麦克风"), microphone)
-        XCTAssertTrue(app.staticTexts["onboarding.title"].exists)
-        shot(app, "READY microphone permission before speech")
-        alert.buttons.firstMatch.tap() // Refuse microphone; onboarding must still finish.
-        XCTAssertTrue(alert.waitForExistence(timeout: 10))
-        let speech = alert.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
-        XCTAssertTrue(speech.localizedCaseInsensitiveContains("speech") || speech.contains("语音"), speech)
-        shot(app, "READY speech permission after microphone dismissal")
-        alert.buttons.firstMatch.tap()
-        XCTAssertTrue(app.buttons["设置"].waitForExistence(timeout: 15))
-        XCTAssertFalse(app.staticTexts["onboarding.title"].exists)
-        XCTAssertEqual(XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.count, 0)
-        XCTAssertTrue(app.buttons["ENABLE MIC"].exists)
-        shot(app, "READY denied permissions still reaches home")
-    }
-    func testRestoresMacStepAfterRelaunch() {
-        let app = launch(["--debug-reset-onboarding"])
-        tap("开始", in: app)
-        app.terminate()
-        app.launchArguments = []
-        app.launch()
-        XCTAssertTrue(app.buttons["已经装好了"].waitForExistence(timeout: 15))
-        XCTAssertFalse(app.buttons["开始"].exists)
-        shot(app, "Restored Mac step")
-    }
-    func testDeniedNetworkExplainsSettings() {
-        let app = launch(["--ui-preview=onboarding-link-denied"])
-        XCTAssertTrue(app.staticTexts["LOCAL NETWORK OFF"].exists)
-        XCTAssertTrue(app.buttons["打开设置"].exists)
-        shot(app, "Local network denied")
-    }
-    func testTimeoutKeepsTroubleshootingVisible() {
-        let app = launch(["--ui-preview=onboarding-search-timeout"])
-        XCTAssertTrue(app.staticTexts["2. iPhone 和 Mac 是否在同一个 Wi-Fi？"].exists)
-        shot(app, "Timeout troubleshooting")
-    }
-    func testExistingPairedPreviewSkipsOnboarding() {
-        let app = XCUIApplication(); app.launchArguments = ["--ui-preview=idle"]; app.launch()
-        XCTAssertTrue(app.buttons["设置"].waitForExistence(timeout: 15))
-        XCTAssertFalse(app.staticTexts["onboarding.title"].exists)
-        shot(app, "Existing paired home")
+    func testOptionalSkipAndReplayFromSettings() {
+        let app = launch()
+        core(app)
+        app.buttons["onboarding.more"].tap()
+        for text in ["Pull up to delete", "Slide sideways to move the cursor", "Pull to the top to clear", "Hold, then slide up to cancel"] {
+            prompt(text, app); app.buttons["onboarding.skip"].tap()
+        }
+        connectLater(app)
+        app.buttons["Settings"].tap()
+        let tutorial = app.buttons["Practice gestures again"]
+        for _ in 0..<9 {
+            if tutorial.exists && app.scrollViews.firstMatch.frame.insetBy(dx: 0, dy: 30).contains(tutorial.frame) { break }
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        XCTAssertTrue(tutorial.isHittable); tutorial.tap()
+        prompt("Hold the bar and speak", app)
+        isolation(app)
+        // Replay stays offline when entered after choosing "Connect later".
+        app.buttons["home.hold"].press(forDuration: 1.0)
+        prompt("Pull the string to send", app)
+        isolation(app)
+        app.buttons["onboarding.skip"].tap()
+        XCTAssertTrue(app.buttons["onboarding.later"].waitForExistence(timeout: 5))
+        app.buttons["onboarding.later"].tap()
+        XCTAssertFalse(app.buttons["onboarding.connectLater"].exists)
+        XCTAssertTrue(app.buttons["home.hold"].exists)
     }
 }

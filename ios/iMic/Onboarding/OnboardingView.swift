@@ -1,314 +1,212 @@
 import SwiftUI
 import UIKit
 
-/// PixelText is decorative by default; the parent supplies an accessible heading.
 struct GuideTitle: View {
     let text: String
     var cell: CGFloat = 3
     var color: Color = Theme.orange
     var body: some View {
-        HStack { PixelText(text: text, cell: cell, color: color) }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(text)
-            .accessibilityAddTraits([.isHeader, .isStaticText])
+        PixelText(text: text, cell: cell, color: color)
+            .accessibilityElement(children: .ignore).accessibilityLabel(text)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
-struct GuideButton: View {
-    let title: String
-    var action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            HStack {
-                Text(title).font(.headline)
-                Spacer()
-                Image(systemName: "arrow.right")
-            }.foregroundStyle(Theme.ivory).padding(18)
-                .background(Theme.panelRaised)
-                .overlay(alignment: .leading) { Rectangle().fill(Theme.orange).frame(width: 3) }
-                .overlay(Rectangle().stroke(Theme.line))
-        }.buttonStyle(.plain)
-    }
-}
-
+/// Shared download actions, with a real Handoff activity and system share sheet.
 struct MacDownloadView: View {
-    @State var expanded = true
     @State private var copied = false
     @State private var activity: NSUserActivity?
-    var installed: (() -> Void)? = nil
-    var practice: (() -> Void)? = nil
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text(L10n.text("Is iMic installed on your Mac?")).font(.title3.weight(.semibold))
-            Text(L10n.text("iMic needs its Mac companion. Your Mac handles recognition and types text into the active app."))
-            if let installed, !expanded { GuideButton(title: L10n.text("It's installed"), action: installed) }
-            if !expanded {
-                GuideButton(title: L10n.text("Send the download link to my Mac")) { expanded = true }
-            } else {
-                MetaLabel(text: "01 / HANDOFF", color: Theme.orange)
-                Text(L10n.text("If your Mac and iPhone use the same Apple ID, a Safari icon will appear on the left of your Mac's Dock. Click it to open the download page."))
-                ShareLink(item: OnboardingLinks.download) {
-                    Label(L10n.text("Share link"), systemImage: "square.and.arrow.up").frame(minHeight: 44)
-                }
-                Button {
-                    UIPasteboard.general.url = OnboardingLinks.download
-                    copied = true
-                    Haptics.shared.play(.copy)
-                } label: {
-                    Label(L10n.text("Copy link"), systemImage: "doc.on.doc").frame(minHeight: 44)
-                }
-                if copied {
-                    Text(L10n.text("Copied. Paste on your Mac with Universal Clipboard enabled."))
-                        .foregroundStyle(Theme.orange).accessibilityIdentifier("download.copied")
-                }
-                Hairline()
-                Text(L10n.text("1. Download and open iMic on your Mac (macOS 13 or later)\n\n2. Follow the Mac setup guide to enter your Model Studio (Bailian) API Key\n\n3. Return here to continue"))
-                Text(L10n.text("Create your own Alibaba Cloud API Key. Recognition incurs a small usage fee."))
-                    .font(.footnote).foregroundStyle(Theme.muted)
-                if let installed { GuideButton(title: L10n.text("It's installed on my Mac. Continue"), action: installed) }
+        VStack(alignment: .leading, spacing: 20) {
+            InstrumentIdentity()
+            Hairline()
+            Text(L10n.text("Return here after installing")).modifier(InstrumentHint(color: Theme.ivory))
+            ShareLink(item: OnboardingLinks.download) {
+                HStack { Text(L10n.text("Share link")).modifier(InstrumentHint(color: Theme.ivory)); Spacer(); HUDLabel(text: "SHARE ›") }.frame(minHeight: 44).contentShape(Rectangle()).overlay(alignment: .bottom) { Hairline() }
             }
-            if let practice { Button(L10n.text("Explore how it works"), action: practice).frame(minHeight: 44) }
+            Button {
+                UIPasteboard.general.url = OnboardingLinks.download
+                copied = true; Haptics.shared.play(.copy)
+            } label: {
+                HStack { Text(copied ? L10n.text("Copied") : L10n.text("Copy link")).modifier(InstrumentHint(color: Theme.ivory)); Spacer(); HUDLabel(text: "COPY ›") }.frame(minHeight: 44).contentShape(Rectangle()).overlay(alignment: .bottom) { Hairline() }
+            }.accessibilityIdentifier("download.copy")
+            Text(L10n.text("Open the Safari Handoff icon on your Mac"))
+                .modifier(InstrumentHint())
         }
+        .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(Theme.ivory).tint(Theme.orange)
+        .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+        .presentationBackground(Theme.ink)
         .onAppear {
             let next = NSUserActivity(activityType: NSUserActivityTypeBrowsingWeb)
-            next.webpageURL = OnboardingLinks.download
-            next.title = L10n.text("Get iMic for Mac")
-            next.isEligibleForHandoff = true
-            next.becomeCurrent()
-            activity = next
+            next.webpageURL = OnboardingLinks.download; next.title = L10n.text("Get iMic for Mac")
+            next.isEligibleForHandoff = true; next.becomeCurrent(); activity = next
         }
         .onDisappear { activity?.invalidate(); activity = nil }
     }
 }
 
+/// Only target decoration lives above the compositor. All teaching copy is Home's status.
 struct OnboardingView: View {
     @EnvironmentObject private var onboarding: OnboardingCoordinator
-    @EnvironmentObject private var link: LinkClient
     @EnvironmentObject private var session: SessionModel
-    @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.openURL) private var openURL
-    @State private var searching = false
-    @State private var timedOut = false
-    @State private var searchGeneration = 0
-    @State private var openedSettings = false
-    @State private var connectedName: String?
-    @State private var practiceInteracting = false
-    @State private var requestingPermissions = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    let source: CGRect
+    let torus: CGRect
+    let size: CGSize
+    let topInset: CGFloat
 
-    private var label: String { ["WELCOME", "MAC", "LINK", "PAIR", "PRACTICE", "READY"][onboarding.step.rawValue] }
+    private var moreVisible: Bool { onboarding.step == .practice && onboarding.action == .more }
+    private var target: CGRect {
+        onboarding.step == .welcome || onboarding.step == .ready || onboarding.action.bar ? source.insetBy(dx: -4, dy: -4) : torus
+    }
     var body: some View {
         ZStack {
-            TechBackground()
-            VStack(alignment: .leading, spacing: 22) {
-                HStack {
-                    if onboarding.step != .welcome {
-                        Button { back() } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
-                            .accessibilityLabel(L10n.text("Back"))
-                    }
-                    Spacer()
-                    MetaLabel(text: "IMIC / FIRST CONNECTION")
+            if moreVisible { more }
+            else if !onboarding.celebrating {
+                HUDTarget(store: session.spectrumStore, target: target)
+                    .allowsHitTesting(false).accessibilityHidden(true)
+                if onboarding.step == .practice {
+                    CoachTouch(action: onboarding.action, source: source, torus: torus, reduceMotion: reduceMotion)
+                        .allowsHitTesting(false).accessibilityHidden(true)
                 }
-                HStack(spacing: 5) {
-                    ForEach(OnboardingStep.allCases, id: \.rawValue) { step in
-                        Rectangle().fill(step == onboarding.step ? Theme.orange : Theme.line).frame(height: 2)
-                    }
-                }.accessibilityLabel(L10n.text("Setup progress, step %@ of 6", L10n.argument(onboarding.step.rawValue + 1)))
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        GuideTitle(text: label, cell: 2.8, color: Theme.orange)
-                            .accessibilityAddTraits(.isHeader).accessibilityIdentifier("onboarding.title")
-                        content
-                        #if DEBUG
-                        OnboardingAudit()
-                        #endif
-                    }.padding(.bottom, 24).frame(maxWidth: .infinity, alignment: .leading)
-                }.scrollIndicators(.hidden).scrollDisabled(practiceInteracting)
-            }.padding(.horizontal, 24).padding(.top, 8)
-        }
-        .foregroundStyle(Theme.ivory).tint(Theme.orange).font(.body)
-        .preferredColorScheme(.dark).interactiveDismissDisabled()
-        .onAppear { enteredStep() }
-        .onChange(of: onboarding.step) { _, _ in enteredStep() }
-        .onChange(of: link.macs.map(\.id)) { _, _ in advanceToPair() }
-        .onChange(of: link.phase) { _, _ in advanceToPair() }
-        .onChange(of: scenePhase) { _, phase in
-            guard searching else { return }
-            if phase == .active {
-                if openedSettings { openedSettings = false; link.retry() }
-                else { link.activate() }
-            } else if phase == .background {
-                link.enterBackground()
             }
+            #if DEBUG
+            OnboardingAudit().position(x: size.width / 2, y: 100)
+            #endif
         }
-        .task(id: searchGeneration) {
-            guard searching else { return }
-            try? await Task.sleep(for: .seconds(8))
-            guard !Task.isCancelled, searching, link.macs.isEmpty else { return }
-            timedOut = true
+        .task(id: onboarding.action) {
+            if voiceOver { UIAccessibility.post(notification: .announcement, argument: onboarding.action.prompt) }
         }
-        .task(id: connectedName) {
-            guard connectedName != nil else { return }
-            try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled, link.phase.isReady, onboarding.step == .pair else { return }
-            onboarding.go(onboarding.tutorialComplete ? .ready : .practice)
+        .task(id: onboarding.celebrating) {
+            guard onboarding.celebrating, onboarding.preview != "complete" else { return }
+            try? await Task.sleep(for: .seconds(2))
+            if !Task.isCancelled { onboarding.complete() }
         }
     }
-    @ViewBuilder private var content: some View {
-        switch onboarding.step {
-        case .welcome:
-            GuideTitle(text: "iMic", cell: 5, color: Theme.ivory).accessibilityLabel("iMic")
-            Text(L10n.text("Use your iPhone as a microphone. Release when done to type straight into your Mac."))
-            WelcomeWaveform().frame(height: 210)
-            Label(L10n.text("Hold to speak, release to type"), systemImage: "mic")
-            Label(L10n.text("String gestures: Return, delete, move cursor"), systemImage: "waveform")
-            Label(L10n.text("Direct encrypted connection. Your Key stays on your Mac."), systemImage: "lock")
-            GuideButton(title: L10n.text("Get started")) { onboarding.go(.mac) }
-        case .mac:
-            MacDownloadView(expanded: onboarding.preview == "mac-download",
-                installed: { onboarding.go(.link) }, practice: { onboarding.practiceFromMac() })
-        case .link:
-            if link.localNetworkDenied {
-                GuideTitle(text: "LOCAL NETWORK OFF", cell: 1.65, color: Theme.orange)
-                Text(L10n.text("Local Network access is off, so iMic cannot find your Mac. Enable Local Network in Settings → iMic."))
-                GuideButton(title: L10n.text("Open Settings"), action: settings)
-            } else if searching {
-                ProgressView().tint(Theme.orange).accessibilityLabel(L10n.text("Looking for a Mac"))
-                Text(L10n.text("Searching… Keep iMic open on your Mac."))
-            } else {
-                Text(L10n.text("iMic will look for your Mac on the same Wi-Fi. Choose Allow when asked for Local Network access."))
-                VStack(spacing: 18) {
-                    GuideTitle(text: "LOCAL NETWORK", cell: 1.7, color: Theme.ivory)
-                    Text(L10n.text("Allow iMic to find and connect to\ndevices on your local network?")).multilineTextAlignment(.center)
-                    HStack { Text(L10n.text("Don't Allow")).foregroundStyle(Theme.muted); Spacer(); Text(L10n.text("Allow")).foregroundStyle(Theme.orange) }
-                    MetaLabel(text: "PERMISSION / ILLUSTRATION")
-                }.padding(24).background(Theme.panel).overlay(Rectangle().stroke(Theme.line))
-                    .accessibilityLabel(L10n.text("Permission illustration: choose Allow in the system dialog"))
-                GuideButton(title: L10n.text("Find my Mac")) { startSearch() }
-            }
-            if timedOut { troubleshooting }
-            Button(L10n.text("Connect later")) { onboarding.presented = false }.frame(minHeight: 44)
-        case .pair:
-            if let connectedName {
-                Text(L10n.text("✓ Connected to %@", L10n.argument(connectedName))).foregroundStyle(Theme.orange)
-            } else {
-                if link.macs.count > 1 {
-                    Text(L10n.text("Choose the Mac to pair with"))
+    private var more: some View {
+        let height = source.minY + 100 - topInset
+        let top = topInset + height * 0.145 + 110
+        let panelHeight = min(240, max(0, torus.minY - top - 10))
+        return VStack(alignment: .leading, spacing: 0) {
+            HUDLabel(text: "MORE / GESTURES").frame(height: 12, alignment: .leading)
+            ScrollView {
+                VStack(spacing: 0) {
+                    gestureRow(.delete, symbol: .up)
+                    gestureRow(.cursor, symbol: .sideways)
+                    gestureRow(.clear, symbol: .clear)
+                    gestureRow(.cancel, symbol: .cancel)
                 }
-                PairingSheet(embedded: true)
-                if link.macs.isEmpty { Text(L10n.text("Looking for a Mac…")); if timedOut { troubleshooting } }
-                Button(L10n.text("Connect later")) { onboarding.presented = false }.frame(minHeight: 44)
-            }
-        case .practice:
-            PracticeView(preview: onboarding.preview, onInteractionChanged: { practiceInteracting = $0 }) { onboarding.finishPractice() }
-        case .ready:
-            Text(L10n.text("Click any text field on your Mac, such as Notes. Then hold the bar below and say something."))
-            Text(L10n.text("Tap Start using iMic to request Microphone access (required), then Speech Recognition access (optional, for live preview on your phone)."))
-                .font(.footnote).foregroundStyle(Theme.muted)
-            GuideButton(title: L10n.text("Start using iMic")) {
-                guard !requestingPermissions else { return }
-                requestingPermissions = true
-                Task {
-                    await session.prepareFirstUsePermissions()
-                    onboarding.complete()
-                    link.startDeferred = false
-                    link.start()
-                    requestingPermissions = false
-                }
-            }.disabled(requestingPermissions)
-            Button(L10n.text("Having trouble on your Mac?")) { openURL(OnboardingLinks.home) }.frame(minHeight: 44)
+            }.scrollIndicators(.hidden)
+            Button { onboarding.finishPractice() } label: {
+                HStack { HUDLabel(text: "LATER"); Spacer(); HUDLabel(text: "›") }.frame(minHeight: 44).contentShape(Rectangle())
+            }.accessibilityIdentifier("onboarding.later")
         }
+        .buttonStyle(.plain).padding(.horizontal, 12).padding(.vertical, 4)
+        .frame(width: source.width, height: panelHeight)
+        .background(Theme.ink).overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("onboarding.morePanel")
+        .position(x: source.midX, y: top + panelHeight / 2)
     }
-    private var troubleshooting: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            MetaLabel(text: "CHECK CONNECTION", color: Theme.orange)
-            Text(L10n.text("1. Is iMic open on your Mac? Look for the microphone icon in the menu bar."))
-            Text(L10n.text("2. Are your iPhone and Mac on the same Wi-Fi?"))
-            Text(L10n.text("3. Guest, office, and hotel networks often block connections between devices. Try a personal hotspot."))
-            Text(L10n.text("4. Is a VPN or proxy enabled?"))
-            Text(L10n.text("5. Is your Mac's firewall blocking incoming connections to iMic?"))
-            Text(L10n.text("6. Have you allowed Local Network access?"))
-            Button(L10n.text("Open Settings"), action: settings).frame(minHeight: 44)
-        }.font(.callout).accessibilityIdentifier("onboarding.troubleshooting")
-    }
-    private func settings() {
-        openedSettings = true
-        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
-    }
-    private func startSearch() {
-        onboarding.searchRequested = true
-        searching = true; timedOut = false; searchGeneration += 1
-        link.startDeferred = false
-        link.start()
-        advanceToPair()
-    }
-    private func enteredStep() {
-        connectedName = nil
-        if onboarding.step == .link || onboarding.step == .pair {
-            if onboarding.preview != nil {
-                searching = onboarding.preview != "link"
-                timedOut = onboarding.preview == "search-timeout"
-            } else if onboarding.step == .pair || onboarding.searchRequested {
-                startSearch()
-            }
-            advanceToPair()
-        }
-    }
-    private func advanceToPair() {
-        guard searching || onboarding.step == .pair else { return }
-        guard onboarding.step == .link || onboarding.step == .pair else { return }
-        if link.phase.isReady {
-            if onboarding.step != .pair { onboarding.go(.pair) }
-            if connectedName == nil { Haptics.shared.play(.pairingSuccess); connectedName = link.phase.macName }
-        } else if !link.macs.isEmpty || link.phase.macName != nil {
-            if onboarding.step != .pair { onboarding.go(.pair) }
-            if link.macs.count == 1, case .searching = link.phase { link.connect(to: link.macs[0]) }
-        }
-    }
-    private func back() {
-        if onboarding.step == .practice, onboarding.practiceReturnsToMac { onboarding.go(.mac) }
-        else { onboarding.go(OnboardingStep(rawValue: max(0, onboarding.step.rawValue - 1)) ?? .welcome) }
+    private func gestureRow(_ action: OnboardingCoordinator.Action, symbol: PixelSymbol.Kind) -> some View {
+        Button { onboarding.setAction(action) } label: {
+            HStack(spacing: 12) {
+                PixelSymbol(kind: symbol, color: Theme.muted).frame(width: 12, height: 12)
+                Text(action.prompt).modifier(InstrumentHint(color: Theme.ivory))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 4)
+                HUDLabel(text: "TRY ›", color: Theme.orange)
+            }.frame(minHeight: 44).contentShape(Rectangle()).contentShape(Rectangle())
+                .overlay(alignment: .bottom) { Hairline() }
+        }.accessibilityIdentifier(action == .delete ? "onboarding.more" : "onboarding.try." + action.rawValue)
     }
 }
 
-private struct WelcomeWaveform: View {
-    @StateObject private var spectrum = SpectrumStore()
+private struct HUDTarget: View {
+    @ObservedObject var store: SpectrumStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let target: CGRect
     var body: some View {
-        TorusView(store: spectrum, instrumentHUD: true, channelLabel: "PREVIEW")
-            .accessibilityLabel(L10n.text("iMic phosphor waveform demo"))
-            .onAppear { spectrum.configureAmbientMotion(enabled: true, reducedMotion: reduceMotion); spectrum.setVisible(true) }
-            .onDisappear { spectrum.setVisible(false) }
-            .onChange(of: reduceMotion) { _, value in spectrum.configureAmbientMotion(enabled: true, reducedMotion: value) }
+        Canvas { context, _ in
+            let opacity = reduceMotion ? 1 : 0.8 + 0.2 * sin(CACurrentMediaTime() * 2 * .pi / 1.6)
+            var brackets = Path()
+            for (x, y, dx, dy) in [(target.minX, target.minY, 1.0, 1.0),
+                                   (target.maxX, target.minY, -1.0, 1.0),
+                                   (target.minX, target.maxY, 1.0, -1.0),
+                                   (target.maxX, target.maxY, -1.0, -1.0)] {
+                brackets.move(to: CGPoint(x: x + dx * 9, y: y))
+                brackets.addLine(to: CGPoint(x: x, y: y))
+                brackets.addLine(to: CGPoint(x: x, y: y + dy * 9))
+            }
+            context.stroke(brackets, with: .color(Theme.ivory.opacity(opacity)), lineWidth: 0.7)
+        }
+    }
+}
+
+private struct CoachTouch: View {
+    let action: OnboardingCoordinator.Action
+    let source: CGRect
+    let torus: CGRect
+    let reduceMotion: Bool
+    @State private var moved = false
+    @State private var visible = true
+    private var start: CGPoint { action.bar ? CGPoint(x: source.midX, y: source.midY) : CGPoint(x: torus.midX, y: torus.midY) }
+    private var delta: CGSize {
+        switch action {
+        case .send: return CGSize(width: 0, height: 100)
+        case .delete: return CGSize(width: 0, height: -75)
+        case .cursor: return CGSize(width: 90, height: 0)
+        case .clear: return CGSize(width: 0, height: 84 - torus.midY)
+        case .cancel: return CGSize(width: 0, height: -100)
+        case .release: return CGSize(width: 0, height: -22)
+        default: return .zero
+        }
+    }
+    var body: some View {
+        ZStack {
+            if reduceMotion {
+                PixelSymbol(kind: action == .cursor ? .sideways : .up, color: Theme.ivory)
+                    .rotationEffect(.degrees(action == .send ? 180 : 0)).frame(width: 9, height: 9)
+                    .position(x: start.x + 48, y: start.y)
+            } else {
+                Rectangle().fill(Theme.ivory).frame(width: 4, height: 4)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(Theme.ivory.opacity(0.4)).frame(width: 2, height: 12).offset(y: 12)
+                    }
+                    .position(x: start.x + (moved ? delta.width : 0), y: start.y + (moved ? delta.height : 0))
+                    .opacity(visible ? 1 : 0)
+            }
+        }
+        .task(id: action) {
+            moved = false; visible = true
+            guard !reduceMotion else { return }
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.8)) { moved = true }
+            try? await Task.sleep(for: .milliseconds(1100))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.3)) { visible = false }
+        }
     }
 }
 
 struct GuideSettingsSection: View {
-    @State private var destination: Destination?
-    @State private var practiceInteracting = false
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var onboarding: OnboardingCoordinator
+    @State private var download = false
     var onPresentationChanged: (Bool) -> Void = { _ in }
-    private enum Destination: String, Identifiable { case practice, download; var id: String { rawValue } }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            GuideTitle(text: "GUIDE", cell: 1.6, color: Theme.orange).accessibilityLabel(L10n.text("How to use iMic"))
-            Text(L10n.text("How to use iMic")).font(.headline)
-            Button(L10n.text("Practice gestures again")) { destination = .practice }.frame(minHeight: 44)
-            Button(L10n.text("Get the Mac app")) { destination = .download }.frame(minHeight: 44)
+            GuideTitle(text: "GUIDE", cell: 1.6).accessibilityLabel(L10n.text("How to use iMic"))
+            Button(L10n.text("Practice gestures again")) {
+                dismiss()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { onboarding.startPractice(replay: true) }
+            }.frame(minHeight: 44).contentShape(Rectangle())
+            Button(L10n.text("Get the Mac app")) { download = true }.frame(minHeight: 44).contentShape(Rectangle())
         }
-        .onChange(of: destination) { _, value in onPresentationChanged(value != nil) }
-        .sheet(item: $destination) { item in
-            NavigationStack {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        if item == .practice {
-                            PracticeView(onInteractionChanged: { practiceInteracting = $0 }) { destination = nil }
-                        } else {
-                            GuideTitle(text: "MAC", cell: 3, color: Theme.orange)
-                            MacDownloadView()
-                        }
-                    }.padding(24)
-                }.scrollDisabled(practiceInteracting).background(Theme.ink).foregroundStyle(Theme.ivory)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.text("Close")) { destination = nil } } }
-            }.preferredColorScheme(.dark)
-        }
+        .onChange(of: download) { _, value in onPresentationChanged(value) }
+        .sheet(isPresented: $download) { MacDownloadView() }
     }
 }

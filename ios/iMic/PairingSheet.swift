@@ -20,6 +20,7 @@ struct PairingSheet: View {
     @State private var utilitySheet: UtilitySheet?
     @FocusState private var codeFocused: Bool
     var embedded = false
+    var instrumentStyle = false
 
     var body: some View {
         Group {
@@ -212,8 +213,7 @@ struct PairingSheet: View {
                 .lineLimit(2)
                 .truncationMode(.middle)
             Text(L10n.text("Find the 6-digit pairing code in the iMic window on your Mac."))
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.muted)
+                .modifier(InstrumentHint())
             ZStack {
                 HStack(spacing: 7) {
                     ForEach(0..<6, id: \.self) { index in
@@ -256,13 +256,12 @@ struct PairingSheet: View {
                     .foregroundStyle(Theme.orange)
             } else if link.pairing {
                 HStack(spacing: 8) {
-                    ProgressView().tint(Theme.orange).scaleEffect(0.7)
+                    if instrumentStyle { PixelScan() } else { ProgressView().tint(Theme.orange).scaleEffect(0.7) }
                     MetaLabel(text: "VERIFYING", color: Theme.muted)
                 }
             } else {
                 Text(L10n.text("Connects automatically after all 6 digits are entered"))
-                    .font(.system(size: 10, design: .monospaced)).tracking(0.6)
-                    .foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+                    .modifier(InstrumentHint()).fixedSize(horizontal: false, vertical: true)
             }
 
             HStack(spacing: 8) {
@@ -322,7 +321,7 @@ struct PairingSheet: View {
             }
             if link.macs.isEmpty {
                 HStack(spacing: 8) {
-                    ProgressView().tint(Theme.orange).scaleEffect(0.7)
+                    if instrumentStyle { PixelScan() } else { ProgressView().tint(Theme.orange).scaleEffect(0.7) }
                     Text(L10n.text("Keep your iPhone and Mac on the same Wi-Fi and allow Local Network access."))
                         .font(.system(size: 13))
                         .foregroundStyle(Theme.muted)

@@ -4,6 +4,11 @@ import SwiftUI
 struct DeviceSelectionView: View {
     @EnvironmentObject private var link: LinkClient
     @EnvironmentObject private var session: SessionModel
+    @EnvironmentObject private var onboarding: OnboardingCoordinator
+    @Environment(\.openURL) private var openURL
+    var onboardingMode = false
+    @State private var searchExpired = false
+    @State private var showDownload = false
     @State private var pendingSelection: RememberedMac?
     @State private var confirmSwitch = false
 
@@ -13,6 +18,113 @@ struct DeviceSelectionView: View {
     }
 
     var body: some View {
+        Group {
+            if onboardingMode { instrumentLink } else { regularList }
+        }
+        .background(Theme.ink.ignoresSafeArea())
+        .modifier(PhosphorNativeGlass())
+        .navigationTitle(onboardingMode ? "" : L10n.text("Connect to a computer"))
+        .toolbar(onboardingMode ? .hidden : .visible, for: .navigationBar)
+        .navigationBarTitleDisplayMode(.inline)
+        .tint(Theme.orange)
+        .sheet(isPresented: $showDownload) { MacDownloadView() }
+        .task {
+            guard onboardingMode else { return }
+            link.startDeferred = false
+            link.start()
+            if link.phase.isReady { onboarding.go(.ready); return }
+            #if DEBUG
+            if onboarding.preview == "download" {
+                searchExpired = true
+                try? await Task.sleep(for: .seconds(1))
+                if !Task.isCancelled { showDownload = true }
+                return
+            }
+            #endif
+            try? await Task.sleep(for: .seconds(5))
+            if !Task.isCancelled { searchExpired = true }
+        }
+        .onChange(of: link.phase) { _, phase in
+            if onboardingMode, phase.isReady { onboarding.go(.ready) }
+        }
+        .confirmationDialog(L10n.text("Cancel this voice session and switch Macs?"), isPresented: $confirmSwitch, titleVisibility: .visible) {
+            Button(L10n.text("Cancel session and switch"), role: .destructive) {
+                if let mac = pendingSelection { performSelection(mac) }
+                pendingSelection = nil
+            }
+            Button(L10n.text("Continue this session"), role: .cancel) { pendingSelection = nil }
+        } message: {
+            Text(L10n.text("Recording or recognition will stop. Unsent audio will not go to another Mac. Completed results will be kept."))
+        }
+    }
+
+    private var instrumentLink: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .top) {
+                TechBackground()
+                ScrollView {
+                    VStack(spacing: 0) {
+                        HStack(alignment: .top) {
+                            InstrumentIdentity()
+                            Spacer()
+                            Button { onboarding.connectLater() } label: {
+                                HUDLabel(text: "GUIDE · " + L10n.text("Connect later"), color: Theme.ivory).frame(minHeight: 44).contentShape(Rectangle())
+                            }.buttonStyle(.plain).offset(y: -9)
+                                .accessibilityIdentifier("onboarding.connectLater")
+                        }.frame(height: 62, alignment: .top)
+                        HUDDivider(store: session.spectrumStore, connected: link.phase.isReady).frame(height: 10)
+                        InstrumentStatus(label: "LINK / MAC", word: linkWord,
+                            description: L10n.text(needsPairing ? "Enter the pairing code shown on your Mac" : "Open iMic on your Mac"),
+                            detail: link.macs.isEmpty ? L10n.text("Allow Local Network to find your Mac") : nil, teaching: true)
+                            .padding(.top, 36).padding(.bottom, 30)
+                        VStack(alignment: .leading, spacing: 16) {
+                            if needsPairing {
+                                PairingSheet(embedded: true, instrumentStyle: true).id(link.selectedMacID)
+                            } else {
+                                HStack { HUDLabel(text: "NEARBY / MAC"); Spacer(); HUDLabel(text: String(link.macs.count)) }
+                            }
+                            if link.macs.isEmpty {
+                                HStack(spacing: 12) {
+                                    PixelScan().accessibilityIdentifier("onboarding.searching")
+                                    Text(L10n.text("Looking for a Mac…")).modifier(InstrumentHint())
+                                }.frame(minHeight: 44).accessibilityElement(children: .combine)
+                            } else {
+                                VStack(spacing: 0) { ForEach(link.macs) { mac in deviceRow(id: mac.id, name: mac.name, nearby: true) } }
+                            }
+                            if !otherRemembered.isEmpty {
+                                HUDLabel(text: "REMEMBERED / MAC")
+                                ForEach(otherRemembered) { mac in deviceRow(id: mac.id, name: mac.name, nearby: false) }
+                            }
+                            if link.localNetworkDenied {
+                                Button(L10n.text("Open Settings")) {
+                                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                                }.modifier(InstrumentHint(color: Theme.ivory)).frame(minHeight: 44)
+                            }
+                            if searchExpired && link.macs.isEmpty {
+                                Hairline()
+                                Button { showDownload = true } label: {
+                                    HStack {
+                                        Text(L10n.text("No iMic on your Mac yet?")).modifier(InstrumentHint(color: Theme.ivory))
+                                        Spacer(); HUDLabel(text: "GET ›", color: Theme.orange)
+                                    }.frame(minHeight: 44)
+                                }.accessibilityIdentifier("onboarding.download")
+                            }
+                        }.padding(16).overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
+                        Spacer(minLength: 32)
+                        HStack { HUDLabel(text: "LOCAL / ENCRYPTED"); Spacer(); HUDLabel(text: "RX / 01") }
+                    }
+                    .padding(.horizontal, 24).padding(.top, 14).padding(.bottom, 24)
+                    .frame(minHeight: geometry.size.height, alignment: .top)
+                }.scrollIndicators(.hidden).scrollDismissesKeyboard(.interactively)
+            }
+        }
+    }
+    private var linkWord: String {
+        if needsPairing { return "PAIR" }
+        if case .connecting = link.phase { return "LINK" }
+        return link.macs.isEmpty ? "SCAN" : "FOUND"
+    }
+    private var regularList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 30) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -57,20 +169,6 @@ struct DeviceSelectionView: View {
             .padding(.top, 22)
             .padding(.bottom, 34)
             .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .background(Theme.ink.ignoresSafeArea())
-        .modifier(PhosphorNativeGlass())
-        .navigationTitle(L10n.text("Connect to a computer"))
-        .navigationBarTitleDisplayMode(.inline)
-        .tint(Theme.orange)
-        .confirmationDialog(L10n.text("Cancel this voice session and switch Macs?"), isPresented: $confirmSwitch, titleVisibility: .visible) {
-            Button(L10n.text("Cancel session and switch"), role: .destructive) {
-                if let mac = pendingSelection { performSelection(mac) }
-                pendingSelection = nil
-            }
-            Button(L10n.text("Continue this session"), role: .cancel) { pendingSelection = nil }
-        } message: {
-            Text(L10n.text("Recording or recognition will stop. Unsent audio will not go to another Mac. Completed results will be kept."))
         }
     }
 
@@ -161,10 +259,8 @@ struct DeviceSelectionView: View {
             }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: "desktopcomputer")
-                    .font(.system(size: 20, weight: .light))
-                    .foregroundStyle(selected ? Theme.orange : Theme.muted)
-                    .frame(width: 28)
+                PixelSymbol(kind: .computer, color: selected ? Theme.orange : Theme.muted)
+                    .frame(width: 28, height: 22)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(name)
                         .font(.system(size: 15, weight: .medium))
@@ -177,9 +273,9 @@ struct DeviceSelectionView: View {
                         .lineLimit(2)
                 }
                 Spacer(minLength: 4)
-                Image(systemName: selected ? "checkmark" : "arrow.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(selected ? Theme.orange : Theme.muted)
+                if selected {
+                    PixelSymbol(kind: .check, color: Theme.orange).frame(width: 12, height: 12)
+                } else { HUDLabel(text: "›") }
             }
             .padding(.vertical, 16)
             .contentShape(Rectangle())

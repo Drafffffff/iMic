@@ -33,10 +33,7 @@ private struct LiveApplicationView: View {
     }
 
     var body: some View {
-        Group {
-            if onboarding.presented { OnboardingView() }
-            else { HomeView() }
-        }
+        HomeView()
             .environmentObject(link)
             .environmentObject(session)
             .environmentObject(onboarding)
