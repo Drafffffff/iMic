@@ -135,7 +135,7 @@ final class BailianDiscovery {
                 }
                 if !accepted.isEmpty { completion(.failure(.service(200))); return }
                 if hosts.allSatisfy({ responses[$0]?.0 == 401 }) {
-                    let suspect = key.hasPrefix("sk-sp-") || key.hasPrefix("sk-ws-")
+                    let suspect = key.hasPrefix("sk-sp-")
                     completion(.failure(suspect ? .plan : .invalidKey)); return
                 }
                 // Prefer a specific actionable rejection over a different region's 401.

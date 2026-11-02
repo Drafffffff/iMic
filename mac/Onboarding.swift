@@ -113,6 +113,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     private enum KeyState: Equatable { case idle, checking, valid, rejected, offline, format }
 
     private weak var host: SetupWizardHost?
+    private let validationSession: URLSession?
     private(set) var step: SetupStep = .key
     private var snapshot: SetupSnapshot
 
@@ -147,8 +148,9 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     private var checkedKey = ""
     private let polishCheck = NSButton(checkboxWithTitle: L10n.text("Also enable AI polish (recommended)"), target: nil, action: nil)
 
-    init(host: SetupWizardHost) {
+    init(host: SetupWizardHost, validationSession: URLSession? = nil) {
         self.host = host
+        self.validationSession = validationSession
         snapshot = host.setupSnapshot()
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 420),
@@ -407,6 +409,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         keyField.placeholderString = "sk-…"
         keyField.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
         keyField.bezelStyle = .roundedBezel
+        keyField.configureSingleLineInput()
         keyField.delegate = self
         keyField.setAccessibilityLabel(L10n.text("Model Studio API Key"))
         keyField.heightAnchor.constraint(equalToConstant: 32).isActive = true
@@ -471,7 +474,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
             message = BailianIssue.network.message
             color = .systemRed
         case .format:
-            message = L10n.text("Model Studio API Keys start with sk-. Check that you copied the entire Key.")
+            message = ShellCredentials.formatMessage
             color = .systemRed
         }
         keyMessage.stringValue = message
@@ -545,13 +548,14 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
             }
             self.updateKey(); self.updateStepper()
         }
-        if host?.setupPreview == true {
+        if host?.setupPreview == true && validationSession == nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 finish(key.contains("bad") ? .failure(.invalidKey) : .success(.init(host: BailianAddress.hosts[0], asrListed: false, polishListed: true)))
             }
             return
         }
         keyTask = BailianDiscovery.start(key: key, baseURL: advanced.isHidden ? "" : baseField.stringValue,
+            session: validationSession ?? SettingsValidation.session,
             progress: { [weak self] message in
                 guard let self, self.keyGeneration == generation else { return }
                 self.validationMessage = message; self.updateKey()

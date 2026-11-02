@@ -144,6 +144,69 @@ final class PolishProviderTests: XCTestCase {
         }
     }
 
+    private var dottedKey: String { "sk-ws-AAAA.BBBB.CCCC." + String(repeating: "Ab09+/", count: 15) + "==" }
+
+    func testDottedKeySurvivesEveryCredentialAndBearerPath() throws {
+        let key = dottedKey
+        XCTAssertTrue(ShellCredentials.valid(key))
+        XCTAssertTrue(PolishCredentials.valid(key, for: .bailian))
+        for input in [key, "  \(key)\r\n", "'\(key)'", "\"\(key)\"", "“\(key)”", "export DASHSCOPE_API_KEY='\(key)'\r\n"] {
+            XCTAssertEqual(ShellCredentials.clean(input), key)
+        }
+        // Test every supported shell file, including unquoted and quoted literal assignments.
+        for (path, fish) in ShellCredentials.files {
+            let url = home.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            for literal in [key, "'\(key)'", "\"\(key)\""] {
+                let assignment = fish ? "set -gx DASHSCOPE_API_KEY \(literal)" : "export DASHSCOPE_API_KEY=\(literal)"
+                try Data((assignment + "\n").utf8).write(to: url)
+                XCTAssertEqual(ShellCredentials(home: home).load(environment: [:]), key)
+            }
+            try FileManager.default.removeItem(at: url)
+        }
+        for name in PolishCredentials.names(for: .bailian) {
+            XCTAssertEqual(PolishCredentials.load(for: .bailian, file: file, home: home, environment: [name: key]), key)
+        }
+        XCTAssertTrue(PolishCredentials.save(key, for: .bailian, file: file))
+        XCTAssertEqual(PolishCredentials.load(for: .bailian, file: file, home: home, environment: [:]), key)
+        let check = try XCTUnwrap(BailianKeyCheck.request(key: key, asrEndpoint: ASRTestEndpoint.value))
+        let validation = try SettingsValidation.request(provider: .bailian, key: key,
+            model: PolishProvider.bailian.defaultModel, endpoint: PolishProvider.bailian.defaultEndpoint)
+        let polish = try DeepSeekClient.request(text: raw, key: key, model: PolishProvider.bailian.defaultModel,
+            endpoint: PolishProvider.bailian.defaultEndpoint, provider: .bailian, options: .default)
+        for request in [check, validation, polish] {
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(key)")
+        }
+        let list = modelList(asr: false)
+        let selected = try discover(key: key) { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(key)")
+            return (request.url!.host == BailianAddress.hosts[0] ? 200 : 401, list)
+        }.get()
+        XCTAssertEqual(selected.host, BailianAddress.hosts[0])
+        XCTAssertFalse(selected.asrListed)
+        XCTAssertTrue(selected.polishListed)
+        XCTAssertTrue(selected.message.contains(L10n.text("The model list does not include the speech model. Access will be confirmed on first recognition.")))
+    }
+
+    func testKeyAlphabetRejectsInjectionAndBoundsLength() throws {
+        for character in [" ", "\t", "\r", "\n", "\0", "\u{7f}", "'", "\"", "“", "\\", "$", "`", ";", "&", "|", "(", ")", ":", "é", "中"] {
+            let invalid = dottedKey + character + "AAAA"
+            XCTAssertFalse(ShellCredentials.valid(invalid))
+            XCTAssertFalse(PolishCredentials.save(invalid, for: .bailian, file: file))
+            XCTAssertNil(BailianKeyCheck.request(key: invalid, asrEndpoint: ASRTestEndpoint.value))
+            XCTAssertThrowsError(try SettingsValidation.request(provider: .bailian, key: invalid,
+                model: "model", endpoint: PolishProvider.bailian.defaultEndpoint))
+            try Data("export DASHSCOPE_API_KEY='\(invalid)'\n".utf8).write(to: home.appendingPathComponent(".zshrc"))
+            XCTAssertNil(ShellCredentials(home: home).resolve(environment: [:]))
+            XCTAssertNil(ShellCredentials(home: home).resolve(environment: ["DASHSCOPE_API_KEY": invalid]))
+        }
+        XCTAssertFalse(ShellCredentials.valid("sk-" + String(repeating: "A", count: 7)))
+        XCTAssertTrue(ShellCredentials.valid("sk-" + String(repeating: "A", count: 8)))
+        XCTAssertTrue(ShellCredentials.valid("sk-" + String(repeating: "A", count: 509)))
+        XCTAssertFalse(ShellCredentials.valid("sk-" + String(repeating: "A", count: 510)))
+        XCTAssertFalse(ShellCredentials.valid("xx-" + String(repeating: "A", count: 90)))
+    }
+
     func testBailianAddressesShareOneAllowlistAndDeriveBothEndpoints() throws {
         let hosts = BailianAddress.hosts + ["ws-123.cn-beijing.maas.aliyuncs.com", "ws.ap-southeast-1.maas.aliyuncs.com", "trial.cn-beijing.maas.aliyuncs.com", "trial.ap-southeast-1.maas.aliyuncs.com", "trial.cn-hongkong.maas.aliyuncs.com"]
         for host in hosts {
@@ -233,8 +296,8 @@ final class PolishProviderTests: XCTestCase {
         let list = modelList()
         XCTAssertEqual(discover { _ in (200,list) }, .failure(.ambiguous))
         XCTAssertEqual(discover { _ in (401,Data()) }, .failure(.invalidKey))
-        for key in ["sk-sp-fake-test-key", "sk-ws-fake-test-key"] {
-            XCTAssertEqual(discover(key: key) { _ in (401,Data()) }, .failure(.plan))
+        for key in ["sk-sp-fake-test-key", dottedKey] {
+            XCTAssertEqual(discover(key: key) { _ in (401,Data()) }, .failure(key.hasPrefix("sk-sp-") ? .plan : .invalidKey))
             let valid = discover(key: key) { req in (req.url!.host == BailianAddress.hosts[0] ? 200 : 401, list) }
             XCTAssertNotNil(try? valid.get()) // Never reject a usable workspace key by prefix alone.
         }

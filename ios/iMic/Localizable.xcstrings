@@ -11699,6 +11699,114 @@
           }
         }
       }
+    },
+    "Cut": {
+      "comment": "mac",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cut"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "剪切"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Edit": {
+      "comment": "mac",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Redo": {
+      "comment": "mac",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redo"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重做"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Select All": {
+      "comment": "mac",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select All"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全选"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "This doesn't look like a Model Studio API Key. Check that you copied all of it.": {
+      "comment": "mac",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This doesn't look like a Model Studio API Key. Check that you copied all of it."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这不像百炼 API Key，请检查是否复制完整。"
+          }
+        }
+      },
+      "extractionState": "manual"
+    },
+    "Undo": {
+      "comment": "mac",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "撤销"
+          }
+        }
+      },
+      "extractionState": "manual"
     }
   },
   "version": "1.0"
