@@ -22,6 +22,7 @@ var snapshots: [CaptureDiagnostics] = []
 var clock: TimeInterval = 0
 var checks = 0
 var failNextStart = false
+var vpioRecoveries = 0
 var startBarrier: (DispatchSemaphore, DispatchSemaphore)?
 func expect(_ value: @autoclosure () -> Bool, _ message: String) {
     checks += 1
@@ -30,12 +31,13 @@ func expect(_ value: @autoclosure () -> Bool, _ message: String) {
 final class FakeHardware: CaptureHardware {
     let id: Int
     var running = false
+    var voiceProcessing = true
     var route = "built-in:48000:1"
     var inputRoute = validRoute
     var meter: ((CaptureMeter) -> Void)?
     var failure: ((String) -> Void)?
     var notificationObject: AnyObject { self }
-    var diagnostics: CaptureDiagnostics { CaptureDiagnostics(sampleRate: 48000, nativeRate: 48000, channels: 1, running: running, inputRoute: inputRoute) }
+    var diagnostics: CaptureDiagnostics { CaptureDiagnostics(sampleRate: 48000, nativeRate: 48000, channels: 1, running: running, inputRoute: inputRoute, voiceProcessing: voiceProcessing, mode: voiceProcessing ? "voiceChat" : "measurement") }
     var inputIdentity: String { route }
     init(_ id: Int) { self.id = id }
     func start(meter: @escaping (CaptureMeter) -> Void, failure: @escaping (String) -> Void) throws {
@@ -50,8 +52,9 @@ final class FakeHardware: CaptureHardware {
     }
     func stop() { trace.append("stop\(id)"); running = false }
 }
-let controller = AudioCaptureController(queue: queue, center: center, names: names, makeHardware: {
+let controller = AudioCaptureController(queue: queue, center: center, names: names, makeHardware: { vpio in
     let device = FakeHardware(devices.count)
+    device.voiceProcessing = vpio
     if let route = nextInputRoute { device.inputRoute = route; nextInputRoute = nil }
     devices.append(device)
     return device
@@ -61,9 +64,9 @@ let controller = AudioCaptureController(queue: queue, center: center, names: nam
     if failRebuild { throw NSError(domain: "test.playback", code: 1) }
     nextInputRoute = routeAfterRebuild
 }, log: { trace.append($0) }, now: { clock })
-func start(_ monitor: Bool = true) {
+func start(_ monitor: Bool = true, vpio: Bool = true, microphoneTest: Bool = true) {
     queue.sync {
-        try! controller.start(onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) })
+        try! controller.start(voiceProcessing: vpio, microphoneTest: microphoneTest, onVoiceProcessingRecovered: { vpioRecoveries += 1 }, onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) })
         controller.setMonitoring(monitor)
     }
 }
@@ -71,9 +74,9 @@ func post(_ name: Notification.Name, object: AnyObject? = nil, began: Bool = fal
     center.post(name: name, object: object, userInfo: ["began": began, "oldDevice": oldDevice])
     queue.sync {}
 }
-func pulse(callbacks: UInt64 = 50, zero: Bool = false, samples: Bool = true, elapsed: Double = 0.5, peak: Double = 0.01) {
+func pulse(callbacks: UInt64 = 50, zero: Bool = false, samples: Bool = true, elapsed: Double = 0.5, peak: Double = 0.01, rms: Double? = nil) {
     clock += elapsed
-    devices.last!.meter?(CaptureMeter(rms: zero ? 0 : peak, peak: zero ? 0 : peak,
+    devices.last!.meter?(CaptureMeter(rms: zero ? 0 : (rms ?? peak), peak: zero ? 0 : peak,
         callbacks: callbacks, hasSamples: samples, allZero: zero, elapsed: elapsed))
     queue.sync {}
 }
@@ -148,7 +151,8 @@ let count = devices.count
 pulse(callbacks: 0, samples: false); pulse(callbacks: 0, samples: false)
 expect(devices.count == count + 1, "missing callbacks triggers retry")
 for _ in 0..<4 { pulse(peak: 1e-12) }
-expect(devices.last!.running, "tiny nonzero input must not be silent")
+expect(snapshots.last!.recoveryResult == .lowLevel, "tiny nonzero recovery remains lowLevel")
+expect(devices.last!.running, "MIC TEST keeps low nonzero input visible for comparison")
 pulse(zero: true); pulse(peak: 1e-12); pulse(zero: true)
 expect(devices.last!.running, "nonzero resets consecutive silence")
 queue.sync { controller.setMonitoring(false); controller.setMonitoring(true) }
@@ -157,7 +161,7 @@ expect(devices.count == count + 2, "new hold has its own retry budget")
 // Stop/start ordering is the actual production serial queue, not a shadow policy.
 let old = devices.last!
 queue.async { controller.stop() }
-queue.async { try! controller.start(onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }) }
+queue.async { try! controller.start(microphoneTest: true, onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }) }
 queue.sync {}
 let fresh = devices.last!
 old.failure?("old-generation")
@@ -170,10 +174,10 @@ expect(snapshots.contains { $0.meter.peak == 1e-12 && $0.running }, "diagnostics
 let entered = DispatchSemaphore(value: 0)
 let release = DispatchSemaphore(value: 0)
 startBarrier = (entered, release)
-queue.async { try! controller.start(onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }) }
+queue.async { try! controller.start(microphoneTest: true, onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }) }
 expect(entered.wait(timeout: .now() + 5) == .success, "fake activation is in flight")
 queue.async { controller.stop() }
-queue.async { try! controller.start(onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }) }
+queue.async { try! controller.start(microphoneTest: true, onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }) }
 release.signal()
 queue.sync {}
 expect(devices.last!.running, "stop/start queued during activation ends in new live engine")
@@ -204,7 +208,7 @@ post(names.interruption, began: true)
 let beforeBlocked = devices.count
 queue.sync {
     do {
-        try controller.start(onFailure: { _ in }, onDiagnostics: { _ in })
+        try controller.start(microphoneTest: true, onFailure: { _ in }, onDiagnostics: { _ in })
         fatalError("interrupted start unexpectedly succeeded")
     } catch {}
 }
@@ -244,12 +248,12 @@ let beforeSignal = rebuilds
 pulse(zero: true); pulse(zero: true)
 expect(rebuilds == beforeSignal + 1, "silence uses playback route recovery")
 pulse()
-expect(snapshots.last!.recoveryResult == .signalDetected, "nonzero native sample verifies recovery signal")
+expect(snapshots.last!.recoveryResult == .signalDetected, "normal-level native sample verifies recovery signal")
 expect(!queue.sync { controller.recoverManually() }, "manual cannot get a second recovery after silence")
 // Deliberate manual rebuild after an exhausted run starts a fresh test and
 // spends that new test's sole budget before any ordinary engine start.
 let explicitManual = rebuilds
-queue.sync { try! controller.start(rebuildFirst: true, onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }); controller.setMonitoring(true) }
+queue.sync { try! controller.start(rebuildFirst: true, microphoneTest: true, onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }); controller.setMonitoring(true) }
 expect(rebuilds == explicitManual + 1 && snapshots.last!.attempt == 1, "explicit new manual test recovers once")
 pulse(zero: true); pulse(zero: true)
 expect(rebuilds == explicitManual + 1 && failures.last == CaptureRouteError.message, "new manual test cannot follow with an automatic second recovery")
@@ -261,7 +265,7 @@ for playbackFails in [false, true] {
     let before = rebuilds
     var error: Error?
     queue.sync {
-        do { try controller.start(onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }) }
+        do { try controller.start(microphoneTest: true, onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }) }
         catch let caught { error = caught }
         controller.setMonitoring(true)
     }
@@ -284,7 +288,7 @@ expect(rebuilds == manualBefore + 1 && failures.last == CaptureRouteError.messag
 // Manual rebuild remains usable after a non-route startup/format failure.
 failNextStart = true
 queue.sync {
-    do { try controller.start(onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }) }
+    do { try controller.start(microphoneTest: true, onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }) }
     catch {}
 }
 let afterFormatFailure = rebuilds
@@ -314,6 +318,126 @@ start()
 queue.sync { controller.stop() }
 let afterExplicitStop = rebuilds
 expect(!queue.sync { controller.recoverManually() } && rebuilds == afterExplicitStop, "closed/background self-test cannot be revived by a late manual request")
+// VPIO startup ordering is shared with the actual AVAudioEngine adapter.
+for vpio in [false, true] {
+    var steps: [String] = []
+    let format: Int = try! CaptureStartup.prepare(voiceProcessing: vpio,
+        configureSession: { config in
+            expect(config.mode == (vpio ? .voiceChat : .measurement), "VPIO selects voiceChat; raw keeps measurement")
+            expect(config.defaultToSpeaker && config.automaticGain && !config.bypass && !config.advancedDucking, "speaker policy, AGC, AEC and minimal ducking policy")
+            steps.append(config.mode == .voiceChat ? "voiceChat" : "measurement")
+        },
+        activate: { steps.append("activate") },
+        enableVoiceProcessing: { steps.append("enable-vpio") },
+        configureProcessing: { _ in steps.append("AGC-AEC-min-ducking") },
+        readFormat: { steps.append("actual-format"); return vpio ? 48000 : 16000 })
+    expect(steps == (vpio ? ["voiceChat", "activate", "enable-vpio", "AGC-AEC-min-ducking", "actual-format"] : ["measurement", "activate", "actual-format"]), "configure and activate before VPIO, actual format after processing")
+    expect(format == (vpio ? 48000 : 16000), "uses post-VPIO actual format")
+}
+var readAfterEnableFailure = false
+do {
+    _ = try CaptureStartup.prepare(voiceProcessing: true, configureSession: { _ in }, activate: {},
+        enableVoiceProcessing: { throw NSError(domain: "vpio", code: 1) }, configureProcessing: { _ in },
+        readFormat: { readAfterEnableFailure = true })
+} catch {}
+expect(!readAfterEnableFailure, "VPIO failure propagates instead of silently using raw input")
+let suite = "imic.vpio-tests.\(UUID().uuidString)"
+let defaults = UserDefaults(suiteName: suite)!
+expect(VoiceProcessingPreference.enabled(in: defaults), "new and existing installations default on")
+defaults.set(false, forKey: "micDebug.voiceProcessing")
+expect(VoiceProcessingPreference.enabled(in: defaults), "legacy diagnostic OFF key ignored")
+defaults.set(false, forKey: VoiceProcessingPreference.key)
+expect(!VoiceProcessingPreference.enabled(in: defaults), "explicit new preference OFF retained")
+var comparison = MicrophoneTestProcessing(defaults: defaults)
+comparison.toggle()
+expect(comparison.enabled && !VoiceProcessingPreference.enabled(in: defaults), "MIC TEST temporary ON doesn't write saved OFF")
+comparison.toggle()
+expect(!comparison.enabled, "MIC TEST toggles both directions")
+defaults.set(true, forKey: VoiceProcessingPreference.key)
+comparison = MicrophoneTestProcessing(defaults: defaults)
+comparison.toggle()
+expect(!comparison.enabled && VoiceProcessingPreference.enabled(in: defaults), "MIC TEST temporary OFF doesn't write saved ON")
+expect(MicrophoneTestProcessing(defaults: defaults).enabled, "leaving test restores saved value on next entry")
+defaults.removePersistentDomain(forName: suite)
+expect(CaptureLevel.classify(CaptureMeter(rms: 0.0002, peak: 0.0008, callbacks: 10, hasSamples: true)) == .lowLevel, "field nonzero noise classified low")
+expect(CaptureLevel.classify(CaptureMeter(rms: 0.001, peak: 0.002, callbacks: 10, hasSamples: true)) == .normal, "RMS threshold is strict")
+expect(CaptureLevel.classify(CaptureMeter(rms: 0.0005, peak: 0.003, callbacks: 10, hasSamples: true)) == .normal, "peak threshold is strict")
+expect(CaptureLevel.classify(CaptureMeter(callbacks: 10, hasSamples: true, allZero: true)) == .allZero, "digital zero distinct from low nonzero")
+start(vpio: false, microphoneTest: false)
+let rawDevices = devices.count
+let rawPlayback = rebuilds
+let recoveredBefore = vpioRecoveries
+pulse(peak: 0.0008, rms: 0.0002); pulse(peak: 0.0008, rms: 0.0002)
+expect(devices.count == rawDevices, "one second low nonzero doesn't trigger early")
+pulse(peak: 0.0008, rms: 0.0002)
+expect(devices.count == rawDevices + 1 && devices.last!.voiceProcessing, "1.5 seconds nearly silent raw switches to VPIO")
+expect(rebuilds == rawPlayback && snapshots.last!.attempt == 1, "VPIO path switch uses shared budget without playback kick")
+pulse(peak: 0.0008, rms: 0.0002)
+expect(snapshots.last!.recoveryResult == .lowLevel && vpioRecoveries == recoveredBefore, "noise floor never claims restored signal or persists setting")
+pulse()
+expect(snapshots.last!.recoveryResult == .signalDetected && vpioRecoveries == recoveredBefore + 1, "normal VPIO level confirms fallback exactly once")
+pulse()
+expect(vpioRecoveries == recoveredBefore + 1, "recovered notification fires once")
+expect(!queue.sync { controller.recoverManually() }, "fallback consumes same manual/route recovery budget")
+// Rebuild current VPIO profile, including explicit raw comparison.
+for vpio in [false, true] {
+    start(vpio: vpio)
+    expect(queue.sync { controller.recoverManually() }, "manual route rebuild accepted")
+    expect(devices.last!.voiceProcessing == vpio, "route rebuild preserves selected VPIO configuration")
+}
+start(vpio: false, microphoneTest: false)
+pulse()
+let spokeDevices = devices.count
+for _ in 0..<5 { pulse(peak: 0.0008, rms: 0.0002) }
+expect(devices.count == spokeDevices && devices.last!.running, "normal input followed by quiet pause doesn't trigger fallback")
+start(false, vpio: false, microphoneTest: false)
+let idleDevices = devices.count
+for _ in 0..<5 { pulse(peak: 0.0008, rms: 0.0002) }
+expect(devices.count == idleDevices, "warm lease low input doesn't trigger fallback")
+queue.sync { controller.setMonitoring(true) }
+pulse(peak: 0.0008, rms: 0.0002); pulse(peak: 0.0008, rms: 0.0002)
+expect(devices.count == idleDevices, "warm low history doesn't shorten hold timer")
+pulse(peak: 0.0008, rms: 0.0002)
+expect(devices.count == idleDevices + 1, "fresh hold low duration triggers fallback")
+let beforeWarmConfirmation = vpioRecoveries
+queue.sync { controller.setMonitoring(false) }
+pulse()
+expect(vpioRecoveries == beforeWarmConfirmation, "post-release normal input cannot persist fallback preference")
+start(vpio: false)
+let comparisonDevices = devices.count
+for _ in 0..<5 { pulse(peak: 0.0008, rms: 0.0002) }
+expect(devices.count == comparisonDevices && !devices.last!.voiceProcessing, "MIC TEST keeps temporary raw low input for comparison")
+start(false, vpio: false, microphoneTest: false)
+queue.sync { controller.setMonitoring(true) }
+let lowBoundary = devices.count
+clock += 0.01
+devices.last!.meter?(CaptureMeter(rms: 0.0002, peak: 0.0008, callbacks: 50, hasSamples: true, elapsed: 0.5))
+queue.sync {}
+pulse(peak: 0.0008, rms: 0.0002); pulse(peak: 0.0008, rms: 0.0002)
+expect(devices.count == lowBoundary, "low watchdog clips warm report to actual held time")
+pulse(peak: 0.0008, rms: 0.0002)
+expect(devices.count == lowBoundary + 1, "low fallback after full held 1.5 seconds")
+start(vpio: true, microphoneTest: false)
+let vpioDevices = devices.count
+for _ in 0..<3 { pulse(peak: 0.0008, rms: 0.0002) }
+expect(devices.count == vpioDevices && !devices.last!.running && failures.last == AudioCaptureController.noAudioMessage, "VPIO low input fails clearly without repeated recovery")
+expect(snapshots.last!.recoveryResult == .lowLevel, "terminal low remains distinct from signalDetected")
+start(vpio: false, microphoneTest: false)
+failNextStart = true
+for _ in 0..<3 { pulse(peak: 0.0008, rms: 0.0002) }
+expect(!devices.last!.running && failures.last == AudioCaptureController.noAudioMessage, "fallback activation failure stops and reports no audio")
+nextInputRoute = emptyRoute
+start(vpio: false, microphoneTest: false)
+let usedRouteBudget = devices.count
+for _ in 0..<3 { pulse(peak: 0.0008, rms: 0.0002) }
+expect(devices.count == usedRouteBudget && !devices.last!.running, "route recovery exhausts budget before later low-level fallback")
+start(vpio: false, microphoneTest: false)
+pulse(zero: true); pulse(zero: true)
+expect(devices.last!.voiceProcessing && snapshots.last!.attempt == 1, "raw exact-zero recovery uses VPIO and same budget")
+let zeroBudget = devices.count
+for _ in 0..<3 { pulse(peak: 0.0008, rms: 0.0002) }
+expect(devices.count == zeroBudget && !devices.last!.running, "fallback still-low cannot loop")
+expect(snapshots.last!.report.contains("vpio=on") && snapshots.last!.report.contains("mode=voiceChat") && snapshots.last!.report.contains("ducking=") && snapshots.last!.report.contains("level=lowLevel"), "diagnostic copy includes VPIO, mode, format, ducking and classification")
 let oldGate = CaptureDeliveryGate()
 var delivered = 0
 oldGate.deliver { delivered += 1 }
@@ -322,4 +446,4 @@ let newGate = CaptureDeliveryGate()
 oldGate.deliver { delivered += 100 }
 newGate.deliver { delivered += 1 }
 expect(delivered == 2, "drained old buffers cannot feed a new speech segment")
-print("PASS: \(checks) capture assertions (route validation/recovery, shared budget, notifications, warm leases, native silence, generations)")
+print("PASS: \(checks) capture assertions (route validation/recovery, shared budget, notifications, warm leases, native silence, generations, VPIO configuration/fallback/preferences/comparison)")

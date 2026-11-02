@@ -229,11 +229,17 @@ final class SessionModel: ObservableObject {
     private func startAudioEngine() -> Bool {
         audioStandbyTask?.cancel()
         audioStandbyTask = nil
-        guard !audio.isRunning else { audio.setMonitoring(true); return true }
+        if audio.isRunning, audio.matchesPreferredConfiguration { audio.setMonitoring(true); return true }
+        // A Settings change invalidates only the old warm capture, at the next hold.
+        if audio.isRunning { audio.stop(); preRoll.removeAll() }
         audioGeneration &+= 1
         let generation = audioGeneration
         // Starts in the background: capture begins at once and PCM flows when the engine is up.
         audio.start(
+            onVoiceProcessingRecovered: { [weak self] in
+                guard let self, self.audioGeneration == generation else { return }
+                self.showNotice(L10n.text("Voice processing was enabled automatically to restore recording."))
+            },
             onChunk: { [weak self] data in
                 DispatchQueue.main.async { [weak self] in
                     guard let self, self.audioGeneration == generation else { return }
