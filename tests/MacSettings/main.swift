@@ -300,7 +300,18 @@ for row in addresses where row.id.hasSuffix(".endpoint") && row.id != "bailian.e
     row.value = original; row.cancel()
     break
 }
+keySettings.select(.bailian)
+keySettings.window.makeKeyAndOrderFront(nil)
+allViews(keyPane).compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "bailianAdvancedToggle" }!.performClick(nil)
+captureKeyField(keySettings.window, "settings-service-address")
 keySettings.window.orderOut(nil)
+let addressWizard = SetupWizard(host: app)
+addressWizard.reopen(at: .key)
+allViews(addressWizard.window!.contentView!).compactMap { $0 as? NSButton }.first {
+    $0.title == L10n.text("Advanced options · Set service address manually")
+}!.performClick(nil)
+captureKeyField(addressWizard.window!, "setup-service-address")
+addressWizard.close()
 mockSession.invalidateAndCancel()
 pasteboard.clearContents(); pasteboard.writeObjects(clipboard)
 print("Key fields: Cmd+V/A via native events, mocked discovery, cleanup, format rejection, single-line masks and ordinary C/X/Z/redo passed")

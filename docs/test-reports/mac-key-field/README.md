@@ -55,8 +55,8 @@
 | 命令 | 结果 |
 |---|---|
 | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` | PASS，74 项测试，0 失败 |
-| `./scripts/test-polish.sh` | PASS，30 项测试，0 失败 |
-| `./scripts/test-mac-settings.sh`（附加截图参数） | PASS，英文与简体中文原生回归全部通过，生成并逐张复核 12 张截图 |
+| `./scripts/test-polish.sh` | PASS，32 项测试，0 失败 |
+| `./scripts/test-mac-settings.sh`（附加截图参数） | PASS，英文与简体中文原生回归全部通过，生成并复核原有 12 张截图及新增 4 张高级选项截图 |
 | `./scripts/test-input.sh` | PASS，21 项测试，0 失败 |
 | `./scripts/build-mac.sh` | PASS，worktree 内构建，代码签名与严格校验通过 |
 | `python3 tools/check-l10n.py` | PASS，中英文键、格式参数、生成资源及中文排除项检查通过 |
@@ -71,3 +71,30 @@
 4. 到设置的百炼页确认 Key 可以正常显示、全选、修改与重新自动验证；眼睛按钮切换的明文输入也不应折行。普通地址输入检查 Cmd+C/X/Z；安全框按系统规则限制拷贝/剪切。
 
 本次不执行真实服务识别，不安装、不发布、不改变 `VERSION` / `MAC_BUILD`，不合并 PR。
+
+
+## 补充：控制台 API 快捷接入地址
+
+新增观察对应的限制位于 `BailianAddress.baseHost`：此前仅接受 HTTPS 的 `/compatible-mode/v1`。现在支持三种输入，兼容末尾单个斜杠及前后空白，统一提取同一个主机名：
+
+- API Host：`ws-synthetic.cn-beijing.maas.aliyuncs.com`
+- OpenAI 兼容地址：`https://ws-synthetic.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
+- DashScope 地址：`https://ws-synthetic.cn-beijing.maas.aliyuncs.com/api/v1`
+
+以上主机名为合成测试值。解析后的主机仍须通过原有 `BailianAddress.allowed` 白名单，URL 仍须通过原有 HTTPS、默认/443 端口、无用户名密码、无查询参数与 fragment 的校验。套餐地址仍返回套餐提示，其他无效地址返回准确列出三种格式的中英文提示。手动输入的 URL 仅接受上述两种 HTTPS 路径；识别服务仍由现有规则生成 WSS 地址。地域语音模型支持范围保持原样。
+
+统一推算结果为：模型列表 `https://主机/compatible-mode/v1/models`、识别 `wss://主机/api-ws/v1/inference`、润色 `https://主机/compatible-mode/v1/chat/completions`。使用编码路径做精确匹配，拒绝额外路径、转义分隔符与路径别名。
+
+新增两个单元测试：
+
+- `testConsoleAddressFormsUseTheSameHostAndDerivedEndpoints`：覆盖三种格式、末尾斜杠、前后空格/制表符/换行、显式 443、共享/合成业务空间/试用主机；经模拟网络验证 `/models` 请求及 Bearer 头，并检查选定主机推算与保存的识别/润色地址。不支持语音识别的原有地域仍返回原有错误。
+- `testConsoleAddressesRejectUnsafeAuthoritiesSchemesAndPathsBeforeSendingKey`：覆盖裸非白名单主机与 URL、伪装后缀、用户名密码、HTTP/WS、不适用的 WSS Base URL、非 443 端口、错误路径、查询参数、fragment、内部空白、控制字符与套餐主机。无效输入在发出携带 Key 的请求前失败。
+
+本次补充后重新运行上表全部六项检查，全部通过。向导与设置页的高级选项均显示中英文说明，允许直接粘贴控制台「API 快捷接入」中的任一地址；新增四张原生截图：
+
+| 位置 | English | 简体中文 |
+|---|---|---|
+| 向导高级选项 | [截图](en/setup-service-address.png) | [截图](zh-Hans/setup-service-address.png) |
+| 设置高级选项 | [截图](en/settings-service-address.png) | [截图](zh-Hans/settings-service-address.png) |
+
+手动复核：在向导「高级选项」或设置百炼页中，分别粘贴控制台给出的 API Host、OpenAI 兼容地址和 DashScope 地址（可带末尾斜杠与前后空白），配合自己的 Key 验证；三种形式应检测到相同地域，并使用该业务空间主机连接识别与润色。错误路径应明确提示支持的格式。不要将真实 Key 或真实业务空间 ID 放入截图、日志或 PR。

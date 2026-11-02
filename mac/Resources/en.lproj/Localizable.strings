@@ -417,6 +417,7 @@
 "Pairing has expired" = "Pairing has expired";
 "Pairing required" = "Pairing required";
 "Paste" = "Paste";
+"Paste any address from the console's API Quick Access dialog: API Host (hostname only), OpenAI-compatible URL (/compatible-mode/v1), or DashScope URL (/api/v1). URLs must use HTTPS. Leave blank to detect automatically." = "Paste any address from the console's API Quick Access dialog: API Host (hostname only), OpenAI-compatible URL (/compatible-mode/v1), or DashScope URL (/api/v1). URLs must use HTTPS. Leave blank to detect automatically.";
 "Paste the pay-as-you-go Base URL from the console. Leave blank to detect automatically." = "Paste the pay-as-you-go Base URL from the console. Leave blank to detect automatically.";
 "Paste your Key to detect its region and verify it. One Model Studio Key handles recognition and polish." = "Paste your Key to detect its region and verify it. One Model Studio Key handles recognition and polish.";
 "Pause" = "Pause";
@@ -632,6 +633,7 @@
 "Undo" = "Undo";
 "Unknown link frame type" = "Unknown link frame type";
 "Unsupported service address. Paste the official Model Studio pay-as-you-go Base URL (HTTPS, port 443, /compatible-mode/v1). Plan endpoints and other hosts are not supported." = "Unsupported service address. Paste the official Model Studio pay-as-you-go Base URL (HTTPS, port 443, /compatible-mode/v1). Plan endpoints and other hosts are not supported.";
+"Unsupported service address. Use an allowed Model Studio API Host (hostname only) or an HTTPS URL ending in /compatible-mode/v1 or /api/v1 (port 443). Plan addresses and other hosts are not supported." = "Unsupported service address. Use an allowed Model Studio API Host (hostname only) or an HTTPS URL ending in /compatible-mode/v1 or /api/v1 (port 443). Plan addresses and other hosts are not supported.";
 "Update iMic on your Mac to enable string controls" = "Update iMic on your Mac to enable string controls";
 "Update iMic on your Mac to set mode, tone, and output language from your phone." = "Update iMic on your Mac to set mode, tone, and output language from your phone.";
 "Uploading audio…" = "Uploading audio…";

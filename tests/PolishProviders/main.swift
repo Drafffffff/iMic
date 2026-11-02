@@ -232,6 +232,79 @@ final class PolishProviderTests: XCTestCase {
         XCTAssertEqual(try BailianAddress.baseHost("https://dashscope.aliyuncs.com:443/compatible-mode/v1"), BailianAddress.hosts[0])
     }
 
+    func testConsoleAddressFormsUseTheSameHostAndDerivedEndpoints() throws {
+        // Synthetic workspace name only; no console-issued workspace ID.
+        let hosts = BailianAddress.hosts + ["ws-synthetic.cn-beijing.maas.aliyuncs.com",
+            "trial.ap-southeast-1.maas.aliyuncs.com"]
+        let list = modelList()
+        for host in hosts {
+            for form in [host, "https://\(host)/compatible-mode/v1", "https://\(host)/api/v1"] {
+                for suffix in ["", "/"] {
+                    for (left, right) in [("", ""), (" \t\n", "\r\n ")] {
+                        let input = left + form + suffix + right
+                        let parsed = try BailianAddress.baseHost(input)
+                        XCTAssertEqual(parsed, host)
+                        XCTAssertEqual(BailianAddress.asr(parsed), "wss://\(host)/api-ws/v1/inference")
+                        XCTAssertEqual(BailianAddress.polish(parsed), "https://\(host)/compatible-mode/v1/chat/completions")
+                        let result = discover(base: input) { request in
+                            XCTAssertEqual(request.url?.absoluteString, "https://\(host)/compatible-mode/v1/models")
+                            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(self.bailianKey)")
+                            return (200, list)
+                        }
+                        guard BailianAddress.supportsASR(host) else {
+                            XCTAssertEqual(result, .failure(.unsupported(BailianAddress.title(BailianAddress.region(host)))))
+                            continue
+                        }
+                        let selection = try result.get()
+                        XCTAssertEqual(selection.host, host)
+                        selection.apply(defaults)
+                        XCTAssertEqual(defaults.string(forKey: "asrEndpoint"), BailianAddress.asr(host))
+                        XCTAssertEqual(defaults.string(forKey: PolishProvider.bailian.endpointKey), BailianAddress.polish(host))
+                    }
+                }
+            }
+            for input in ["\(host):443/", "https://\(host):443/compatible-mode/v1/", "https://\(host):443/api/v1/"] {
+                XCTAssertEqual(try BailianAddress.baseHost(input), host)
+            }
+        }
+    }
+
+    func testConsoleAddressesRejectUnsafeAuthoritiesSchemesAndPathsBeforeSendingKey() {
+        let host = "ws-synthetic.cn-beijing.maas.aliyuncs.com"
+        let invalid = [
+            "evil.example", "evil.example/", "https://evil.example/api/v1",
+            "\(host).evil.example", "https://\(host).evil.example/compatible-mode/v1",
+            "synthetic-user@\(host)", "synthetic-user:synthetic-pass@\(host)/",
+            "https://synthetic-user@\(host)/api/v1", "https://synthetic-user:synthetic-pass@\(host)/compatible-mode/v1",
+            "http://\(host)/api/v1", "http://\(host)/compatible-mode/v1",
+            "wss://\(host)/api/v1", "ws://\(host)/compatible-mode/v1",
+            "\(host):80", "\(host):444", "https://\(host):444/api/v1",
+            "https://\(host)", "https://\(host)/", "https://\(host)/other",
+            "\(host)/api/v1", "\(host)/compatible-mode/v1", "\(host)//",
+            "https://\(host)/api/v1/models", "https://\(host)/api/v1//",
+            "https://\(host)/compatible-mode/v1/chat/completions", "https://\(host)/api%2Fv1",
+            "https://\(host)/api/v1/../v1", "https://\(host)/api/v1?key=synthetic",
+            "\(host)?query", "https://\(host)/api/v1#fragment", "\(host)#fragment",
+            "https://\(host)/api/ v1", "ws-syn thetic.cn-beijing.maas.aliyuncs.com",
+            "https://\(host)/api/\nv1", "https://\(host)/api/v1\u{0}",
+            "token-plan.cn-beijing.maas.aliyuncs.com", "https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1/",
+            "coding.dashscope.aliyuncs.com/", "https://coding.dashscope.aliyuncs.com/api/v1"
+        ]
+        for input in invalid {
+            let issue: BailianIssue = BailianAddress.isPlan(input) ? .plan : .address
+            XCTAssertThrowsError(try BailianAddress.baseHost(input)) { XCTAssertEqual($0 as? BailianIssue, issue) }
+            XCTAssertEqual(discover(base: input) { _ in
+                XCTFail("Rejected console address must not receive a Key"); return (200, Data())
+            }, .failure(issue))
+        }
+        XCTAssertThrowsError(try BailianAddress.baseHost(" \r\n "))
+        XCTAssertTrue(BailianIssue.address.message.contains("/api/v1"))
+        XCTAssertTrue(BailianIssue.address.message.contains("/compatible-mode/v1"))
+        XCTAssertNotNil(SettingsValidation.asrURL(BailianAddress.asr(host)))
+        XCTAssertNil(SettingsValidation.asrURL("ws://\(host)/api-ws/v1/inference"))
+        XCTAssertNil(SettingsValidation.asrURL("https://\(host)/api-ws/v1/inference"))
+    }
+
     func testActionableErrorsUseServiceCodeBeforeHTTPStatusAndNeverEchoBodies() throws {
         let cases: [(Int, String, BailianIssue, String)] = [
             (401,"InvalidApiKey",.invalidKey,"复制不完整"),

@@ -431,7 +431,9 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         baseField.delegate = self; baseField.setAccessibilityLabel(L10n.text("Model Studio Base URL"))
         advanced.arrangedSubviews.forEach { advanced.removeArrangedSubview($0); $0.removeFromSuperview() }
         advanced.orientation = .vertical; advanced.alignment = .leading
-        advanced.addArrangedSubview(Self.text(L10n.text("Paste the pay-as-you-go Base URL from the console. Leave blank to detect automatically."), size: 11))
+        let addressHint = Self.text(L10n.text("Paste any address from the console's API Quick Access dialog: API Host (hostname only), OpenAI-compatible URL (/compatible-mode/v1), or DashScope URL (/api/v1). URLs must use HTTPS. Leave blank to detect automatically."), size: 11)
+        advanced.addArrangedSubview(addressHint)
+        addressHint.widthAnchor.constraint(equalTo: advanced.widthAnchor).isActive = true
         advanced.addArrangedSubview(baseField)
         baseField.widthAnchor.constraint(equalTo: advanced.widthAnchor).isActive = true
         advanced.isHidden = true

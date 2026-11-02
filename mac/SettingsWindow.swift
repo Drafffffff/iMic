@@ -252,9 +252,11 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         app.polishFields = choices; choices.isHidden = !DeepSeekConfiguration.enabled
         activeProvider.font = .systemFont(ofSize: 11); activeProvider.textColor = .imicMuted
         let base = field("bailian.base", L10n.text("Set service address manually (Base URL, optional)"), "")
-        let advanced = NSStackView(views: [base])
+        let addressHint = note(L10n.text("Paste any address from the console's API Quick Access dialog: API Host (hostname only), OpenAI-compatible URL (/compatible-mode/v1), or DashScope URL (/api/v1). URLs must use HTTPS. Leave blank to detect automatically."))
+        let advanced = NSStackView(views: [addressHint, base])
         advanced.orientation = .vertical; advanced.alignment = .leading; advanced.isHidden = true
         base.widthAnchor.constraint(equalTo: advanced.widthAnchor).isActive = true
+        addressHint.widthAnchor.constraint(equalTo: advanced.widthAnchor).isActive = true
         let toggle = action(L10n.text("Advanced options · Set service address manually"), #selector(toggleBailianAdvanced(_:)))
         toggle.identifier = NSUserInterfaceItemIdentifier("bailianAdvancedToggle")
         toggle.target = self

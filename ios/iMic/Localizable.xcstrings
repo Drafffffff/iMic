@@ -11807,6 +11807,42 @@
         }
       },
       "extractionState": "manual"
+    },
+    "Paste any address from the console's API Quick Access dialog: API Host (hostname only), OpenAI-compatible URL (/compatible-mode/v1), or DashScope URL (/api/v1). URLs must use HTTPS. Leave blank to detect automatically.": {
+      "extractionState": "manual",
+      "comment": "mac",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste any address from the console's API Quick Access dialog: API Host (hostname only), OpenAI-compatible URL (/compatible-mode/v1), or DashScope URL (/api/v1). URLs must use HTTPS. Leave blank to detect automatically."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可直接粘贴控制台「API 快捷接入」给出的任一地址：API Host（裸主机名）、OpenAI 兼容地址（/compatible-mode/v1）或 DashScope 地址（/api/v1）。网址须使用 HTTPS；留空自动识别。"
+          }
+        }
+      }
+    },
+    "Unsupported service address. Use an allowed Model Studio API Host (hostname only) or an HTTPS URL ending in /compatible-mode/v1 or /api/v1 (port 443). Plan addresses and other hosts are not supported.": {
+      "extractionState": "manual",
+      "comment": "mac",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unsupported service address. Use an allowed Model Studio API Host (hostname only) or an HTTPS URL ending in /compatible-mode/v1 or /api/v1 (port 443). Plan addresses and other hosts are not supported."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务地址不受支持。请输入白名单内的百炼 API Host（裸主机名），或路径为 /compatible-mode/v1、/api/v1 的 HTTPS 地址（443 端口）。不支持套餐地址或其他主机。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
