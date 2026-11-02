@@ -11699,6 +11699,214 @@
           }
         }
       }
+    },
+    "System audio input is unavailable. Try playing any audio, then record again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System audio input is unavailable. Try playing any audio, then record again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统音频输入异常，请播放任意一段声音后再尝试录音。"
+          }
+        }
+      }
+    },
+    "No input route": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No input route"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无输入路由"
+          }
+        }
+      }
+    },
+    "No available inputs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No available inputs"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无可用输入设备"
+          }
+        }
+      }
+    },
+    "Input list unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input list unavailable"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法获取输入设备列表"
+          }
+        }
+      }
+    },
+    "Route details show the last active session check. Copy diagnostics to include port IDs.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Route details show the last active session check. Copy diagnostics to include port IDs."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "路由信息来自最近一次会话激活检查。复制诊断信息可包含端口 ID。"
+          }
+        }
+      }
+    },
+    "Rebuild audio route": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rebuild audio route"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重建音频通路"
+          }
+        }
+      }
+    },
+    "If the level stays empty, rebuild the audio route. If it still fails, try playing any audio, then return and start a new test.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If the level stays empty, rebuild the audio route. If it still fails, try playing any audio, then return and start a new test."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果电平始终为空，请重建音频通路。若仍无声，可尝试播放任意一段声音后返回，开始新的自检。"
+          }
+        }
+      }
+    },
+    "Not attempted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not attempted"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未尝试"
+          }
+        }
+      }
+    },
+    "Rebuilding audio route…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rebuilding audio route…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在重建音频通路…"
+          }
+        }
+      }
+    },
+    "Route rebuilt. Speak to check the level.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Route rebuilt. Speak to check the level."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "路由已重建，请说话检查电平。"
+          }
+        }
+      }
+    },
+    "Input signal detected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input signal detected"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已检测到输入信号"
+          }
+        }
+      }
+    },
+    "Audio route recovery failed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio route recovery failed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音频通路恢复失败"
+          }
+        }
+      }
+    },
+    "One rebuild per test, shared with automatic recovery. Rebuilding again starts a new test.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One rebuild per test, shared with automatic recovery. Rebuilding again starts a new test."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每次自检最多重建一次，与自动恢复共用次数。再次点击重建会开启新的自检。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

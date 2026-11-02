@@ -46,6 +46,7 @@
 "Audio data incomplete. This input was canceled." = "Audio data incomplete. This input was canceled.";
 "Audio did not fully reach your Mac. Local recognition text is kept." = "Audio did not fully reach your Mac. Local recognition text is kept.";
 "Audio resend timed out. This input was canceled." = "Audio resend timed out. This input was canceled.";
+"Audio route recovery failed" = "Audio route recovery failed";
 "Audio transfer timed out. This input was canceled." = "Audio transfer timed out. This input was canceled.";
 "Audio upload timed out. Local recognition text is kept. Copy it and retry." = "Audio upload timed out. Local recognition text is kept. Copy it and retry.";
 "Automatic typing" = "Automatic typing";
@@ -265,14 +266,17 @@
 "Hold to speak, release to type" = "Hold to speak, release to type";
 "How to use iMic" = "How to use iMic";
 "If the level stays empty, close this test and hold to record again. If it still fails, copy diagnostics and share them with the log." = "If the level stays empty, close this test and hold to record again. If it still fails, copy diagnostics and share them with the log.";
+"If the level stays empty, rebuild the audio route. If it still fails, try playing any audio, then return and start a new test." = "If the level stays empty, rebuild the audio route. If it still fails, try playing any audio, then return and start a new test.";
 "If your Mac and iPhone use the same Apple ID, a Safari icon will appear on the left of your Mac's Dock. Click it to open the download page." = "If your Mac and iPhone use the same Apple ID, a Safari icon will appear on the left of your Mac's Dock. Click it to open the download page.";
 "Incomplete audio frame" = "Incomplete audio frame";
 "Incorrect pairing code" = "Incorrect pairing code";
 "Incorrect pairing code or expired connection" = "Incorrect pairing code or expired connection";
 "Incorrect pairing code. Please retry." = "Incorrect pairing code. Please retry.";
+"Input list unavailable" = "Input list unavailable";
 "Input position changed · Text kept" = "Input position changed · Text kept";
 "Input range changed · Existing content untouched, result kept" = "Input range changed · Existing content untouched, result kept";
 "Input range not synchronized yet · Text kept" = "Input range not synchronized yet · Text kept";
+"Input signal detected" = "Input signal detected";
 "Interface sounds" = "Interface sounds";
 "Interface sounds: %@" = "Interface sounds: %@";
 "Invalid audio end frame or sample count" = "Invalid audio end frame or sample count";
@@ -368,11 +372,14 @@
 "No app available for typing" = "No app available for typing";
 "No audio received" = "No audio received";
 "No automatic typing. Check the target and permissions." = "No automatic typing. Check the target and permissions.";
+"No available inputs" = "No available inputs";
 "No iPhone paired yet" = "No iPhone paired yet";
+"No input route" = "No input route";
 "No speech recognized" = "No speech recognized";
 "No waveform cache. Complete a real recording first, or provide the path to an exported JSON file." = "No waveform cache. Complete a real recording first, or provide the path to an exported JSON file.";
 "No waveforms yet. Hold the bar on the home screen to speak and release normally to keep a waveform. Canceled recordings are not saved." = "No waveforms yet. Hold the bar on the home screen to speak and release normally to keep a waveform. Canceled recordings are not saved.";
 "Not allowed yet" = "Not allowed yet";
+"Not attempted" = "Not attempted";
 "Not authorized · Add the app, then enable its switch" = "Not authorized · Add the app, then enable its switch";
 "Not found on the local network" = "Not found on the local network";
 "Not saved" = "Not saved";
@@ -380,6 +387,7 @@
 "Notice" = "Notice";
 "Off" = "Off";
 "On" = "On";
+"One rebuild per test, shared with automatic recovery. Rebuilding again starts a new test." = "One rebuild per test, shared with automatic recovery. Rebuilding again starts a new test.";
 "Only Model Studio inference addresses are supported. Must match the Key's region or workspace." = "Only Model Studio inference addresses are supported. Must match the Key's region or workspace.";
 "Only waveforms are kept, without audio or recognized text. The last 3 sessions, up to 60 seconds each, are automatically cleared after 24 hours." = "Only waveforms are kept, without audio or recognized text. The last 3 sessions, up to 60 seconds each, are automatically cleared after 24 hours.";
 "Open %@ Settings" = "Open %@ Settings";
@@ -457,6 +465,8 @@
 "Quit iMic" = "Quit iMic";
 "Reading Mac preferences" = "Reading Mac preferences";
 "Real microphone" = "Real microphone";
+"Rebuild audio route" = "Rebuild audio route";
+"Rebuilding audio route…" = "Rebuilding audio route…";
 "Received volume" = "Received volume";
 "Received volume · 16 kHz" = "Received volume · 16 kHz";
 "Received volume · Last 1.92 seconds" = "Received volume · Last 1.92 seconds";
@@ -506,6 +516,8 @@
 "Retrying connection" = "Retrying connection";
 "Return" = "Return";
 "Returned to foreground" = "Returned to foreground";
+"Route details show the last active session check. Copy diagnostics to include port IDs." = "Route details show the last active session check. Copy diagnostics to include port IDs.";
+"Route rebuilt. Speak to check the level." = "Route rebuilt. Speak to check the level.";
 "Sarcastic" = "Sarcastic";
 "Save" = "Save";
 "Saved to your connected Mac. Takes effect after your Mac confirms." = "Saved to your connected Mac. Takes effect after your Mac confirms.";
@@ -563,6 +575,7 @@
 "Switch to this Mac" = "Switch to this Mac";
 "Switching keeps your pairings. iMic will reconnect only to the selected Mac and will not switch to another computer automatically." = "Switching keeps your pairings. iMic will reconnect only to the selected Mac and will not switch to another computer automatically.";
 "Synthetic test · Not a real recording" = "Synthetic test · Not a real recording";
+"System audio input is unavailable. Try playing any audio, then record again." = "System audio input is unavailable. Try playing any audio, then record again.";
 "System permissions" = "System permissions";
 "Tap Start using iMic to request Microphone access (required), then Speech Recognition access (optional, for live preview on your phone)." = "Tap Start using iMic to request Microphone access (required), then Speech Recognition access (optional, for live preview on your phone).";
 "Tap a Mac, then confirm with the pairing code in its window." = "Tap a Mac, then confirm with the pairing code in its window.";

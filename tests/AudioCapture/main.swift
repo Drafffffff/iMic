@@ -4,7 +4,17 @@ let queue = DispatchQueue(label: "capture.tests")
 let center = NotificationCenter()
 let names = CaptureNotifications(interruption: .init("interruption"), route: .init("route"),
     configuration: .init("config"), reset: .init("reset"), foreground: .init("foreground"),
-    interruptionBegan: { $0.userInfo?["began"] as? Bool == true })
+    interruptionBegan: { $0.userInfo?["began"] as? Bool == true },
+    oldDeviceUnavailable: { $0.userInfo?["oldDevice"] as? Bool == true })
+let builtIn = CaptureInputPort(uid: "built-in", type: "MicrophoneBuiltIn", name: "Phone mic")
+let validRoute = CaptureInputRoute(inputs: [builtIn], available: [builtIn])
+let emptyRoute = CaptureInputRoute(inputs: [], available: [builtIn])
+let orphanRoute = CaptureInputRoute(inputs: [CaptureInputPort(uid: "gone", type: "BluetoothHFP", name: "Gone headset")], available: [builtIn])
+var nextInputRoute: CaptureInputRoute?
+var routeAfterRebuild = CaptureInputRoute(inputs: [builtIn], available: [builtIn])
+var rebuilds = 0
+var failRebuild = false
+var deactivationOptions: [Bool] = []
 var trace: [String] = []
 var devices: [FakeHardware] = []
 var failures: [String] = []
@@ -21,10 +31,11 @@ final class FakeHardware: CaptureHardware {
     let id: Int
     var running = false
     var route = "built-in:48000:1"
+    var inputRoute = validRoute
     var meter: ((CaptureMeter) -> Void)?
     var failure: ((String) -> Void)?
     var notificationObject: AnyObject { self }
-    var diagnostics: CaptureDiagnostics { CaptureDiagnostics(sampleRate: 48000, nativeRate: 48000, channels: 1, running: running) }
+    var diagnostics: CaptureDiagnostics { CaptureDiagnostics(sampleRate: 48000, nativeRate: 48000, channels: 1, running: running, inputRoute: inputRoute) }
     var inputIdentity: String { route }
     init(_ id: Int) { self.id = id }
     func start(meter: @escaping (CaptureMeter) -> Void, failure: @escaping (String) -> Void) throws {
@@ -34,23 +45,30 @@ final class FakeHardware: CaptureHardware {
             barrier.0.signal()
             barrier.1.wait()
         }
+        if inputRoute.invalidReason != nil { throw CaptureRouteError.invalidInputRoute }
         if failNextStart { failNextStart = false; throw NSError(domain: "test.activation", code: 1) }
     }
     func stop() { trace.append("stop\(id)"); running = false }
 }
 let controller = AudioCaptureController(queue: queue, center: center, names: names, makeHardware: {
     let device = FakeHardware(devices.count)
+    if let route = nextInputRoute { device.inputRoute = route; nextInputRoute = nil }
     devices.append(device)
     return device
-}, deactivate: { trace.append("deactivate") }, log: { trace.append($0) }, now: { clock })
+}, deactivate: { notify in trace.append("deactivate"); deactivationOptions.append(notify) }, rebuildRoute: {
+    rebuilds += 1
+    trace.append("playback-mixing-no-audio")
+    if failRebuild { throw NSError(domain: "test.playback", code: 1) }
+    nextInputRoute = routeAfterRebuild
+}, log: { trace.append($0) }, now: { clock })
 func start(_ monitor: Bool = true) {
     queue.sync {
         try! controller.start(onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) })
         controller.setMonitoring(monitor)
     }
 }
-func post(_ name: Notification.Name, object: AnyObject? = nil, began: Bool = false) {
-    center.post(name: name, object: object, userInfo: ["began": began])
+func post(_ name: Notification.Name, object: AnyObject? = nil, began: Bool = false, oldDevice: Bool = false) {
+    center.post(name: name, object: object, userInfo: ["began": began, "oldDevice": oldDevice])
     queue.sync {}
 }
 func pulse(callbacks: UInt64 = 50, zero: Bool = false, samples: Bool = true, elapsed: Double = 0.5, peak: Double = 0.01) {
@@ -123,7 +141,7 @@ expect(retry.running, "stale callbacks ignored")
 let failureCount = failures.count
 pulse(zero: true); pulse(zero: true); pulse(zero: true)
 expect(devices.count == warmCount + 1, "retry is bounded to one")
-expect(failures.count == failureCount + 1 && failures.last == "No audio received", "terminal silence delivered once")
+expect(failures.count == failureCount + 1 && failures.last == CaptureRouteError.message, "terminal silence delivered once")
 // No callback branch, retry recovery, and tiny native values distinct from zero.
 start()
 let count = devices.count
@@ -178,7 +196,7 @@ start()
 let beforeRetryFailure = failures.count
 failNextStart = true
 pulse(zero: true); pulse(zero: true)
-expect(failures.count == beforeRetryFailure + 1 && failures.last == "No audio received", "retry startup failure is terminal")
+expect(failures.count == beforeRetryFailure + 1 && failures.last == CaptureRouteError.message, "retry startup failure is terminal")
 expect(!devices.last!.running, "failed retry released its hardware")
 // Pending user requests during an interruption fail without reactivation.
 start()
@@ -194,7 +212,108 @@ expect(devices.count == beforeBlocked, "no engine activation inside interruption
 post(names.foreground)
 start()
 expect(devices.last!.running, "foreground allows new hold if ended notification was missed")
+let beforeHealthyStart = rebuilds
+start()
+expect(rebuilds == beforeHealthyStart, "healthy initial input does not enter playback")
+// Pure validation uses stable UID + port type, not the display name.
+expect(emptyRoute.invalidReason == "empty-input-route", "empty active route rejected")
+expect(orphanRoute.invalidReason == "input-port-no-longer-available", "orphan UID rejected")
+expect(CaptureInputRoute(inputs: [builtIn], available: nil).invalidReason != nil, "nil availableInputs is not evidence of validity")
+expect(CaptureInputRoute(inputs: [builtIn], available: []).invalidReason != nil, "empty available list rejected")
+var renamed = builtIn; renamed.name = "Renamed mic"
+expect(CaptureInputRoute(inputs: [builtIn], available: [renamed]).invalidReason == nil, "display name change keeps valid UID")
+var wrongType = builtIn; wrongType.type = "USB"
+expect(CaptureInputRoute(inputs: [builtIn], available: [wrongType]).invalidReason != nil, "same UID with wrong port type rejected")
+for fault in [emptyRoute, orphanRoute] {
+    let before = rebuilds
+    nextInputRoute = fault
+    start()
+    expect(rebuilds == before + 1 && devices.last!.running, "invalid startup route recovered once")
+    expect(snapshots.last!.attempt == 1 && snapshots.last!.recoveryResult == .awaitingSignal, "route validity doesn't claim signal success")
+    expect(deactivationOptions.last == false, "intermediate deactivate doesn't notify other apps")
+    let playback = trace.lastIndex(of: "playback-mixing-no-audio")!
+    expect(trace[playback - 1] == "deactivate" && trace[playback - 2].hasPrefix("stop") && trace[playback + 1].hasPrefix("activate"), "old engine stops before playback, fresh capture starts afterward")
+    queue.sync { controller.setMonitoring(true) }
+    expect(!queue.sync { controller.recoverManually() }, "initial monitor arm cannot reset startup recovery budget")
+    pulse(zero: true); pulse(zero: true)
+    expect(rebuilds == before + 1 && failures.last == CaptureRouteError.message, "startup route and silence share one recovery")
+    expect(snapshots.last!.recoveryResult == .failed, "failed verification recorded")
+}
+start()
+let beforeSignal = rebuilds
+pulse(zero: true); pulse(zero: true)
+expect(rebuilds == beforeSignal + 1, "silence uses playback route recovery")
+pulse()
+expect(snapshots.last!.recoveryResult == .signalDetected, "nonzero native sample verifies recovery signal")
+expect(!queue.sync { controller.recoverManually() }, "manual cannot get a second recovery after silence")
+// Deliberate manual rebuild after an exhausted run starts a fresh test and
+// spends that new test's sole budget before any ordinary engine start.
+let explicitManual = rebuilds
+queue.sync { try! controller.start(rebuildFirst: true, onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }); controller.setMonitoring(true) }
+expect(rebuilds == explicitManual + 1 && snapshots.last!.attempt == 1, "explicit new manual test recovers once")
+pulse(zero: true); pulse(zero: true)
+expect(rebuilds == explicitManual + 1 && failures.last == CaptureRouteError.message, "new manual test cannot follow with an automatic second recovery")
+// A truly invalid replacement after recovery is terminal, not another recovery.
+for playbackFails in [false, true] {
+    nextInputRoute = emptyRoute
+    routeAfterRebuild = emptyRoute
+    failRebuild = playbackFails
+    let before = rebuilds
+    var error: Error?
+    queue.sync {
+        do { try controller.start(onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }) }
+        catch let caught { error = caught }
+        controller.setMonitoring(true)
+    }
+    expect(error is CaptureRouteError && rebuilds == before + 1, "failed playback/revalidation terminates startup")
+    expect(snapshots.last!.recoveryResult == .failed && !snapshots.last!.running, "failed recovery diagnostics stopped")
+    expect(!queue.sync { controller.recoverManually() }, "failed recovery cannot loop manually")
+}
+failRebuild = false
+routeAfterRebuild = validRoute
+nextInputRoute = nil
+start()
+let manualBefore = rebuilds
+pulse()
+expect(queue.sync { controller.recoverManually() }, "MIC TEST manual rebuild accepted")
+expect(rebuilds == manualBefore + 1, "manual rebuild executes playback exactly once")
+expect(snapshots.last!.meter.peak == 0 && snapshots.last!.recoveryResult == .awaitingSignal, "rebuild clears stale levels before verification")
+expect(!queue.sync { controller.recoverManually() }, "manual button is bounded")
+pulse(zero: true); pulse(zero: true)
+expect(rebuilds == manualBefore + 1 && failures.last == CaptureRouteError.message, "manual and silence share budget")
+// Manual rebuild remains usable after a non-route startup/format failure.
+failNextStart = true
+queue.sync {
+    do { try controller.start(onFailure: { failures.append($0) }, onDiagnostics: { snapshots.append($0) }) }
+    catch {}
+}
+let afterFormatFailure = rebuilds
+expect(queue.sync { controller.recoverManually() }, "MIC TEST manual after failed start accepted")
+expect(rebuilds == afterFormatFailure + 1 && devices.last!.running, "manual after failed start creates new engine")
+start()
+let oldDeviceBefore = rebuilds
+devices.last!.inputRoute = orphanRoute
+post(names.route, oldDevice: true)
+expect(rebuilds == oldDeviceBefore + 1 && devices.last!.running, "oldDeviceUnavailable rereads invalid route and recovers")
+expect(trace.contains { $0.contains("reason=old-device-unavailable") }, "old-device reason logged")
+start()
+let healthyDisconnect = rebuilds
+post(names.route, oldDevice: true)
+expect(rebuilds == healthyDisconnect && devices.last!.running, "healthy current input doesn't need playback after output disconnect")
+start(false)
+let coldBefore = rebuilds
+devices.last!.inputRoute = emptyRoute
+post(names.route, oldDevice: true)
+expect(rebuilds == coldBefore && !devices.last!.running, "invalid warm lease is released without unattended playback")
+start(false)
+devices.last!.inputRoute = emptyRoute
+queue.sync { controller.setMonitoring(true) }
+expect(rebuilds == coldBefore + 1 && devices.last!.running, "new hold validates warm route immediately")
+expect(snapshots.last!.report.contains("availableInputs=") && snapshots.last!.report.contains("recoveries=1") && snapshots.last!.report.contains("recoveryResult="), "copy report includes route, inventory, recovery count/result")
+start()
 queue.sync { controller.stop() }
+let afterExplicitStop = rebuilds
+expect(!queue.sync { controller.recoverManually() } && rebuilds == afterExplicitStop, "closed/background self-test cannot be revived by a late manual request")
 let oldGate = CaptureDeliveryGate()
 var delivered = 0
 oldGate.deliver { delivered += 1 }
@@ -203,4 +322,4 @@ let newGate = CaptureDeliveryGate()
 oldGate.deliver { delivered += 100 }
 newGate.deliver { delivered += 1 }
 expect(delivered == 2, "drained old buffers cannot feed a new speech segment")
-print("PASS: \(checks) capture assertions (notifications, warm leases, native silence, bounded retry, generations)")
+print("PASS: \(checks) capture assertions (route validation/recovery, shared budget, notifications, warm leases, native silence, generations)")
