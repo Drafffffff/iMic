@@ -5,7 +5,7 @@
 ## 冲突处理
 
 - `HomeView.swift`：同时保留引导连接页 fullScreenCover 与 MIC TEST sheet；弦的可用条件同时检查连接引导和自检弹层。保留 #23 自检期间暂停主屏绘制及错误区入口。第一次真实输入失败时让出 coach mark，让原有错误和 MIC TEST 操作可以正常使用。
-- `Localizable.xcstrings`：按词条做三方合并，保留双方的中英文翻译与注释；712 个词条。程序逐项核验两个合并父分支的词条和值全部保留，生成资源检查通过。
+- `Localizable.xcstrings`：按词条做三方合并，保留双方的中英文翻译与注释；首次合并为 712 个词条。程序逐项核验两个合并父分支的词条和值全部保留，生成资源检查通过。
 - `docs/releases/NEXT.md`：同时保留新引导和官网 TestFlight 两条记录。
 - `SessionModel.swift` 自动合并后逐项复核：保留 #23 的静音监测调用、五秒热窗口、`startAudioEngine()` 和 `microphoneTestCapture()`。只在共用 `updateAudioStandby()` 入口增加练习早返回，避免练习的 phase 变化开启采集监测；正式录音、自检的实现不变。
 
@@ -32,7 +32,7 @@
 | --- | --- |
 | `swift test` | 74 tests / 0 failures |
 | `./scripts/build-ios.sh` | Debug Simulator 通过 |
-| `python3 tools/check-l10n.py` | 712 个双语词条、生成资源及文字检查通过 |
+| `python3 tools/check-l10n.py` | 最终 720 个双语词条、生成资源及文字检查通过 |
 | `./scripts/test-ios-mac-selection.sh` | 全部通过 |
 | `IMIC_RESUME_TEST_PORT=48625 ./scripts/test-ios-reconnect.sh` | 全部通过，独立测试端口 |
 | `./scripts/test-ios-audio.sh` | 48 项采集控制器断言通过 |
@@ -41,4 +41,8 @@
 | 练习隔离 | `link=0 send=0 mic=undetermined speech=undetermined captureStarts=0` |
 | 专用模拟器 | 两台均已删除 |
 
-验证期间基础分支又增加 `c817e36`，仅新增 `docs/tasks/2026-11-03-mac-key-field.md`；在合并代码通过验证后另行同步该任务书，受测代码不变。
+验证期间基础分支先增加仅含任务书的 `c817e36`，随后又合入 `c6118cb`（PR #26：Mac Key 输入修复）。本地共享远端引用在同步前已更新，因此第二次合并 `50c44ae` 实际包含 #26；其提交标题“无代码变更”不准确，在此更正，不改写已发布历史。
+
+与已验证的 `1af2f19` 比较，#26 没有改变 iOS / shared 执行代码、UI 测试或项目配置，仅为 iOS 共用 catalog 追加 8 个 Mac 文案；Mac 端改动完整继承基础分支。最终在 `50c44ae` 上重新运行指定检查及 UI 测试，详细输出见 `merge-test-results.txt`。
+
+最终基线复核另新建 iPhone 17 Pro / iOS 27.0：`D85F3E2E-572E-42FA-A3F8-5BE210679337`，只在该专用设备上串行执行最后一轮 UI 测试，已关闭、删除并复核清单无残留。
