@@ -159,6 +159,8 @@ private final class AVMicHardware: CaptureHardware {
         let session = AVAudioSession.sharedInstance()
         try AVMicSession.configureCapture()
         try session.setActive(true)
+        MicDebug.applyDataSource()
+        IMicLog.write("iphone.audio", "mic-debug \(MicDebug.describe())")
         let route = AVMicSession.inputRoute()
         IMicLog.write("iphone.audio", "activated input-route \(route.report)")
         guard route.invalidReason == nil else {
@@ -169,6 +171,13 @@ private final class AVMicHardware: CaptureHardware {
         // Preferences are hints. Read actual native format AFTER activation, connect
         // the sink at that format, then convert on the non-realtime bridge worker.
         let input = engine.inputNode
+        if MicDebug.voiceProcessing {
+            // Field test: route capture through Apple's voice-processing IO unit (VPIO).
+            _ = engine.mainMixerNode
+            do { try input.setVoiceProcessingEnabled(true) }
+            catch { IMicLog.write("iphone.audio", "mic-debug VPIO enable failed: \(error.localizedDescription)") }
+        }
+        IMicLog.write("iphone.audio", "mic-debug vpio=\(input.isVoiceProcessingEnabled)")
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw AudioCapture.CaptureError.format }
         nativeRate = format.sampleRate; channels = format.channelCount
@@ -216,7 +225,7 @@ private enum AVMicSession {
 
     static func configureCapture() throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
+        try session.setCategory(.playAndRecord, mode: MicDebug.mode, options: [.defaultToSpeaker])
         try session.setPreferredSampleRate(16_000)
         try session.setPreferredIOBufferDuration(0.01)
     }
@@ -238,5 +247,47 @@ private enum AVMicSession {
             try? configureCapture()
             throw error
         }
+    }
+}
+
+
+/// Field diagnostics for MIC TEST: override the capture mode and the built-in
+/// microphone data source (bottom / front / back). Defaults keep production behaviour.
+enum MicDebug {
+    static var mode: AVAudioSession.Mode = .measurement
+    static var dataSourceName: String?
+    /// Remembered across launches: on devices whose plain input path is silent, VPIO still works.
+    static var voiceProcessing: Bool {
+        get { UserDefaults.standard.bool(forKey: "micDebug.voiceProcessing") }
+        set { UserDefaults.standard.set(newValue, forKey: "micDebug.voiceProcessing") }
+    }
+
+    private static var builtInMic: AVAudioSessionPortDescription? {
+        AVAudioSession.sharedInstance().availableInputs?.first { $0.portType == .builtInMic }
+    }
+
+    static func builtInSources() -> [String] {
+        builtInMic?.dataSources?.map(\.dataSourceName) ?? []
+    }
+
+    static func applyDataSource() {
+        guard let name = dataSourceName, let mic = builtInMic,
+              let source = mic.dataSources?.first(where: { $0.dataSourceName == name }) else { return }
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setPreferredInput(mic)
+            try mic.setPreferredDataSource(source)
+        } catch {
+            IMicLog.write("iphone.audio", "mic-debug data source \(name) failed: \(error.localizedDescription)")
+        }
+    }
+
+    static func describe() -> String {
+        let session = AVAudioSession.sharedInstance()
+        let selected = session.currentRoute.inputs.first?.selectedDataSource
+        return "mode=\(session.mode.rawValue) requestedMode=\(mode.rawValue) " +
+            "dataSource=\(selected?.dataSourceName ?? "none") orientation=\(selected?.orientation?.rawValue ?? "-") " +
+            "pattern=\(selected?.selectedPolarPattern?.rawValue ?? "-") requestedSource=\(dataSourceName ?? "auto") " +
+            "sources=\(builtInSources()) vpio=\(voiceProcessing)"
     }
 }

@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UIKit
 
@@ -78,7 +79,7 @@ final class MicrophoneTestModel: ObservableObject {
     }
 
     func copy() {
-        UIPasteboard.general.string = diagnostics.report + "\nstatus=\(message ?? "ok")"
+        UIPasteboard.general.string = diagnostics.report + "\n\(MicDebug.describe())\nstatus=\(message ?? "ok")"
         copied = true
     }
 }
@@ -105,6 +106,7 @@ struct MicrophoneTestView: View {
                         .font(.body).foregroundStyle(Theme.ivory)
                         .fixedSize(horizontal: false, vertical: true)
                     meterPanel
+                    micDebugPanel
                     Hairline()
                     inputDetails
                     testActions
@@ -189,6 +191,53 @@ struct MicrophoneTestView: View {
                 }.foregroundStyle(Theme.orange).frame(minHeight: 44)
             }
         }
+    }
+
+    @State private var debugSources: [String] = []
+
+    private func restartWith(mode: AVAudioSession.Mode? = nil, source: String?? = nil) {
+        if let mode { MicDebug.mode = mode }
+        if let source { MicDebug.dataSourceName = source }
+        active = true
+        Task {
+            await model.start(capture: session.microphoneTestCapture())
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            debugSources = MicDebug.builtInSources()
+        }
+    }
+
+    private var micDebugPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HUDLabel(text: "MODE")
+            HStack(spacing: 16) {
+                ForEach([AVAudioSession.Mode.measurement, .default, .voiceChat], id: \.rawValue) { mode in
+                    Button(mode.rawValue.replacingOccurrences(of: "AVAudioSessionMode", with: "")) { restartWith(mode: mode) }
+                        .foregroundStyle(MicDebug.mode == mode ? Theme.orange : Theme.muted)
+                        .frame(minHeight: 44)
+                }
+            }
+            HUDLabel(text: "VPIO")
+            HStack(spacing: 16) {
+                Button("Off") { MicDebug.voiceProcessing = false; restartWith() }
+                    .foregroundStyle(MicDebug.voiceProcessing ? Theme.muted : Theme.orange).frame(minHeight: 44)
+                Button("On") { MicDebug.voiceProcessing = true; restartWith() }
+                    .foregroundStyle(MicDebug.voiceProcessing ? Theme.orange : Theme.muted).frame(minHeight: 44)
+            }
+            HUDLabel(text: "MIC")
+            HStack(spacing: 16) {
+                Button("Auto") { restartWith(source: .some(nil)) }
+                    .foregroundStyle(MicDebug.dataSourceName == nil ? Theme.orange : Theme.muted)
+                    .frame(minHeight: 44)
+                ForEach(debugSources, id: \.self) { name in
+                    Button(name) { restartWith(source: .some(name)) }
+                        .foregroundStyle(MicDebug.dataSourceName == name ? Theme.orange : Theme.muted)
+                        .frame(minHeight: 44)
+                }
+            }
+            Text(MicDebug.describe()).font(.system(.caption2, design: .monospaced)).foregroundStyle(Theme.muted)
+                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+        }
+        .task { try? await Task.sleep(nanoseconds: 800_000_000); debugSources = MicDebug.builtInSources() }
     }
 
     private var recoveryStatus: String {
