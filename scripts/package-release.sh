@@ -17,18 +17,41 @@ if [ "${1:-}" = --check-only ]; then
   echo "PASS：发布公钥与 MAC_BUILD 预检通过；未构建、签名或发布。"
   exit 0
 fi
-if [ "$#" -gt 1 ]; then
-  echo "用法：$0 [输出目录 | --check-only]" >&2
-  exit 2
+MODE=build
+RESUME_ID=""
+DMG=""
+if [ "${1:-}" = --resume-notarization ]; then
+  if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
+    echo "用法：$0 --resume-notarization <submission-id> <dmg> [输出目录]" >&2
+    exit 2
+  fi
+  MODE=resume
+  RESUME_ID=$2
+  DMG=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve(strict=True))' "$3")
+  OUT=${4:-$ROOT/build/release}
+else
+  if [ "$#" -gt 1 ] || [[ "${1:-}" = --* ]]; then
+    echo "用法：$0 [输出目录 | --check-only]；或 --resume-notarization <id> <dmg> [输出目录]" >&2
+    exit 2
+  fi
+  OUT=${1:-$ROOT/build/release}
 fi
-OUT=${1:-$ROOT/build/release}
 mkdir -p "$OUT" "$ROOT/build/release-work.noindex"
 OUT=$(cd "$OUT" && pwd -P)
 WORK=$(mktemp -d "$ROOT/build/release-work.noindex/run.XXXXXX")
+MOUNT=""
 cleanup() {
   local status=$?
   trap - EXIT
-  rm -rf "$WORK" || true
+  if [ -n "$MOUNT" ]; then hdiutil detach "$MOUNT" >/dev/null 2>&1 || true; fi
+  # Keep partially/fully signed code on release failure, including timestamp errors.
+  # The submitted DMG lives outside WORK and is never removed by this trap.
+  if [ "$status" -ne 0 ] && [ -n "${RELEASE_IDENTITY:-}" ]; then
+    echo "保留发布工作目录：$WORK" >&2
+    if [ -n "$DMG" ] && [ -f "$DMG" ]; then echo "保留已签名 DMG：$DMG" >&2; fi
+  else
+    rm -rf "$WORK" || true
+  fi
   exit "$status"
 }
 trap cleanup EXIT
@@ -41,6 +64,10 @@ IOS_NAME="iMic-$VERSION-iOS-unsigned.ipa"
 # 公证：再设置 IMIC_NOTARY_PROFILE（先用 `xcrun notarytool store-credentials` 保存凭据）。
 RELEASE_IDENTITY=${IMIC_RELEASE_IDENTITY:-}
 NOTARY_PROFILE=${IMIC_NOTARY_PROFILE:-}
+if [ "$MODE" = resume ]; then
+  # No Developer ID signing on resume, but keep all release identity checks.
+  RELEASE_IDENTITY=${RELEASE_IDENTITY:-Developer ID Application: KE CHENG (5H39F98ND4)}
+fi
 if [ -n "$RELEASE_IDENTITY" ]; then
   case "$RELEASE_IDENTITY" in
     "Developer ID Application: "*"(5H39F98ND4)") ;;
@@ -49,21 +76,39 @@ if [ -n "$RELEASE_IDENTITY" ]; then
   [ -n "$NOTARY_PROFILE" ] || { echo "自动更新发布必须设置 IMIC_NOTARY_PROFILE，确保最终 DMG 已公证。" >&2; exit 1; }
   # Read the full output before matching: grep -q exits early and, under pipefail, the
   # writer's SIGPIPE turns a match into a failure (intermittently).
-  IDENTITIES=$(security find-identity -v -p codesigning)
-  grep -Fq "\"$RELEASE_IDENTITY\"" <<<"$IDENTITIES" || {
-    echo "钥匙串中没有可用的签名身份：${RELEASE_IDENTITY}（证书需带私钥）。" >&2; exit 1; }
-  echo "==> 构建 Mac 通用版（Apple Silicon + Intel，${RELEASE_IDENTITY}）"
+  if [ "$MODE" != resume ]; then
+    IDENTITIES=$(security find-identity -v -p codesigning)
+    grep -Fq "\"$RELEASE_IDENTITY\"" <<<"$IDENTITIES" || {
+      echo "钥匙串中没有可用的签名身份：${RELEASE_IDENTITY}（证书需带私钥）。" >&2; exit 1; }
+  fi
+  echo "==> 构建/恢复 Mac 通用版（Apple Silicon + Intel，${RELEASE_IDENTITY}）"
 else
-  echo "==> 构建 Mac 通用版（Apple Silicon + Intel，ad-hoc 签名）"
+  echo "==> 构建/恢复 Mac 通用版（Apple Silicon + Intel，ad-hoc 签名）"
 fi
-IMIC_CONFIGURATION=release IMIC_ARCH=universal IMIC_BUILD_DIR="$WORK/mac" IMIC_SIGNING_IDENTITY=- \
-  "$ROOT/scripts/build-mac.sh"
-APP="$WORK/mac/iMic.app"
-if [ -n "$RELEASE_IDENTITY" ]; then
-  "$ROOT/scripts/sign-mac.sh" "$APP" "$RELEASE_IDENTITY" release
-  TEAM=$(codesign -dv "$APP" 2>&1 | sed -n 's/^TeamIdentifier=//p')
-  [ "$TEAM" = 5H39F98ND4 ] || {
-    echo "Developer ID 团队不匹配。" >&2; exit 1; }
+if [ "$MODE" = resume ]; then
+  [ "$(basename "$DMG")" = "$MAC_NAME" ] || { echo "DMG 文件名与 VERSION 不一致。" >&2; exit 1; }
+  codesign --verify --strict "$DMG"
+  TEAM=$(codesign -dv "$DMG" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+  [ "$TEAM" = 5H39F98ND4 ] || { echo "DMG 签名团队不匹配。" >&2; exit 1; }
+  # Inspect the retained, signed app without modifying or re-signing the image.
+  MOUNT="$WORK/mounted"
+  mkdir -p "$MOUNT"
+  hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT" "$DMG"
+  ditto "$MOUNT/iMic.app" "$WORK/iMic.app"
+  hdiutil detach "$MOUNT"
+  MOUNT=""
+  APP="$WORK/iMic.app"
+  "$ROOT/scripts/fetch-sparkle.sh"
+else
+  IMIC_CONFIGURATION=release IMIC_ARCH=universal IMIC_BUILD_DIR="$WORK/mac" IMIC_SIGNING_IDENTITY=- \
+    "$ROOT/scripts/build-mac.sh"
+  APP="$WORK/mac/iMic.app"
+  if [ -n "$RELEASE_IDENTITY" ]; then
+    "$ROOT/scripts/sign-mac.sh" "$APP" "$RELEASE_IDENTITY" release
+    TEAM=$(codesign -dv "$APP" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+    [ "$TEAM" = 5H39F98ND4 ] || {
+      echo "Developer ID 团队不匹配。" >&2; exit 1; }
+  fi
 fi
 APP_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")
 APP_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")
@@ -71,33 +116,54 @@ if [ "$APP_VERSION" != "$VERSION" ] || [ "$APP_BUILD" != "$BUILD" ]; then
   echo "Mac 应用版本/构建号与 VERSION / MAC_BUILD 不一致。" >&2
   exit 1
 fi
+if [ -n "$RELEASE_IDENTITY" ]; then
+  TEAM=$(codesign -dv "$APP" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+  [ "$TEAM" = 5H39F98ND4 ] || { echo "App 签名团队不匹配。" >&2; exit 1; }
+  APP_KEY=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/Info.plist")
+  [ "$APP_KEY" = "$(cat "$ROOT/mac/sparkle-public-key.txt")" ] || { echo "App 更新公钥不匹配。" >&2; exit 1; }
+fi
 codesign --verify --deep --strict "$APP"
 xcrun lipo "$APP/Contents/MacOS/iMic" -verify_arch arm64
 xcrun lipo "$APP/Contents/MacOS/iMic" -verify_arch x86_64
-mkdir -p "$WORK/dmg"
-ditto "$APP" "$WORK/dmg/iMic.app"
-ln -s /Applications "$WORK/dmg/Applications"
-cp "$ROOT/README.md" "$WORK/dmg/README.md"
-hdiutil create -volname "iMic $VERSION" -srcfolder "$WORK/dmg" \
-  -format UDZO -fs HFS+ "$WORK/$MAC_NAME"
-if [ -n "$RELEASE_IDENTITY" ]; then
-  codesign --force --timestamp --sign "$RELEASE_IDENTITY" "$WORK/$MAC_NAME"
-  if [ -n "$NOTARY_PROFILE" ]; then
-    echo "==> 提交 Apple 公证"
-    xcrun notarytool submit "$WORK/$MAC_NAME" --keychain-profile "$NOTARY_PROFILE" --wait
-    xcrun stapler staple "$WORK/$MAC_NAME"
-    spctl --assess --type open --context context:primary-signature -v "$WORK/$MAC_NAME"
-  else
-    echo "提示：未设置 IMIC_NOTARY_PROFILE，DMG 已签名但未公证。" >&2
+if [ "$MODE" != resume ]; then
+  mkdir -p "$WORK/dmg"
+  ditto "$APP" "$WORK/dmg/iMic.app"
+  ln -s /Applications "$WORK/dmg/Applications"
+  cp "$ROOT/README.md" "$WORK/dmg/README.md"
+  hdiutil create -volname "iMic $VERSION" -srcfolder "$WORK/dmg" \
+    -format UDZO -fs HFS+ "$WORK/$MAC_NAME"
+  DMG="$WORK/$MAC_NAME"
+  if [ -n "$RELEASE_IDENTITY" ]; then
+    python3 "$ROOT/tools/release-network.py" retry -- \
+      codesign --force --timestamp --sign "$RELEASE_IDENTITY" "$DMG"
+    # Move the exact signed bytes OUTSIDE the disposable work directory BEFORE
+    # submitting. A lost connection must not destroy the only resumable artifact.
+    mkdir -p "$ROOT/build/notarization-pending"
+    PENDING=$(mktemp -d "$ROOT/build/notarization-pending/$VERSION-$BUILD.XXXXXX")
+    mv "$DMG" "$PENDING/$MAC_NAME"
+    DMG="$PENDING/$MAC_NAME"
   fi
+fi
+if [ -n "$RELEASE_IDENTITY" ]; then
+  # Single submit, then <=8 status polls and <=8 staple attempts, with a shared
+  # 30-minute deadline. Only Accepted can reach stapling and Sparkle signing.
+  if [ "$MODE" = resume ]; then
+    python3 "$ROOT/tools/release-network.py" notarize --dmg "$DMG" \
+      --profile "$NOTARY_PROFILE" --output-directory "$OUT" --resume "$RESUME_ID"
+  else
+    python3 "$ROOT/tools/release-network.py" notarize --dmg "$DMG" \
+      --profile "$NOTARY_PROFILE" --output-directory "$OUT"
+  fi
+  spctl --assess --type open --context context:primary-signature -v "$DMG"
 fi
 # Sign exactly the final notarized, stapled bytes that will be uploaded.
 if [ -n "$RELEASE_IDENTITY" ]; then
   spctl -a -vv "$APP"
-  SIGNATURE=$("$ROOT/build/vendor/Sparkle/bin/sign_update" -p "$WORK/$MAC_NAME")
-  swift "$ROOT/tools/verify-update.swift" "$ROOT/mac/sparkle-public-key.txt" "$SIGNATURE" "$WORK/$MAC_NAME"
+  SIGNATURE=$("$ROOT/build/vendor/Sparkle/bin/sign_update" -p "$DMG")
+  swift "$ROOT/tools/verify-update.swift" "$ROOT/mac/sparkle-public-key.txt" "$SIGNATURE" "$DMG"
 fi
-mv -f "$WORK/$MAC_NAME" "$OUT/$MAC_NAME"
+if [ "$DMG" != "$OUT/$MAC_NAME" ]; then mv -f "$DMG" "$OUT/$MAC_NAME"; fi
+DMG="$OUT/$MAC_NAME"
 
 "$ROOT/scripts/package-ios.sh" "$OUT"
 (
