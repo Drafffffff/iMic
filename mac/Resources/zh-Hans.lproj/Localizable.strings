@@ -46,6 +46,7 @@
 "Audio data incomplete. This input was canceled." = "音频数据不完整，本次输入已取消";
 "Audio did not fully reach your Mac. Local recognition text is kept." = "音频未能完整送达 Mac，已保留本机识别文字";
 "Audio resend timed out. This input was canceled." = "音频补发超时，本次输入已取消";
+"Audio route recovery failed" = "音频通路恢复失败";
 "Audio transfer timed out. This input was canceled." = "音频传输超时，本次输入已取消";
 "Audio upload timed out. Local recognition text is kept. Copy it and retry." = "音频上传超时，已保留本机识别文字，可复制后重试";
 "Automatic typing" = "自动输入";
@@ -267,14 +268,17 @@
 "Hold to speak, release to type" = "按住说话，松手即输入";
 "How to use iMic" = "使用教程";
 "If the level stays empty, close this test and hold to record again. If it still fails, copy diagnostics and share them with the log." = "如果电平始终为空，请关闭自检后重新按住录音。如果仍然无声，请复制诊断信息并连同日志反馈。";
+"If the level stays empty, rebuild the audio route. If it still fails, try playing any audio, then return and start a new test." = "如果电平始终为空，请重建音频通路。若仍无声，可尝试播放任意一段声音后返回，开始新的自检。";
 "If your Mac and iPhone use the same Apple ID, a Safari icon will appear on the left of your Mac's Dock. Click it to open the download page." = "如果 Mac 和 iPhone 登录同一 Apple ID，Mac 程序坞左侧会出现一个 Safari 图标，点它即可打开下载页。";
 "Incomplete audio frame" = "音频帧不完整";
 "Incorrect pairing code" = "配对码不正确";
 "Incorrect pairing code or expired connection" = "配对码不正确或链路已失效";
 "Incorrect pairing code. Please retry." = "配对码不正确，请重试";
+"Input list unavailable" = "无法获取输入设备列表";
 "Input position changed · Text kept" = "输入位置已变化 · 文字已保留";
 "Input range changed · Existing content untouched, result kept" = "输入范围已变化 · 未覆盖原内容，结果已保留";
 "Input range not synchronized yet · Text kept" = "输入范围暂未同步 · 文字已保留";
+"Input signal detected" = "已检测到输入信号";
 "Interface sounds" = "界面音效";
 "Interface sounds: %@" = "界面音效：%@";
 "Invalid audio end frame or sample count" = "语音结束帧数或采样数无效";
@@ -370,11 +374,14 @@
 "No app available for typing" = "没有可输入的应用";
 "No audio received" = "没有收到声音";
 "No automatic typing. Check the target and permissions." = "未自动输入，请检查目标位置与权限";
+"No available inputs" = "无可用输入设备";
 "No iPhone paired yet" = "尚未配对 iPhone";
+"No input route" = "无输入路由";
 "No speech recognized" = "没有识别到语音";
 "No waveform cache. Complete a real recording first, or provide the path to an exported JSON file." = "没有波形缓存。先完成一次真实录音，或指定导出的 JSON 文件路径。";
 "No waveforms yet. Hold the bar on the home screen to speak and release normally to keep a waveform. Canceled recordings are not saved." = "还没有可复看的波形。按住主页面横条说话，正常松手后会自动保留；取消的录音不会保存。";
 "Not allowed yet" = "尚未允许";
+"Not attempted" = "尚未尝试";
 "Not authorized · Add the app, then enable its switch" = "尚未授权 · 添加应用后，请开启旁边的开关";
 "Not found on the local network" = "未在局域网发现";
 "Not saved" = "尚未保存";
@@ -382,6 +389,7 @@
 "Notice" = "提示";
 "Off" = "关闭";
 "On" = "开启";
+"One rebuild per test, shared with automatic recovery. Rebuilding again starts a new test." = "每次自检最多重建一次，与自动恢复共用次数。再次点击重建会开启新的自检。";
 "Only Model Studio inference addresses are supported. Must match the Key's region or workspace." = "只支持百炼推理地址，须与 Key 的地域或业务空间一致。";
 "Only waveforms are kept, without audio or recognized text. The last 3 sessions, up to 60 seconds each, are automatically cleared after 24 hours." = "只保留波形，不保存录音或识别文字。最近 3 次，每次最多 60 秒，24 小时后自动清理。";
 "Open %@ Settings" = "打开%@设置";
@@ -460,6 +468,8 @@
 "Quit iMic" = "退出 iMic";
 "Reading Mac preferences" = "正在读取 Mac 偏好";
 "Real microphone" = "真实麦克风";
+"Rebuild audio route" = "重建音频通路";
+"Rebuilding audio route…" = "正在重建音频通路…";
 "Received volume" = "接收音量";
 "Received volume · 16 kHz" = "接收音量 · 16 kHz";
 "Received volume · Last 1.92 seconds" = "接收音量 · 最近 1.92 秒";
@@ -510,6 +520,8 @@
 "Retrying connection" = "连接重试";
 "Return" = "回车";
 "Returned to foreground" = "返回前台";
+"Route details show the last active session check. Copy diagnostics to include port IDs." = "路由信息来自最近一次会话激活检查。复制诊断信息可包含端口 ID。";
+"Route rebuilt. Speak to check the level." = "路由已重建，请说话检查电平。";
 "Sarcastic" = "阴阳怪气";
 "Save" = "保存";
 "Saved to your connected Mac. Takes effect after your Mac confirms." = "保存到当前连接的 Mac，等待 Mac 确认后生效";
@@ -568,6 +580,7 @@
 "Switch to this Mac" = "切换到这台 Mac";
 "Switching keeps your pairings. iMic will reconnect only to the selected Mac and will not switch to another computer automatically." = "切换不会删除配对。选定后，iMic 只会重连这台 Mac，不会自动转到其他电脑。";
 "Synthetic test · Not a real recording" = "合成测试 · 非真实录音";
+"System audio input is unavailable. Try playing any audio, then record again." = "系统音频输入异常，请播放任意一段声音后再尝试录音。";
 "System permissions" = "系统权限";
 "Tap Start using iMic to request Microphone access (required), then Speech Recognition access (optional, for live preview on your phone)." = "点「开始使用」后，系统会依次请求麦克风权限（必需）和语音识别权限（用于手机上的实时预览，可以拒绝）。";
 "Tap a Mac, then confirm with the pairing code in its window." = "点击 Mac 后，按窗口里的配对码确认。";

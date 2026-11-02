@@ -23,12 +23,14 @@ final class AudioCapture {
             configuration: .AVAudioEngineConfigurationChange,
             reset: AVAudioSession.mediaServicesWereResetNotification,
             foreground: UIApplication.didBecomeActiveNotification,
-            interruptionBegan: { ($0.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) == AVAudioSession.InterruptionType.began.rawValue }),
+            interruptionBegan: { ($0.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) == AVAudioSession.InterruptionType.began.rawValue },
+            oldDeviceUnavailable: { ($0.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt) == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue }),
         makeHardware: { [unowned self] in AVMicHardware(onChunk: chunk, onBuffer: buffer) },
-        deactivate: {
-            do { try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
+        deactivate: { notifyOthers in
+            do { try AVAudioSession.sharedInstance().setActive(false, options: notifyOthers ? .notifyOthersOnDeactivation : []) }
             catch { IMicLog.write("iphone.audio", "deactivate failed: \(error.localizedDescription)") }
-        }, log: { IMicLog.write("iphone.audio", $0) })
+        }, rebuildRoute: { try AVMicSession.rebuildRoute() },
+        log: { IMicLog.write("iphone.audio", $0) })
 
     init() {
         lifecycle.setSpecific(key: queueKey, value: true)
@@ -43,7 +45,7 @@ final class AudioCapture {
         }
     }
 
-    func start(onChunk: @escaping (Data) -> Void,
+    func start(rebuildFirst: Bool = false, onChunk: @escaping (Data) -> Void,
                onBuffer: ((AVAudioPCMBuffer) -> Void)? = nil,
                onFailure: @escaping (String) -> Void,
                onDiagnostics: ((CaptureDiagnostics) -> Void)? = nil,
@@ -59,7 +61,7 @@ final class AudioCapture {
             chunk = { data in gate.deliver { onChunk(data) } }
             buffer = onBuffer.map { callback in { pcm in gate.deliver { callback(pcm) } } }
             do {
-                try controller.start(onFailure: { [weak self] message in
+                try controller.start(rebuildFirst: rebuildFirst, onFailure: { [weak self] message in
                     DispatchQueue.main.async { [weak self] in
                         guard let self, self.request == current, self.requested else { return }
                         self.requested = false
@@ -92,6 +94,22 @@ final class AudioCapture {
     /// retain pre-roll without spending a retry on a quiet room.
     func setMonitoring(_ enabled: Bool) {
         lifecycle.async { [self] in controller.setMonitoring(enabled) }
+    }
+
+    /// MIC TEST only: preserves its callbacks and the controller's one-recovery
+    /// budget, including after a failed start. It never opens SpeechPreview.
+    func rebuildRouteForMicrophoneTest(completion: @escaping (Bool) -> Void) {
+        let current = request
+        let wasRequested = requested
+        requested = true
+        lifecycle.async { [self] in
+            let accepted = controller.recoverManually()
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.request == current else { return }
+                if !accepted { self.requested = wasRequested }
+                completion(accepted)
+            }
+        }
     }
 
     func stop() {
@@ -131,17 +149,22 @@ private final class AVMicHardware: CaptureHardware {
         let session = AVAudioSession.sharedInstance()
         return CaptureDiagnostics(input: session.currentRoute.inputs.map(\.portName).joined(separator: ", "),
             route: session.currentRoute.inputs.map { $0.portType.rawValue }.joined(separator: ","),
-            sampleRate: session.sampleRate, nativeRate: nativeRate, channels: channels, running: engine.isRunning)
+            sampleRate: session.sampleRate, nativeRate: nativeRate, channels: channels, running: engine.isRunning,
+            inputRoute: AVMicSession.inputRoute())
     }
     init(onChunk: @escaping (Data) -> Void, onBuffer: ((AVAudioPCMBuffer) -> Void)?) {
         self.onChunk = onChunk; self.onBuffer = onBuffer
     }
     func start(meter: @escaping (CaptureMeter) -> Void, failure: @escaping (String) -> Void) throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
-        try session.setPreferredSampleRate(16_000)
-        try session.setPreferredIOBufferDuration(0.01)
+        try AVMicSession.configureCapture()
         try session.setActive(true)
+        let route = AVMicSession.inputRoute()
+        IMicLog.write("iphone.audio", "activated input-route \(route.report)")
+        guard route.invalidReason == nil else {
+            IMicLog.write("iphone.audio", "invalid-input-route \(route.report)")
+            throw CaptureRouteError.invalidInputRoute
+        }
         try? session.setAllowHapticsAndSystemSoundsDuringRecording(true)
         // Preferences are hints. Read actual native format AFTER activation, connect
         // the sink at that format, then convert on the non-realtime bridge worker.
@@ -174,5 +197,46 @@ private final class AVMicHardware: CaptureHardware {
             bridge.finish()
         }
         bridge = nil
+    }
+}
+
+
+extension CaptureRouteError: LocalizedError {
+    var errorDescription: String? { L10n.text(Self.message) }
+}
+
+private enum AVMicSession {
+    static func inputRoute() -> CaptureInputRoute {
+        let session = AVAudioSession.sharedInstance()
+        func port(_ value: AVAudioSessionPortDescription) -> CaptureInputPort {
+            CaptureInputPort(uid: value.uid, type: value.portType.rawValue, name: value.portName)
+        }
+        return CaptureInputRoute(inputs: session.currentRoute.inputs.map(port), available: session.availableInputs?.map(port))
+    }
+
+    static func configureCapture() throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
+        try session.setPreferredSampleRate(16_000)
+        try session.setPreferredIOBufferDuration(0.01)
+    }
+
+    static func rebuildRoute() throws {
+        let session = AVAudioSession.sharedInstance()
+        // The old engine has stopped and the session is inactive. Mix during
+        // the brief playback activation; don't render ANY buffers or UI sounds.
+        // This is an attempted workaround, not an API guarantee of OS repair.
+        do {
+            IMicLog.write("iphone.audio", "route-recovery playback activate mixWithOthers; no rendered audio")
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try session.setActive(true)
+            try session.setActive(false)
+            try configureCapture()
+            IMicLog.write("iphone.audio", "route-recovery restored capture configuration; next build reactivates and validates")
+        } catch {
+            try? session.setActive(false)
+            try? configureCapture()
+            throw error
+        }
     }
 }

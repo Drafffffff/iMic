@@ -18,7 +18,17 @@ final class MicrophoneTestUITests: XCTestCase {
             if allow.waitForExistence(timeout: 1) { allow.tap(); break }
         }
         let restart = app.buttons[language == "en" ? "Start microphone test" : "开始麦克风自检"]
-        if restart.waitForExistence(timeout: 2) { restart.tap() }
+        if restart.waitForExistence(timeout: 2) {
+            for _ in 0..<6 {
+                if restart.isHittable { break }
+                app.scrollViews.firstMatch.swipeUp()
+            }
+            if restart.isHittable { restart.tap() }
+            for _ in 0..<6 {
+                if app.buttons[close].firstMatch.isHittable { break }
+                app.scrollViews.firstMatch.swipeDown()
+            }
+        }
         // Native input may be unavailable in Simulator; either live levels or a
         // bounded failure is valid. Never assert that simulator silence is a bug.
         sleep(4)
@@ -26,11 +36,42 @@ final class MicrophoneTestUITests: XCTestCase {
         screenshot.name = "mic-test-\(language)"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        let rebuild = app.buttons["rebuild-audio-route"]
+        for _ in 0..<6 {
+            if rebuild.isHittable { break }
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        XCTAssertTrue(rebuild.exists)
+        if rebuild.isEnabled {
+            rebuild.tap()
+            let spent = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: rebuild)
+            XCTAssertEqual(XCTWaiter.wait(for: [spent], timeout: 8), .completed)
+            let finished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: rebuild)
+            XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 8), .completed)
+            // A second deliberate click is a new manual test; it still shows
+            // one recovery, rather than quietly granting an automatic retry.
+            rebuild.tap()
+            let second = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true AND value == %@", "1"), object: rebuild)
+            XCTAssertEqual(XCTWaiter.wait(for: [second], timeout: 8), .completed)
+        }
+        app.scrollViews.firstMatch.swipeUp()
+        sleep(1)
+        let recoveryShot = XCTAttachment(screenshot: app.screenshot())
+        recoveryShot.name = "mic-route-recovery-\(language)"
+        recoveryShot.lifetime = .keepAlways
+        add(recoveryShot)
         let copyButton = app.buttons["copy-mic-diagnostics"]
-        if !copyButton.isHittable { app.scrollViews.firstMatch.swipeUp() }
+        for _ in 0..<5 {
+            if copyButton.isHittable { break }
+            app.scrollViews.firstMatch.swipeUp()
+        }
         XCTAssertTrue(copyButton.isHittable)
         copyButton.tap()
         XCTAssertTrue(app.buttons["copy-mic-diagnostics"].label == (language == "en" ? "Copied" : "已复制"))
+        for _ in 0..<6 {
+            if app.buttons[close].firstMatch.isHittable { break }
+            app.scrollViews.firstMatch.swipeDown()
+        }
         app.buttons[close].firstMatch.tap()
         XCTAssertTrue(app.buttons[language == "en" ? "Settings" : "设置"].waitForExistence(timeout: 8))
         // Also exercise the real Settings entry instead of just the DEBUG shortcut.
@@ -47,6 +88,10 @@ final class MicrophoneTestUITests: XCTestCase {
         settingsShot.name = "mic-test-settings-\(language)"
         settingsShot.lifetime = .keepAlways
         add(settingsShot)
+        for _ in 0..<6 {
+            if app.buttons[close].firstMatch.isHittable { break }
+            app.scrollViews.firstMatch.swipeDown()
+        }
         app.buttons[close].firstMatch.tap()
     }
 }
