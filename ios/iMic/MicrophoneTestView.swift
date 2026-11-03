@@ -201,7 +201,8 @@ struct MicrophoneTestView: View {
             Text(L10n.text("Route details show the last active session check. Copy diagnostics to include port IDs."))
                 .font(.caption).foregroundStyle(Theme.muted)
             detail("RECOVERY / \(model.diagnostics.attempt)", recoveryStatus)
-            detail("SAMPLE RATE", String(format: "%.0f Hz", model.diagnostics.sampleRate))
+            detail("SESSION FORMAT", String(format: "%.0f Hz / %d ch", model.diagnostics.sampleRate, model.diagnostics.sessionChannels))
+            detail("CAPTURE FORMAT", String(format: "%.0f Hz / %u ch", model.diagnostics.nativeRate, model.diagnostics.channels))
             detail("ENGINE", model.diagnostics.running ? "RUNNING" : "STOPPED")
             detail("CALLBACKS / 0.5s", String(model.diagnostics.meter.callbacks))
         }
