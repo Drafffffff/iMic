@@ -550,6 +550,15 @@ final class LinkClient: ObservableObject {
         queue.async {
             guard let id = id ?? self.currentMacID ?? self.preferredMacID else { return }
             let isCurrent = id == self.currentMacID || id == self.preferredMacID
+            let storedSuccessfulID = UserDefaults.standard.string(forKey: "imic.lastConnectedMacID")
+            let storedPreferredID = UserDefaults.standard.string(forKey: "imic.preferredMacID")
+            let forgetsStoredTarget = storedSuccessfulID == id || (storedSuccessfulID == nil && storedPreferredID == id)
+            if forgetsStoredTarget {
+                // A manual target may still be waiting while the prior success is
+                // forgotten. Preserve that attempt in memory, but do not revive
+                // older history on cold launch. Only a new ready clears this flag.
+                UserDefaults.standard.set(true, forKey: "imic.requiresMacSelection")
+            }
             if isCurrent {
                 // Advance the epoch and detach receive/state handlers before
                 // deleting the token, so old handshakes cannot save it again.

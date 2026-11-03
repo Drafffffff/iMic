@@ -176,6 +176,32 @@ Task { @MainActor in
         await client.selectionTestStop()
         print("PASS old data migration and cold launch remember authenticated success rather than a click")
 
+        try seed(preferred:0,paired:[0,1,2],recent:[macs[0].id:30,macs[2].id:20,macs[1].id:10])
+        client=makeClient()
+        await client.selectionTestDiscover([macs[0]],begin:true)
+        try await until("successful A before changing target") { client.phase.isReady }
+        let waitingChoice=RememberedMac(id:UUID().uuidString,name:"Never advertised D")
+        client.selectRememberedMac(waitingChoice)
+        try await until("manual D waits") { client.selectedMacID==waitingChoice.id && client.isManualSelection }
+        let waitingEpoch=await client.selectionTestEpoch()
+        client.forgetMac(id:macs[0].id)
+        try await until("previous successful A removed") { TokenStore.load(for:macs[0].id)==nil && !client.rememberedMacs.contains { $0.id==macs[0].id } }
+        try check(client.selectedMacID==waitingChoice.id && client.isManualSelection,"Deleting previous successful A interrupted manual D")
+        let afterForgetEpoch=await client.selectionTestEpoch()
+        try check(afterForgetEpoch==waitingEpoch,"Deleting non-current A retired the in-flight target epoch")
+        await client.selectionTestStop()
+        client=makeClient()
+        await client.selectionTestDiscover([macs[2],macs[1]],begin:true,expired:true)
+        try await Task.sleep(for:.seconds(1.8))
+        try check(!client.phase.isReady && !client.pairing && client.selectedMacID==nil,"Deleting the stored successful A restored older history C on cold launch")
+        try check(!servers[2].isConnected && !servers[1].isConnected,"Cold launch connected old history without explicit choice")
+        try check(UserDefaults.standard.bool(forKey:"imic.requiresMacSelection"),"Deleting successful identity did not persist explicit-choice requirement")
+        client.connect(to:macs[1])
+        try await until("explicit new target ready after deleting stored A") { client.phase.isReady }
+        try check(client.selectedMacID==macs[1].id && !UserDefaults.standard.bool(forKey:"imic.requiresMacSelection"),"New authenticated target did not clear deletion pause")
+        await client.selectionTestStop()
+        print("PASS deleting stored success A while manual D waits preserves D; cold launch cannot restore C; explicit B success resumes auto connect")
+
         try seed(preferred:0,paired:[0,1,2],recent:[macs[0].id:30,macs[2].id:20])
         client=makeClient()
         await client.selectionTestDiscover([macs[0]],begin:true)
@@ -184,6 +210,7 @@ Task { @MainActor in
         client.forgetMac(id:macs[2].id)
         try await until("offline other device deleted") { !client.rememberedMacs.contains { $0.id==macs[2].id } }
         try check(client.phase.isReady && client.selectedMacID==macs[0].id && servers[0].isConnected,"Forgetting another device interrupted current link")
+        try check(!UserDefaults.standard.bool(forKey:"imic.requiresMacSelection"),"Forgetting ordinary non-current C changed automatic restoration policy")
         try check(TokenStore.load(for:macs[2].id)==nil,"Forgotten token remained")
         try check((UserDefaults.standard.dictionary(forKey:"imic.macLastConnected") ?? [:])[macs[2].id]==nil,"Forgotten recency remained")
         client.cancelSession(902)
