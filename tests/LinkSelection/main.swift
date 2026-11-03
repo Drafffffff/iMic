@@ -193,6 +193,10 @@ Task { @MainActor in
         try await Task.sleep(for:.seconds(1.8))
         try check(!client.phase.isReady && !client.pairing && client.selectedMacID==nil,"Forgetting current device immediately reconnected or started pairing")
         try check(UserDefaults.standard.bool(forKey:"imic.requiresMacSelection"),"Explicit selection pause was not persisted")
+        let failedAfterForget=RememberedMac(id:UUID().uuidString,name:"Offline after forget")
+        client.selectRememberedMac(failedAfterForget)
+        try await until("manual attempt after forgetting") { client.selectedMacID==failedAfterForget.id }
+        try check(UserDefaults.standard.bool(forKey:"imic.requiresMacSelection"),"Unsuccessful manual attempt lifted persisted deletion pause")
         await client.selectionTestStop()
         client=makeClient()
         await client.selectionTestDiscover([macs[1]],begin:true,expired:true)

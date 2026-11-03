@@ -486,7 +486,6 @@ final class LinkClient: ObservableObject {
         queue.async {
             self.manualSelection = true
             self.autoConnectPaused = false
-            UserDefaults.standard.set(false, forKey: "imic.requiresMacSelection")
             self.attemptedThisRound.removeAll()
             self.publish { self.isManualSelection = true }
             self.preferredMacID = mac.id
@@ -522,7 +521,6 @@ final class LinkClient: ObservableObject {
             self.reconnectWork = nil
             self.manualSelection = true
             self.autoConnectPaused = false
-            UserDefaults.standard.set(false, forKey: "imic.requiresMacSelection")
             self.attemptedThisRound.removeAll()
             self.publish { self.isManualSelection = true }
             self.preferredMacID = mac.id
@@ -1700,6 +1698,8 @@ final class LinkClient: ObservableObject {
         preferredMacID = id
         knownNames[id] = name
         if connected {
+            autoConnectPaused = false
+            UserDefaults.standard.set(false, forKey: "imic.requiresMacSelection")
             UserDefaults.standard.set(id, forKey: "imic.preferredMacID")
             UserDefaults.standard.set(id, forKey: "imic.lastConnectedMacID")
             forgottenMacIDs.remove(id)
