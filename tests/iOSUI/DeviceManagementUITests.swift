@@ -85,4 +85,19 @@ final class DeviceManagementUITests: XCTestCase {
         shot(app,"Current unpaired target opens explicit pairing")
     }
 
+    func testChineseOfflineDeletionIsLocalizedAndRequiresConfirmation() {
+        let app=XCUIApplication()
+        app.launchArguments=["--ui-preview=devices-manage","-AppleLanguages","(zh-Hans)"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["连接电脑"].waitForExistence(timeout:20))
+        let forget=button(app,"devices.forget.preview-office")
+        XCTAssertEqual(forget.label,"删除已配对设备 Office iMac")
+        shot(app,"Chinese device management with deletion actions")
+        forget.tap()
+        XCTAssertTrue(app.buttons["删除配对设备"].waitForExistence(timeout:5))
+        shot(app,"Chinese offline device deletion confirmation")
+        app.buttons["删除配对设备"].tap()
+        XCTAssertFalse(app.buttons["devices.forget.preview-office"].waitForExistence(timeout:1))
+    }
+
 }
