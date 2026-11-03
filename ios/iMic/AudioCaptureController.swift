@@ -10,6 +10,11 @@ struct CaptureMeter {
 }
 
 struct CaptureInputPort: Equatable {
+    struct Identity: Hashable {
+        var uid: String
+        var type: String
+    }
+    var identity: Identity { Identity(uid: uid, type: type) }
     var uid: String
     var type: String
     var name: String
@@ -19,6 +24,9 @@ struct CaptureInputPort: Equatable {
 struct CaptureInputRoute {
     var inputs: [CaptureInputPort] = []
     var available: [CaptureInputPort]? = nil
+    /// Identity is a SET of physical ports. Session/native formats and display
+    /// names are diagnostics, never evidence of a different input device.
+    var identities: Set<CaptureInputPort.Identity> { Set(inputs.map(\.identity)) }
     var invalidReason: String? {
         guard !inputs.isEmpty else { return "empty-input-route" }
         guard let available else { return "available-inputs-unavailable" }
@@ -47,6 +55,7 @@ struct CaptureDiagnostics {
     var input = "—"
     var route = "none"
     var sampleRate: Double = 0
+    var sessionChannels = 0
     var nativeRate: Double = 0
     var channels: UInt32 = 0
     var running = false
@@ -62,7 +71,7 @@ struct CaptureDiagnostics {
     var level: CaptureLevel { CaptureLevel.classify(meter) }
 
     var report: String {
-        "iMic MIC TEST\ninput=\(input) route=\(route)\nsessionRate=\(sampleRate) nativeRate=\(nativeRate) channels=\(channels)\nvpio=\(voiceProcessing ? "on" : "off") mode=\(mode) format=\(format) ducking=\(ducking) level=\(level.rawValue)\nengineRunning=\(running) recoveries=\(attempt) recoveryResult=\(recoveryResult.rawValue) event=\(event)\n\(inputRoute.report)\nRMS=\(meter.rms) peak=\(meter.peak) callbacks=\(meter.callbacks) interval=\(meter.elapsed) allZero=\(meter.allZero)"
+        "iMic MIC TEST\ninput=\(input) route=\(route)\nsessionRate=\(sampleRate) sessionChannels=\(sessionChannels) nativeRate=\(nativeRate) channels=\(channels)\nvpio=\(voiceProcessing ? "on" : "off") mode=\(mode) format=\(format) ducking=\(ducking) level=\(level.rawValue)\nengineRunning=\(running) recoveries=\(attempt) recoveryResult=\(recoveryResult.rawValue) event=\(event)\n\(inputRoute.report)\nRMS=\(meter.rms) peak=\(meter.peak) callbacks=\(meter.callbacks) interval=\(meter.elapsed) allZero=\(meter.allZero)"
     }
 }
 
@@ -72,7 +81,7 @@ struct CaptureDiagnostics {
 protocol CaptureHardware: AnyObject {
     var notificationObject: AnyObject { get }
     var diagnostics: CaptureDiagnostics { get }
-    var inputIdentity: String { get }
+    var inputFormatAvailable: Bool { get }
     func start(meter: @escaping (CaptureMeter) -> Void, failure: @escaping (String) -> Void) throws
     func stop()
 }
@@ -85,6 +94,8 @@ struct CaptureNotifications {
     var foreground: Notification.Name
     var interruptionBegan: (Notification) -> Bool
     var oldDeviceUnavailable: (Notification) -> Bool = { _ in false }
+    var routeReason: (Notification) -> String = { _ in "unknown" }
+    var previousInputs: (Notification) -> [CaptureInputPort] = { _ in [] }
 }
 
 final class AudioCaptureController {
@@ -101,7 +112,7 @@ final class AudioCaptureController {
     private var hardware: CaptureHardware?
     private var active = false
     private var allowsManualRecovery = false
-    private var identity = ""
+    private var inputPorts: Set<CaptureInputPort.Identity> = []
     private var epoch: UInt64 = 0
     private var retried = false
     private var monitoring = false
@@ -186,7 +197,7 @@ final class AudioCaptureController {
                 }
             })
             guard new.diagnostics.inputRoute.invalidReason == nil else { throw CaptureRouteError.invalidInputRoute }
-            identity = new.inputIdentity
+            inputPorts = new.diagnostics.inputRoute.identities
             publish(event: retried ? "retry" : "started")
         } catch {
             log("engine start failed: \(error.localizedDescription)")
@@ -240,9 +251,8 @@ final class AudioCaptureController {
             catch { invalidate(CaptureRouteError.message) }
             return
         }
-        guard last.running else {
-            log("engine-stopped; cancel current capture")
-            invalidate("Microphone configuration changed. Hold again to record.")
+        if !last.running || !hardware.inputFormatAvailable {
+            recoverConfigurationIfNeeded(reason: "unhealthy-engine-at-meter")
             return
         }
         // Clip a report that spans the warm-to-held boundary to this hold's time.
@@ -331,34 +341,77 @@ final class AudioCaptureController {
         guard let hardware else { return }
         if note.name == names.configuration {
             guard let object = note.object as AnyObject?, object === hardware.notificationObject else { return }
-            if monitoring, hardware.diagnostics.inputRoute.invalidReason != nil {
-                do { try recoverRoute(reason: "invalid-route-at-configuration-change") }
-                catch { invalidate(CaptureRouteError.message) }
+            if hardware.diagnostics.inputRoute.invalidReason != nil {
+                if monitoring {
+                    do { try recoverRoute(reason: "invalid-route-at-configuration-change") }
+                    catch { invalidate(CaptureRouteError.message) }
+                } else { invalidate("Microphone configuration changed. Hold again to record.") }
                 return
             }
-            invalidate("Microphone configuration changed. Hold again to record.")
+            recoverConfigurationIfNeeded(reason: "engine-configuration-change")
         } else if note.name == names.route {
-            // setCategory/setActive may emit a route notification for our own start.
-            // Ignore it only if actual input identity, format and running state agree.
-            let route = hardware.diagnostics.inputRoute
-            log("route-change oldDeviceUnavailable=\(names.oldDeviceUnavailable(note)) \(route.report)")
+            let snapshot = hardware.diagnostics
+            let route = snapshot.inputRoute
+            let reason = names.routeReason(note)
+            let oldDeviceUnavailable = names.oldDeviceUnavailable(note)
+            let previous = names.previousInputs(note)
+            log("route-change reason=\(reason) oldDeviceUnavailable=\(oldDeviceUnavailable) previousInputs=\(previous.map(\.description)) \(route.report) sessionRate=\(snapshot.sampleRate) sessionChannels=\(snapshot.sessionChannels) nativeRate=\(snapshot.nativeRate) channels=\(snapshot.channels) running=\(snapshot.running)")
             if route.invalidReason != nil {
                 if monitoring {
-                    do { try recoverRoute(reason: names.oldDeviceUnavailable(note) ? "old-device-unavailable" : "invalid-route-change") }
+                    do { try recoverRoute(reason: oldDeviceUnavailable ? "old-device-unavailable" : "invalid-route-change") }
                     catch { invalidate(CaptureRouteError.message) }
                 } else { invalidate("Microphone input changed. Hold again to record.") }
                 return
             }
-            log("route-change current=\(hardware.inputIdentity) leased=\(identity) running=\(hardware.diagnostics.running)")
-            guard hardware.inputIdentity != identity || !hardware.diagnostics.running else { return }
-            invalidate("Microphone input changed. Hold again to record.")
+            let lostInputs = inputPorts.subtracting(route.identities)
+            let previousIDs = Set(previous.map(\.identity))
+            // oldDeviceUnavailable describes an OUTPUT path too. Only treat it
+            // as input loss if a leased input actually disappeared; a healthy
+            // built-in input must survive an output-only disconnect.
+            let lostCurrentInput = oldDeviceUnavailable && !lostInputs.isEmpty
+                && (previousIDs.isEmpty || !previousIDs.isDisjoint(with: lostInputs))
+            if lostCurrentInput, monitoring {
+                do { try recoverRoute(reason: "old-device-unavailable") }
+                catch { invalidate(CaptureRouteError.message) }
+                return
+            }
+            guard route.identities == inputPorts else {
+                invalidate("Microphone input changed. Hold again to record.")
+                return
+            }
+            // Includes categoryChange/override/routeConfigurationChange and any
+            // other reason with the SAME valid input set. Never spend a recovery
+            // or cancel merely because session rate/channel metadata changed.
+            // Actual engine/format loss is handled by config notification/meter.
+            log("route-change same-input-ports; continuing capture")
+            publish(event: "route-unchanged: \(reason)")
         } else if note.name == names.reset {
             invalidate("Microphone services reset. Hold again to record.")
         } else if note.name == names.foreground {
-            if !hardware.diagnostics.running || hardware.inputIdentity != identity || !monitoring {
+            if !hardware.diagnostics.running || hardware.diagnostics.inputRoute.identities != inputPorts || !monitoring {
                 invalidate("Microphone lease expired. Hold again to record.")
             }
         }
+    }
+
+    private func recoverConfigurationIfNeeded(reason: String) {
+        guard let hardware else { return }
+        let running = hardware.diagnostics.running
+        let formatAvailable = hardware.inputFormatAvailable
+        log("configuration-check reason=\(reason) running=\(running) formatAvailable=\(formatAvailable)")
+        guard !running || !formatAvailable else {
+            publish(event: "configuration-healthy")
+            return
+        }
+        // Rebuild only for an active hold/self-test. A warm lease is discarded,
+        // never restarted unattended. recoverRoute owns the same one-shot budget
+        // as route/zero/low-level/manual recovery and fences all old callbacks.
+        guard monitoring else {
+            invalidate("Microphone configuration changed. Hold again to record.")
+            return
+        }
+        do { try recoverRoute(reason: reason) }
+        catch { invalidate(CaptureRouteError.message) }
     }
 
     private func invalidate(_ message: String) {

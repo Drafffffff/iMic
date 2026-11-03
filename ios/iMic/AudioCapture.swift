@@ -25,7 +25,15 @@ final class AudioCapture {
             reset: AVAudioSession.mediaServicesWereResetNotification,
             foreground: UIApplication.didBecomeActiveNotification,
             interruptionBegan: { ($0.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) == AVAudioSession.InterruptionType.began.rawValue },
-            oldDeviceUnavailable: { ($0.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt) == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue }),
+            oldDeviceUnavailable: { ($0.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt) == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue },
+            routeReason: { note in
+                guard let value = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                      let reason = AVAudioSession.RouteChangeReason(rawValue: value) else { return "unknown" }
+                return String(describing: reason)
+            }, previousInputs: { note in
+                let previous = note.userInfo?[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription
+                return previous?.inputs.map { CaptureInputPort(uid: $0.uid, type: $0.portType.rawValue, name: $0.portName) } ?? []
+            }),
         makeHardware: { [unowned self] vpio in AVMicHardware(voiceProcessing: vpio, onChunk: chunk, onBuffer: buffer) },
         deactivate: { notifyOthers in
             do { try AVAudioSession.sharedInstance().setActive(false, options: notifyOthers ? .notifyOthersOnDeactivation : []) }
@@ -159,16 +167,18 @@ private final class AVMicHardware: CaptureHardware {
     private let onChunk: (Data) -> Void
     private let onBuffer: ((AVAudioPCMBuffer) -> Void)?
     var notificationObject: AnyObject { engine }
-    var inputIdentity: String {
-        let session = AVAudioSession.sharedInstance()
-        return session.currentRoute.inputs.map { "\($0.uid):\($0.portType.rawValue)" }.joined(separator: ",")
-            + ":\(session.sampleRate):\(session.inputNumberOfChannels)"
+    var inputFormatAvailable: Bool {
+        guard bridge != nil else { return false }
+        // Read the engine's CURRENT graph format after startup, not the cached
+        // converter format or the session's mutable sample-rate/channel hints.
+        let format = engine.inputNode.outputFormat(forBus: 0)
+        return format.sampleRate > 0 && format.channelCount > 0
     }
     var diagnostics: CaptureDiagnostics {
         let session = AVAudioSession.sharedInstance()
         return CaptureDiagnostics(input: session.currentRoute.inputs.map(\.portName).joined(separator: ", "),
             route: session.currentRoute.inputs.map { $0.portType.rawValue }.joined(separator: ","),
-            sampleRate: session.sampleRate, nativeRate: nativeRate, channels: channels, running: engine.isRunning,
+            sampleRate: session.sampleRate, sessionChannels: session.inputNumberOfChannels, nativeRate: nativeRate, channels: channels, running: engine.isRunning,
             inputRoute: AVMicSession.inputRoute(), voiceProcessing: actualVoiceProcessing,
             mode: session.mode.rawValue, format: actualFormat, ducking: ducking)
     }
