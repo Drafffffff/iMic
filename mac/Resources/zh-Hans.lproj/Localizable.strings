@@ -64,7 +64,9 @@
 "Bluetooth has lower bandwidth. Long recordings may keep uploading." = "蓝牙带宽较低，长录音可能需要补传。";
 "Bluetooth · Encrypted" = "蓝牙 · 加密";
 "Cancel" = "取消";
+"Cancel session and forget" = "取消语音并删除";
 "Cancel session and switch" = "取消语音并切换";
+"Cancel this voice session and forget %@?" = "取消当前语音并删除 %@？";
 "Cancel this voice session and switch Macs?" = "取消当前语音并切换 Mac？";
 "Canceled" = "已取消";
 "Canceled the voice session on your previous Mac" = "已取消旧 Mac 的语音会话";
@@ -243,6 +245,9 @@
 "For your first connection, enter the 6-digit pairing code shown on your Mac" = "首次连接需要输入 Mac 窗口中的 6 位配对码";
 "Foreground connection check timed out" = "前台存活检查超时";
 "Forget" = "忘记";
+"Forget %@, paired Mac" = "删除已配对设备 %@";
+"Forget %@?" = "删除 %@ 的配对？";
+"Forget Mac" = "删除配对设备";
 "Forget all pairings" = "解除全部配对";
 "Forget##ccdebb93" = "解除";
 "Full rant" = "暴躁吐槽";
@@ -491,6 +496,7 @@
 "Recording" = "录音";
 "Recording buffer full. This input has stopped." = "录音缓存已满，本次输入已停止";
 "Recording exceeded the session limit. This input has stopped." = "录音超过单次时长上限，本次输入已停止";
+"Recording or recognition will stop. Local text is kept. Enter the pairing code again to reconnect." = "录音或识别将停止，本地文字会保留。下次连接需要重新输入配对码。";
 "Recording or recognition will stop. Unsent audio will not go to another Mac. Completed results will be kept." = "当前录音或识别会停止，不会把尚未发送的内容交给另一台 Mac。已完成的识别结果会保留。";
 "Recording too short" = "录音太短";
 "Recording too short. Ignored." = "录音太短，已忽略";
@@ -624,6 +630,7 @@
 "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. iMic needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page." = "这看起来是 Token Plan 或 Coding Plan 套餐的 Key。套餐 Key 只能用于 Claude Code 等编程工具，iMic 需要按量付费的 API Key。请在百炼控制台的「API Key」页面创建一个新的 Key。";
 "This provider has no valid Key. Polish will keep the original text." = "此来源缺少有效 Key，润色将保留原文。";
 "This region does not support iMic’s speech model. Create a Key in Singapore (international) or Beijing (China)." = "该地域不支持 iMic 的语音模型，请在国际站的新加坡或中国站的北京地域创建 Key。";
+"This removes the pairing from this iPhone. Enter the pairing code again to reconnect." = "从这台 iPhone 删除配对。下次连接需要重新输入配对码。";
 "This text field cannot be safely cleared" = "当前输入框无法安全清空";
 "This text field cannot be safely cleared. Clear it on your computer." = "当前输入框无法安全清空，请在电脑端操作";
 "Timed out waiting for recognition" = "等待识别结果超时";

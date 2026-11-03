@@ -64,7 +64,9 @@
 "Bluetooth has lower bandwidth. Long recordings may keep uploading." = "Bluetooth has lower bandwidth. Long recordings may keep uploading.";
 "Bluetooth · Encrypted" = "Bluetooth · Encrypted";
 "Cancel" = "Cancel";
+"Cancel session and forget" = "Cancel session and forget";
 "Cancel session and switch" = "Cancel session and switch";
+"Cancel this voice session and forget %@?" = "Cancel this voice session and forget %@?";
 "Cancel this voice session and switch Macs?" = "Cancel this voice session and switch Macs?";
 "Canceled" = "Canceled";
 "Canceled the voice session on your previous Mac" = "Canceled the voice session on your previous Mac";
@@ -243,6 +245,9 @@
 "For your first connection, enter the 6-digit pairing code shown on your Mac" = "For your first connection, enter the 6-digit pairing code shown on your Mac";
 "Foreground connection check timed out" = "Foreground connection check timed out";
 "Forget" = "Forget";
+"Forget %@, paired Mac" = "Forget %@, paired Mac";
+"Forget %@?" = "Forget %@?";
+"Forget Mac" = "Forget Mac";
 "Forget all pairings" = "Forget all pairings";
 "Forget##ccdebb93" = "Forget";
 "Full rant" = "Full rant";
@@ -491,6 +496,7 @@
 "Recording" = "Recording";
 "Recording buffer full. This input has stopped." = "Recording buffer full. This input has stopped.";
 "Recording exceeded the session limit. This input has stopped." = "Recording exceeded the session limit. This input has stopped.";
+"Recording or recognition will stop. Local text is kept. Enter the pairing code again to reconnect." = "Recording or recognition will stop. Local text is kept. Enter the pairing code again to reconnect.";
 "Recording or recognition will stop. Unsent audio will not go to another Mac. Completed results will be kept." = "Recording or recognition will stop. Unsent audio will not go to another Mac. Completed results will be kept.";
 "Recording too short" = "Recording too short";
 "Recording too short. Ignored." = "Recording too short. Ignored.";
@@ -624,6 +630,7 @@
 "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. iMic needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page." = "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. iMic needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page.";
 "This provider has no valid Key. Polish will keep the original text." = "This provider has no valid Key. Polish will keep the original text.";
 "This region does not support iMic’s speech model. Create a Key in Singapore (international) or Beijing (China)." = "This region does not support iMic’s speech model. Create a Key in Singapore (international) or Beijing (China).";
+"This removes the pairing from this iPhone. Enter the pairing code again to reconnect." = "This removes the pairing from this iPhone. Enter the pairing code again to reconnect.";
 "This text field cannot be safely cleared" = "This text field cannot be safely cleared";
 "This text field cannot be safely cleared. Clear it on your computer." = "This text field cannot be safely cleared. Clear it on your computer.";
 "Timed out waiting for recognition" = "Timed out waiting for recognition";
