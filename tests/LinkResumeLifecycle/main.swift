@@ -130,7 +130,7 @@ Task { @MainActor in
         print("PASS foreground replaces the stale pairing socket, keeps the explicit target despite another pairing, and requires the real code")
     } catch {failures+=1;print("FAIL code prompt: \(error)")}
     await pairing.resumeTestStop()
-    store.forgetAll();TokenStore.delete(for:store.macID)
+    store.forgetAll();store.overrideCode("246810");TokenStore.delete(for:store.macID)
     let connecting=client()
     do {
         proxy.blackholeNextConnection()
