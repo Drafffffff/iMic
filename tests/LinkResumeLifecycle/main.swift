@@ -71,7 +71,7 @@ let server = LinkServer(store:store,port:port+1)
 let proxy = try ResumeProxy(port:port,serverPort:port+1)
 let mac = DiscoveredMac(id:store.macID,name:"Lifecycle fixture",endpoint:.hostPort(host:"127.0.0.1",port:.init(rawValue:port)!))
 Task { @MainActor in
-    let keys=["imic.deviceID","imic.preferredMacID","imic.macNames","imic.macLastConnected"]
+    let keys=["imic.deviceID","imic.preferredMacID","imic.macNames","imic.macLastConnected","imic.lastConnectedMacID", "imic.forgottenMacIDs", "imic.requiresMacSelection"]
     let saved=keys.map { UserDefaults.standard.object(forKey:$0) }
     var failures=0
     var clients:[LinkClient]=[]
@@ -81,6 +81,9 @@ Task { @MainActor in
         try? FileManager.default.removeItem(at:directory)
         let result:Int32=failures==0 ? 0:1
         DispatchQueue.main.asyncAfter(deadline:.now()+0.1) {exit(result)}
+    }
+    for key in ["imic.lastConnectedMacID", "imic.forgottenMacIDs", "imic.requiresMacSelection"] {
+        UserDefaults.standard.removeObject(forKey:key)
     }
     UserDefaults.standard.set(store.macID,forKey:"imic.preferredMacID")
     UserDefaults.standard.set([store.macID:"Lifecycle fixture"],forKey:"imic.macNames")
