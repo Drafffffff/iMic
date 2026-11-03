@@ -335,7 +335,7 @@ final class LinkClient: ObservableObject {
             self.backgroundAt = nil
             // A manually chosen target remains explicit while its first hello
             // or pairing code is pending; foreground must not turn it automatic.
-            if returning, !(self.manualSelection && !self.ready), !self.needsCode {
+            if returning, !self.hasPendingManualPairing, !self.needsCode {
                 self.resetSelectionLocked()
             }
             self.reconnectAttempts = 0
@@ -365,6 +365,15 @@ final class LinkClient: ObservableObject {
         }
     }
 
+    /// Queue-only: preserve explicit pairing before/after its first hello.
+    /// Selection of already-paired/offline targets remains a separate policy.
+    private var hasPendingManualPairing: Bool {
+        guard manualSelection, !ready else { return false }
+        if needsCode { return true }
+        return (connection != nil || usingBLE)
+            && currentMacID.flatMap { TokenStore.load(for: $0) } == nil
+    }
+
     private func probeForegroundLocked() {
         guard foregroundProbe == nil else { return }
         let stamp = Date().timeIntervalSince1970
@@ -392,7 +401,7 @@ final class LinkClient: ObservableObject {
         let notifyLoss = activeLinkSession != nil
         let name = currentMacName ?? "Mac"
         let resumingPairing = needsCode
-        let preservingManualTarget = !ready && manualSelection
+        let preservingManualTarget = hasPendingManualPairing
         let mac = directMac ?? ((resumingPairing || preservingManualTarget) ? lastMac : nil)
         resetSelectionLocked()
         if preservingManualTarget { manualSelection = true }
