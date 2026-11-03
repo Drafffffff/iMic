@@ -257,7 +257,7 @@ struct DeviceSelectionView: View {
         case .failed(let message): return message
         case .searching, .idle:
             if link.selectedMacID != nil { return L10n.text("The selected Mac is offline or not yet found. Waiting to connect.") }
-            return link.pairedMacIDs.isEmpty ? L10n.text("Searching for Macs. Choose a computer below.") : L10n.text("Looking for your paired Mac")
+            return L10n.text("Searching for Macs. Choose a computer below.")
         }
     }
 
@@ -273,7 +273,7 @@ struct DeviceSelectionView: View {
         let selected = id == link.selectedMacID
         return HStack(spacing: 8) {
         Button {
-            guard !selected else { return }
+            guard !selected || !link.phase.isReady else { return }
             Haptics.shared.play(.selection)
             let mac = RememberedMac(id: id, name: name)
             if session.phase == .listening || session.phase == .transcribing {

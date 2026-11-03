@@ -12,5 +12,5 @@ xcrun swiftc -D DEBUG -swift-version 5 -O \
   "$WORK/LinkClient.swift" "$ROOT/ios/iMic/BLELinkClient.swift" \
   "$ROOT/tests/LinkSelection/main.swift" \
   -framework Network -framework CryptoKit -framework CoreBluetooth -framework Combine -framework Security \
-  -o "$WORK/selection-tests"
-"$WORK/selection-tests" --debug-no-ble-fallback
+  -o "$WORK/selection-tests-${WORK##*.}"
+"$WORK/selection-tests-${WORK##*.}" --debug-no-ble-fallback

@@ -304,6 +304,9 @@ final class LinkClient: ObservableObject {
                 macs = [mac, nearby]
                 rememberedMacs = [RememberedMac(id: mac.id, name: mac.name), RememberedMac(id: nearby.id, name: nearby.name), RememberedMac(id: "preview-office", name: "Office iMac")]
                 pairedMacIDs = Set(rememberedMacs.map(\.id))
+                if mode == "devices-manage-repair" {
+                    pairedMacIDs.remove(mac.id); phase = .searching
+                }
             }
             hasPairedMac = phase.isReady
             gestureReady = phase.isReady
@@ -499,7 +502,15 @@ final class LinkClient: ObservableObject {
     }
 
     func selectRememberedMac(_ mac: RememberedMac) {
-        guard !startDeferred, !isPreview else { return }
+        guard !startDeferred else { return }
+        #if DEBUG
+        if isPreview {
+            selectedMacID = mac.id; selectedMacName = mac.name
+            pairing = !pairedMacIDs.contains(mac.id)
+            phase = pairing ? .needsCode(mac.name) : .ready(mac.name)
+            return
+        }
+        #endif
         if let nearby = macs.first(where: { $0.id == mac.id }) {
             connect(to: nearby)
             return
@@ -598,6 +609,7 @@ final class LinkClient: ObservableObject {
         if selectedMacID == id {
             selectedMacID = nil; selectedMacName = nil; phase = .searching
             transport = nil; hasPairedMac = false; pairing = false
+            gestureReady = false; gestureSupported = false; clearPending = false
         }
     }
     #endif

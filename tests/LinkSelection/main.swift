@@ -16,6 +16,44 @@ func check(_ value: @autoclosure () -> Bool, _ message: String) throws {
     }
 }
 
+// Hold real encrypted server replies while forgetting the pairing. This exercises
+// the production receive callback after its socket and token have been retired.
+final class DelayedReplyProxy {
+    private let queue = DispatchQueue(label:"imic.selection.delayed-replies")
+    private let listener: NWListener
+    private var phone: NWConnection?
+    private var server: NWConnection?
+    private var paused = false
+    private var replies: [Data] = []
+    var buffered: Int { queue.sync { replies.reduce(0) { $0+$1.count } } }
+    init(port: UInt16, serverPort: UInt16) throws {
+        listener = try NWListener(using:.tcp,on:NWEndpoint.Port(rawValue:port)!)
+        listener.newConnectionHandler = { [weak self] phone in
+            guard let self else { return }
+            let server=NWConnection(host:"127.0.0.1",port:NWEndpoint.Port(rawValue:serverPort)!,using:.tcp)
+            self.phone=phone;self.server=server
+            phone.start(queue:self.queue);server.start(queue:self.queue)
+            self.relay(phone,to:server,reply:false)
+            self.relay(server,to:phone,reply:true)
+        }
+        listener.start(queue:queue)
+    }
+    func pause() { queue.sync { paused=true } }
+    func resume() { queue.sync { paused=false;for data in replies { phone?.send(content:data,completion:.contentProcessed { _ in }) };replies=[] } }
+    func stop() { queue.async { self.listener.cancel();self.phone?.cancel();self.server?.cancel() } }
+    private func relay(_ from: NWConnection,to: NWConnection,reply: Bool) {
+        from.receive(minimumIncompleteLength:1,maximumLength:65536) { [weak self] data,_,done,error in
+            guard let self else { return }
+            if let data,!data.isEmpty {
+                if reply && self.paused { self.replies.append(data) }
+                else { to.send(content:data,completion:.contentProcessed { _ in }) }
+            }
+            if done || error != nil { from.cancel();to.cancel();return }
+            self.relay(from,to:to,reply:reply)
+        }
+    }
+}
+
 Task { @MainActor in
     let keys = ["imic.deviceID", "imic.preferredMacID", "imic.macNames", "imic.macLastConnected", "imic.lastConnectedMacID", "imic.forgottenMacIDs", "imic.requiresMacSelection"]
     let saved = keys.map { UserDefaults.standard.object(forKey: $0) }
@@ -110,7 +148,13 @@ Task { @MainActor in
             try await until("revoked token removed") { TokenStore.load(for:macs[0].id)==nil }
             try await Task.sleep(for:.milliseconds(800))
             try check(!client.phase.isReady && !prompted && !servers[1].isConnected,"Revocation prompted pairing or redirected to another Mac")
-            observer.cancel();await client.selectionTestStop()
+            observer.cancel()
+            client.connect(to:macs[0])
+            try await until("explicit retry can re-pair revoked target") { client.pairing }
+            client.submitCode(stores[0].currentCode())
+            try await until("revoked target manually paired again") { client.phase.isReady }
+            try check(client.selectedMacID==macs[0].id && !servers[1].isConnected,"Explicit repair changed target")
+            await client.selectionTestStop()
         }
         print("PASS rejected hello/auth tokens never pair or redirect automatically")
 
@@ -122,15 +166,14 @@ Task { @MainActor in
         await client.selectionTestDiscover([macs[0],macs[1]],begin:true)
         try await until("migrated target authenticates") { client.phase.isReady }
         try check(UserDefaults.standard.string(forKey:"imic.lastConnectedMacID")==macs[0].id,"Ready did not persist successful identity")
-        servers[2].stop()
-        client.selectRememberedMac(RememberedMac(id:macs[2].id,name:macs[2].name))
-        try await until("manual choice publishes") { client.selectedMacID==macs[2].id }
+        let offlineChoice = RememberedMac(id:UUID().uuidString,name:"Never advertised fixture")
+        client.selectRememberedMac(offlineChoice)
+        try await until("manual choice publishes") { client.selectedMacID==offlineChoice.id }
         try check(UserDefaults.standard.string(forKey:"imic.lastConnectedMacID")==macs[0].id,"Manual click changed last successful Mac before authentication")
         await client.selectionTestStop()
         client=makeClient()
         try check(client.selectedMacID==macs[0].id,"Relaunch did not restore successful device")
         await client.selectionTestStop()
-        servers[2].start()
         print("PASS old data migration and cold launch remember authenticated success rather than a click")
 
         try seed(preferred:0,paired:[0,1,2],recent:[macs[0].id:30,macs[2].id:20])
@@ -182,6 +225,23 @@ Task { @MainActor in
         try check(UserDefaults.standard.string(forKey:"imic.lastConnectedMacID")==macs[2].id,"Authenticated pair not remembered")
         await client.selectionTestStop()
         print("PASS first-install pairing remains explicit and success is recorded at ready")
+        try seed(preferred:nil,paired:[])
+        let proxy=try DelayedReplyProxy(port:port+5,serverPort:port+2)
+        let delayed=DiscoveredMac(id:macs[2].id,name:macs[2].name,endpoint:.hostPort(host:"127.0.0.1",port:NWEndpoint.Port(rawValue:port+5)!))
+        client=makeClient()
+        await client.selectionTestDiscover([delayed],begin:true)
+        try await until("delayed pairing prompt") { client.pairing }
+        proxy.pause()
+        client.submitCode(stores[2].currentCode())
+        try await until("encrypted paired/ready replies held") { proxy.buffered>0 }
+        client.forgetMac(id:macs[2].id)
+        try await until("forget while pairing retires target") { client.selectedMacID==nil }
+        proxy.resume()
+        try await Task.sleep(for:.milliseconds(400))
+        try check(TokenStore.load(for:macs[2].id)==nil && !client.phase.isReady && !client.hasPairedMac,"Late paired/ready reply restored forgotten credentials")
+        try check(!client.gestureReady && !client.clearPending,"Retired target retained editing capability")
+        await client.selectionTestStop();proxy.stop()
+        print("PASS delayed encrypted paired/ready replies cannot resurrect forgotten credentials or gestures")
         print("PASS all sticky Mac and forgetting integration checks")
     } catch {
         fputs("FAIL \(error)\n",stderr); code=1
