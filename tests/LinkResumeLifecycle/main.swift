@@ -17,6 +17,7 @@ final class ResumeProxy {
     let serverPort: UInt16
     private var tunnels: [Tunnel] = []
     private var count = 0
+    private var blackholeNext = false
     var accepted: Int { queue.sync { count } }
     init(port: UInt16, serverPort: UInt16) throws {
         self.serverPort = serverPort
@@ -25,6 +26,8 @@ final class ResumeProxy {
             guard let self else { return }
             self.count += 1
             let tunnel = Tunnel(phone: connection, port: self.serverPort)
+            tunnel.blackholed = self.blackholeNext
+            self.blackholeNext = false
             self.tunnels.append(tunnel)
             connection.start(queue: self.queue)
             tunnel.mac.start(queue: self.queue)
@@ -42,6 +45,7 @@ final class ResumeProxy {
             self.relay(tunnel, from: from, to: to)
         }
     }
+    func blackholeNextConnection() { queue.sync { blackholeNext = true } }
     func blackhole() { queue.sync { tunnels.forEach { $0.blackholed = true } } }
     func stop() {
         queue.sync {
@@ -126,6 +130,22 @@ Task { @MainActor in
         print("PASS foreground replaces the stale pairing socket, keeps the explicit target despite another pairing, and requires the real code")
     } catch {failures+=1;print("FAIL code prompt: \(error)")}
     await pairing.resumeTestStop()
+    store.forgetAll();TokenStore.delete(for:store.macID)
+    let connecting=client()
+    do {
+        proxy.blackholeNextConnection()
+        let accepted=proxy.accepted
+        await connecting.resumeTestStart(mac)
+        try await until("manual socket before its first hello") {proxy.accepted>accepted}
+        try require(!connecting.phase.isReady,"Blackholed first hello unexpectedly authenticated")
+        connecting.enterBackground();connecting.activate()
+        try await until("manual target reconnects before any code prompt",timeout:1) {proxy.accepted>accepted+1}
+        try await until("same manual target asks for code after replacing hello-blackhole") {if case .needsCode=connecting.phase{return connecting.selectedMacID==mac.id};return false}
+        connecting.submitCode("246810")
+        try await until("manual first-hello recovery authenticates with code") {connecting.phase.isReady}
+        print("PASS foreground preserves a manual unpaired target before its first hello, without falling back to the paired Mac")
+    } catch {failures+=1;print("FAIL first hello: \(error)")}
+    await connecting.resumeTestStop()
     let healthy=client()
     do {
         // Independent setup: an earlier failed pairing regression must not make
@@ -156,6 +176,6 @@ Task { @MainActor in
         print("PASS browser failure cannot overwrite a healthy link's ready state")
     } catch {failures+=1;print("FAIL discovery presentation: \(error)")}
     await healthy.resumeTestStop()
-    print("Lifecycle regressions: \(5-failures)/5 passed")
+    print("Lifecycle regressions: \(6-failures)/6 passed")
 }
 dispatchMain()

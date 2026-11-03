@@ -333,9 +333,11 @@ final class LinkClient: ObservableObject {
             guard self.foregroundRestartEpoch == nil else { return }
             let returning = self.backgroundAt != nil
             self.backgroundAt = nil
-            // Waiting for a code is an explicit in-progress pairing intent, not
-            // an invitation to select a different remembered Mac on foreground.
-            if returning, !self.needsCode { self.resetSelectionLocked() }
+            // A manually chosen target remains explicit while its first hello
+            // or pairing code is pending; foreground must not turn it automatic.
+            if returning, !(self.manualSelection && !self.ready), !self.needsCode {
+                self.resetSelectionLocked()
+            }
             self.reconnectAttempts = 0
             self.reconnectWork?.cancel()
             self.reconnectWork = nil
@@ -390,10 +392,10 @@ final class LinkClient: ObservableObject {
         let notifyLoss = activeLinkSession != nil
         let name = currentMacName ?? "Mac"
         let resumingPairing = needsCode
-        let pairingWasManual = resumingPairing && manualSelection
-        let mac = directMac ?? (resumingPairing ? lastMac : nil)
+        let preservingManualTarget = !ready && manualSelection
+        let mac = directMac ?? ((resumingPairing || preservingManualTarget) ? lastMac : nil)
         resetSelectionLocked()
-        if pairingWasManual { manualSelection = true }
+        if preservingManualTarget { manualSelection = true }
         // Retire discovery before handing the loss to main. Otherwise an old
         // browse callback can connect in that gap, advance the epoch, and discard
         // the pending foreground recovery publication and its fresh browser.
@@ -410,7 +412,7 @@ final class LinkClient: ObservableObject {
         IMicLog.write("iphone.link", "foreground reconnect reason=\(reason)")
         publish {
             self.phase = mac == nil ? .searching : .connecting(name)
-            self.isManualSelection = pairingWasManual
+            self.isManualSelection = preservingManualTarget
             self.transport = nil
             self.pairing = false
             self.pairingError = nil

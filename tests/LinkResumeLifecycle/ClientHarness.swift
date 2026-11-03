@@ -5,11 +5,11 @@ extension LinkClient {
         await withCheckedContinuation { continuation in
             queue.async {
                 self.running = true
-                self.manualSelection = true
-                self.connectLocked(to: mac)
                 continuation.resume()
             }
         }
+        // Use the real manual-selection entrypoint, including selected identity.
+        connect(to: mac)
     }
     func resumeTestStop() async {
         await withCheckedContinuation { continuation in
