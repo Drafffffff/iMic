@@ -83,9 +83,5 @@ extension LinkClient {
             return self.browser == nil
         }
     }
-    func resumeTestAwaitingFreshDiscovery() async -> Bool {
-        await withCheckedContinuation { continuation in
-            queue.async { continuation.resume(returning: !self.needsCode && self.browser != nil) }
-        }
-    }
+
 }

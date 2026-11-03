@@ -73,10 +73,11 @@ let mac = DiscoveredMac(id:store.macID,name:"Lifecycle fixture",endpoint:.hostPo
 Task { @MainActor in
     let keys=["imic.deviceID","imic.preferredMacID","imic.macNames","imic.macLastConnected","imic.lastConnectedMacID", "imic.forgottenMacIDs", "imic.requiresMacSelection"]
     let saved=keys.map { UserDefaults.standard.object(forKey:$0) }
+    let otherMacID=UUID().uuidString
     var failures=0
     var clients:[LinkClient]=[]
     defer {
-        server.stop();proxy.stop();TokenStore.delete(for:store.macID)
+        server.stop();proxy.stop();TokenStore.delete(for:store.macID);TokenStore.delete(for:otherMacID)
         for (key,value) in zip(keys,saved) {if let value {UserDefaults.standard.set(value,forKey:key)}else{UserDefaults.standard.removeObject(forKey:key)}}
         try? FileManager.default.removeItem(at:directory)
         let result:Int32=failures==0 ? 0:1
@@ -106,18 +107,23 @@ Task { @MainActor in
         print("PASS foreground handoff retires old browser before main-thread publication")
     } catch {failures+=1;print("FAIL foreground handoff: \(error)")}
     await handoff.resumeTestStop()
+    // An unrelated existing pairing must not turn the user's explicit new-Mac
+    // pairing into an automatic-target attempt after foreground recovery.
+    UserDefaults.standard.set([store.macID:"Lifecycle fixture",otherMacID:"Other paired fixture"],forKey:"imic.macNames")
+    let savedOther = TokenStore.save(Data(repeating:51,count:32),for:otherMacID)
     let pairing=client()
     do {
+        try require(savedOther,"Cannot seed unrelated paired fixture")
         await pairing.resumeTestStart(mac)
         try await until("initial code prompt") {if case .needsCode=pairing.phase{return true};return false}
+        let initialPairingConnections=proxy.accepted
         pairing.enterBackground();proxy.blackhole();pairing.activate()
-        try await until("fresh pairing transport after foreground",timeout:1) {await pairing.resumeTestAwaitingFreshDiscovery()}
-        await pairing.resumeTestStart(mac)
-        try await until("new code prompt") {if case .needsCode=pairing.phase{return true};return false}
+        try await until("fresh pairing transport after foreground",timeout:1) {proxy.accepted>initialPairingConnections}
+        try await until("same explicit target's new code prompt") {if case .needsCode=pairing.phase{return pairing.selectedMacID==mac.id};return false}
         pairing.submitCode("246810")
         try await until("encrypted pairing on replacement transport") {pairing.phase.isReady}
         try require(proxy.accepted>=2,"Pairing reused the blackholed socket")
-        print("PASS foreground recovers a stale code-prompt connection and pairs with the real code")
+        print("PASS foreground replaces the stale pairing socket, keeps the explicit target despite another pairing, and requires the real code")
     } catch {failures+=1;print("FAIL code prompt: \(error)")}
     await pairing.resumeTestStop()
     let healthy=client()

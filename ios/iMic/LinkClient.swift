@@ -333,7 +333,9 @@ final class LinkClient: ObservableObject {
             guard self.foregroundRestartEpoch == nil else { return }
             let returning = self.backgroundAt != nil
             self.backgroundAt = nil
-            if returning { self.resetSelectionLocked() }
+            // Waiting for a code is an explicit in-progress pairing intent, not
+            // an invitation to select a different remembered Mac on foreground.
+            if returning, !self.needsCode { self.resetSelectionLocked() }
             self.reconnectAttempts = 0
             self.reconnectWork?.cancel()
             self.reconnectWork = nil
@@ -387,8 +389,11 @@ final class LinkClient: ObservableObject {
         // Only an announced old session must be failed on replacement.
         let notifyLoss = activeLinkSession != nil
         let name = currentMacName ?? "Mac"
+        let resumingPairing = needsCode
+        let pairingWasManual = resumingPairing && manualSelection
+        let mac = directMac ?? (resumingPairing ? lastMac : nil)
         resetSelectionLocked()
-        let mac = directMac
+        if pairingWasManual { manualSelection = true }
         // Retire discovery before handing the loss to main. Otherwise an old
         // browse callback can connect in that gap, advance the epoch, and discard
         // the pending foreground recovery publication and its fresh browser.
@@ -405,7 +410,7 @@ final class LinkClient: ObservableObject {
         IMicLog.write("iphone.link", "foreground reconnect reason=\(reason)")
         publish {
             self.phase = mac == nil ? .searching : .connecting(name)
-            self.isManualSelection = false
+            self.isManualSelection = pairingWasManual
             self.transport = nil
             self.pairing = false
             self.pairingError = nil
