@@ -124,6 +124,7 @@ struct PairingSheet: View {
         .confirmationDialog(L10n.text("Disconnect and forget this Mac?"), isPresented: $showForget, titleVisibility: .visible) {
             Button(L10n.text("Disconnect and forget"), role: .destructive) {
                 Haptics.shared.play(.tap)
+                session.cancelForDeviceSwitch()
                 link.forgetMac()
                 dismiss()
             }

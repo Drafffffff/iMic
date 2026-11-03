@@ -40,6 +40,12 @@ extension LinkClient {
         }
     }
 
+    func selectionTestEpoch() async -> UInt64 {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: self.currentEpoch()) }
+        }
+    }
+
     func selectionTestStop() async {
         await withCheckedContinuation { continuation in
             queue.async {

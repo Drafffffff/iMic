@@ -249,7 +249,7 @@ struct HomeView: View {
             #endif
             #if DEBUG
             DemoTouchOverlay.installIfNeeded()
-            if ProcessInfo.processInfo.arguments.contains("--ui-preview=devices") {
+            if ProcessInfo.processInfo.arguments.contains(where: { $0 == "--ui-preview=devices" || $0.hasPrefix("--ui-preview=devices-manage") }) {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showDevices = true }
             }
             #endif

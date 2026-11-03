@@ -11,10 +11,12 @@ struct DeviceSelectionView: View {
     @State private var showDownload = false
     @State private var pendingSelection: RememberedMac?
     @State private var confirmSwitch = false
+    @State private var pendingForget: RememberedMac?
+    @State private var confirmForget = false
 
     private var nearbyIDs: Set<String> { Set(link.macs.map(\.id)) }
     private var otherRemembered: [RememberedMac] {
-        link.rememberedMacs.filter { $0.id != link.selectedMacID && !nearbyIDs.contains($0.id) }
+        link.rememberedMacs.filter { !nearbyIDs.contains($0.id) }
     }
 
     var body: some View {
@@ -55,6 +57,19 @@ struct DeviceSelectionView: View {
             Button(L10n.text("Continue this session"), role: .cancel) { pendingSelection = nil }
         } message: {
             Text(L10n.text("Recording or recognition will stop. Unsent audio will not go to another Mac. Completed results will be kept."))
+        }
+        .confirmationDialog(forgetTitle, isPresented: $confirmForget, titleVisibility: .visible) {
+            Button(forgetCancelsVoice ? L10n.text("Cancel session and forget") : L10n.text("Forget Mac"), role: .destructive) {
+                guard let mac = pendingForget else { return }
+                if mac.id == link.selectedMacID { session.cancelForDeviceSwitch() }
+                link.forgetMac(id: mac.id)
+                pendingForget = nil
+            }
+            Button(L10n.text("Cancel"), role: .cancel) { pendingForget = nil }
+        } message: {
+            Text(forgetCancelsVoice
+                ? L10n.text("Recording or recognition will stop. Local text is kept. Enter the pairing code again to reconnect.")
+                : L10n.text("This removes the pairing from this iPhone. Enter the pairing code again to reconnect."))
         }
     }
 
@@ -172,6 +187,15 @@ struct DeviceSelectionView: View {
         }
     }
 
+    private var forgetCancelsVoice: Bool {
+        pendingForget?.id == link.selectedMacID && (session.phase == .listening || session.phase == .transcribing)
+    }
+    private var forgetTitle: String {
+        let name = pendingForget?.name ?? "Mac"
+        return forgetCancelsVoice ? L10n.text("Cancel this voice session and forget %@?", L10n.argument(name))
+            : L10n.text("Forget %@?", L10n.argument(name))
+    }
+
     private var needsPairing: Bool {
         if case .needsCode = link.phase { return true }
         return link.pairing && !link.phase.isReady
@@ -232,8 +256,8 @@ struct DeviceSelectionView: View {
         case .needsCode: return L10n.text("For your first connection, enter the 6-digit pairing code shown on your Mac")
         case .failed(let message): return message
         case .searching, .idle:
-            if link.isManualSelection { return L10n.text("The selected Mac is offline or not yet found. Waiting to connect.") }
-            return link.pairedMacIDs.isEmpty ? L10n.text("Searching for Macs. Choose a computer below.") : L10n.text("Looking for your paired Mac")
+            if link.selectedMacID != nil { return L10n.text("The selected Mac is offline or not yet found. Waiting to connect.") }
+            return L10n.text("Searching for Macs. Choose a computer below.")
         }
     }
 
@@ -247,8 +271,9 @@ struct DeviceSelectionView: View {
 
     private func deviceRow(id: String, name: String, nearby: Bool) -> some View {
         let selected = id == link.selectedMacID
-        return Button {
-            guard !selected else { return }
+        return HStack(spacing: 8) {
+        Button {
+            guard !selected || !link.phase.isReady else { return }
             Haptics.shared.play(.selection)
             let mac = RememberedMac(id: id, name: name)
             if session.phase == .listening || session.phase == .transcribing {
@@ -283,6 +308,21 @@ struct DeviceSelectionView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(L10n.text("%@, %@, %@", L10n.argument(name), L10n.argument(selected ? L10n.text("Current target") : L10n.text("Switch to this Mac")), L10n.argument(link.pairedMacIDs.contains(id) ? L10n.text("Paired") : L10n.text("Pairing required"))))
+        .accessibilityIdentifier("devices.select.\(id)")
+        if link.pairedMacIDs.contains(id) {
+            Button(role: .destructive) {
+                Haptics.shared.play(.tap)
+                pendingForget = RememberedMac(id: id, name: name)
+                confirmForget = true
+            } label: {
+                Image(systemName: "trash").font(.system(size: 16)).foregroundStyle(Theme.orange)
+                    .frame(width: 44, height: 44).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.text("Forget %@, paired Mac", L10n.argument(name)))
+            .accessibilityIdentifier("devices.forget.\(id)")
+        }
+        }
     }
 
     private func performSelection(_ mac: RememberedMac) {

@@ -5,64 +5,74 @@ final class MacSelectionTests: XCTestCase {
     private let b = MacCandidate(id: "B", paired: true, lastConnected: 10)
     private let c = MacCandidate(id: "C", paired: true, lastConnected: 20)
     private let d = MacCandidate(id: "D", paired: false)
-
     private func choose(_ candidates: [MacCandidate], preferred: String? = "A", expired: Bool = true,
-                        anyPaired: Bool = true, excluded: Set<String> = [], manual: Bool = false,
-                        preferredPaired: Bool = true) -> String? {
+                        anyPaired: Bool = true, excluded: Set<String> = [], manual: Bool = false) -> String? {
         MacSelection.choose(discovered: candidates, preferredID: preferred, graceExpired: expired,
-            hasAnyPairedMac: anyPaired, excluded: excluded, manualSelection: manual,
-            preferredIsPaired: preferredPaired)
+                            hasAnyPairedMac: anyPaired, excluded: excluded, manualSelection: manual)
     }
-
-    func testPreferredPairedMacWinsBeforeGraceExpires() {
+    func testPreferredWinsRegardlessOfDiscoveryOrderOrRecency() {
         XCTAssertEqual(choose([b, c], preferred: "B", expired: false), "B")
         XCTAssertEqual(choose([c, b], preferred: "B"), "B")
     }
-    func testOfflinePreferredWaitsForGrace() {
+    func testOfflinePreferredNeverFallsBackAfterGrace() {
         XCTAssertNil(choose([b, c], expired: false))
-        XCTAssertEqual(MacSelection.preferredGrace, 1.5)
+        XCTAssertNil(choose([c, b], expired: true))
     }
-    func testExpiredGraceUsesMostRecentlyAuthenticatedMac() {
-        XCTAssertEqual(choose([b, c]), "C")
-        XCTAssertEqual(choose([c, b]), "C")
+    func testFailedPreferredWaitsForItsRetryInsteadOfTryingOthers() {
+        XCTAssertNil(choose([b,c], preferred:"C", excluded:["C"]))
+        XCTAssertEqual(choose([b,c], preferred:"C"), "C")
     }
-    func testAnyOfflinePairingPreventsAutomaticPairingOfStranger() {
+    func testRevokedPreferredCannotAutoPairOrRedirect() {
+        XCTAssertNil(choose([d,b], preferred:"D"))
+        XCTAssertNil(choose([b], preferred:"D"))
+        XCTAssertEqual(choose([d,b], preferred:"D", manual:true), "D")
+    }
+    func testAmbiguousPairingHistoryRequiresExplicitChoice() {
+        XCTAssertNil(choose([b,c], preferred:nil))
+        XCTAssertNil(choose([b], preferred:nil))
+    }
+    func testOfflinePairingPreventsAutomaticPairingOfStranger() {
         XCTAssertNil(choose([d]))
-        XCTAssertNil(choose([d], preferred: nil))
+        XCTAssertNil(choose([d], preferred:nil))
     }
-    func testFirstInstallConnectsOnlySingleDiscovery() {
-        XCTAssertEqual(choose([d], preferred: nil, anyPaired: false), "D")
-        XCTAssertNil(choose([d, MacCandidate(id: "E", paired: false)], preferred: nil, anyPaired: false))
-        XCTAssertNil(choose([], preferred: nil, anyPaired: false))
+    func testFirstInstallOnlyStartsSingleDiscoveryPairing() {
+        XCTAssertEqual(choose([d], preferred:nil, anyPaired:false), "D")
+        XCTAssertNil(choose([d,MacCandidate(id:"E",paired:false)], preferred:nil, anyPaired:false))
+        XCTAssertNil(choose([d], preferred:nil, anyPaired:false, excluded:["D"]))
+        XCTAssertNil(choose([], preferred:nil, anyPaired:false))
     }
-    func testNoPreferredDoesNotWait() {
-        XCTAssertEqual(choose([b], preferred: nil, expired: false), "B")
+    func testManualOfflineChoiceNeverFallsBack() {
+        XCTAssertNil(choose([b,c], manual:true))
+        XCTAssertEqual(choose([b,c], preferred:"B", manual:true), "B")
+        XCTAssertNil(choose([b], preferred:nil, manual:true))
     }
-    func testFailedTargetsAreSkippedWithinRound() {
-        XCTAssertEqual(choose([b, c], excluded: ["C"]), "B")
-        XCTAssertNil(choose([b, c], excluded: ["B", "C"]))
-        XCTAssertEqual(choose([b, c], preferred: "C", expired: false, excluded: ["C"]), "B")
-        XCTAssertNil(choose([d], preferred: nil, anyPaired: false, excluded: ["D"]))
+    func testNewSuccessfulIdentityWinsOverManualAndOldTimestamps() {
+        XCTAssertEqual(MacSelection.restoredTarget([b,c], successfulID:"B", legacyPreferredID:"C"), "B")
     }
-    func testManualSelectionNeverFallsBack() {
-        XCTAssertNil(choose([b, c], manual: true))
-        XCTAssertEqual(choose([b, c], preferred: "B", manual: true), "B")
-        XCTAssertEqual(choose([b, d], preferred: "D", manual: true), "D", "Explicit user selection can request pairing")
+    func testMigrateAuthenticatedHistoryInsteadOfUnsuccessfulClick() {
+        XCTAssertEqual(MacSelection.restoredTarget([b,c,d], successfulID:nil, legacyPreferredID:"D"), "C")
     }
-    func testUnpairedPreferredDoesNotDelayPairedFallback() {
-        XCTAssertEqual(choose([b, d], preferred: "D", expired: false), "B")
-        XCTAssertEqual(choose([b], expired: false, preferredPaired: false), "B")
+    func testRestoreOfflineOrRevokedLastDeviceWithoutChoosingAnother() {
+        XCTAssertEqual(MacSelection.restoredTarget([b], successfulID:"offline", legacyPreferredID:nil), "offline")
+        XCTAssertEqual(MacSelection.restoredTarget([d,b], successfulID:"D", legacyPreferredID:"B"), "D")
     }
-    func testMissingOrEqualTimestampsHaveStableOrder() {
-        let a = MacCandidate(id: "A", paired: true)
-        let z = MacCandidate(id: "Z", paired: true)
-        XCTAssertEqual(choose([z, a], preferred: nil), "A")
-        XCTAssertEqual(choose([a, z], preferred: nil), "A")
-        XCTAssertEqual(choose([c, MacCandidate(id: "B", paired: true, lastConnected: 20)], preferred: nil), "B")
+    func testLegacyWithoutTimestampsKeepsTargetOrOnlyPairing() {
+        XCTAssertEqual(MacSelection.restoredTarget([MacCandidate(id:"B",paired:true),MacCandidate(id:"C",paired:true)], successfulID:nil, legacyPreferredID:"B"), "B")
+        XCTAssertEqual(MacSelection.restoredTarget([b,d], successfulID:nil, legacyPreferredID:nil), "B")
+        let noDates = [MacCandidate(id:"B",paired:true),MacCandidate(id:"C",paired:true)]
+        XCTAssertNil(MacSelection.restoredTarget(noDates, successfulID:nil, legacyPreferredID:nil))
     }
-    func testBLEAllowlistContainsOnlyPairedMacsAndUsesSamePriority() {
-        XCTAssertEqual(MacSelection.orderedPaired([c, d, b], preferredID: "B"), ["B", "C"])
-        XCTAssertEqual(MacSelection.orderedPaired([b, c, d], preferredID: "offline"), ["C", "B"])
-        XCTAssertEqual(MacSelection.orderedPaired([d], preferredID: "D"), [])
+    func testEqualTimestampsAndNonfiniteHistoryAreDeterministic() {
+        let a = MacCandidate(id:"A",paired:true,lastConnected:20)
+        XCTAssertEqual(MacSelection.restoredTarget([c,a], successfulID:nil, legacyPreferredID:nil), "A")
+        XCTAssertEqual(MacSelection.restoredTarget([a,c], successfulID:nil, legacyPreferredID:"C"), "C")
+        XCTAssertEqual(MacSelection.restoredTarget([b,MacCandidate(id:"bad",paired:true,lastConnected:.nan)], successfulID:nil, legacyPreferredID:nil), "B")
+    }
+    func testBluetoothOnlyAcceptsTheSameSelectedPairedIdentity() {
+        XCTAssertEqual(MacSelection.bluetoothTargets([b,c,d], preferredID:"B", excluded:[]), ["B"])
+        XCTAssertEqual(MacSelection.bluetoothTargets([b,c], preferredID:"offline", excluded:[]), [])
+        XCTAssertEqual(MacSelection.bluetoothTargets([b,c], preferredID:"B", excluded:["B"]), [])
+        XCTAssertEqual(MacSelection.bluetoothTargets([b,c,d], preferredID:"D", excluded:[]), [])
+        XCTAssertEqual(MacSelection.bluetoothTargets([b,c], preferredID:nil, excluded:[]), [])
     }
 }

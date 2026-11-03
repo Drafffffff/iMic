@@ -16,8 +16,46 @@ func check(_ value: @autoclosure () -> Bool, _ message: String) throws {
     }
 }
 
+// Hold real encrypted server replies while forgetting the pairing. This exercises
+// the production receive callback after its socket and token have been retired.
+final class DelayedReplyProxy {
+    private let queue = DispatchQueue(label:"imic.selection.delayed-replies")
+    private let listener: NWListener
+    private var phone: NWConnection?
+    private var server: NWConnection?
+    private var paused = false
+    private var replies: [Data] = []
+    var buffered: Int { queue.sync { replies.reduce(0) { $0+$1.count } } }
+    init(port: UInt16, serverPort: UInt16) throws {
+        listener = try NWListener(using:.tcp,on:NWEndpoint.Port(rawValue:port)!)
+        listener.newConnectionHandler = { [weak self] phone in
+            guard let self else { return }
+            let server=NWConnection(host:"127.0.0.1",port:NWEndpoint.Port(rawValue:serverPort)!,using:.tcp)
+            self.phone=phone;self.server=server
+            phone.start(queue:self.queue);server.start(queue:self.queue)
+            self.relay(phone,to:server,reply:false)
+            self.relay(server,to:phone,reply:true)
+        }
+        listener.start(queue:queue)
+    }
+    func pause() { queue.sync { paused=true } }
+    func resume() { queue.sync { paused=false;for data in replies { phone?.send(content:data,completion:.contentProcessed { _ in }) };replies=[] } }
+    func stop() { queue.async { self.listener.cancel();self.phone?.cancel();self.server?.cancel() } }
+    private func relay(_ from: NWConnection,to: NWConnection,reply: Bool) {
+        from.receive(minimumIncompleteLength:1,maximumLength:65536) { [weak self] data,_,done,error in
+            guard let self else { return }
+            if let data,!data.isEmpty {
+                if reply && self.paused { self.replies.append(data) }
+                else { to.send(content:data,completion:.contentProcessed { _ in }) }
+            }
+            if done || error != nil { from.cancel();to.cancel();return }
+            self.relay(from,to:to,reply:reply)
+        }
+    }
+}
+
 Task { @MainActor in
-    let keys = ["imic.deviceID", "imic.preferredMacID", "imic.macNames", "imic.macLastConnected"]
+    let keys = ["imic.deviceID", "imic.preferredMacID", "imic.macNames", "imic.macLastConnected", "imic.lastConnectedMacID", "imic.forgottenMacIDs", "imic.requiresMacSelection"]
     let saved = keys.map { UserDefaults.standard.object(forKey: $0) }
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("imic-selection-\(UUID().uuidString)")
     let deviceID = UUID().uuidString
@@ -44,6 +82,9 @@ Task { @MainActor in
     func seed(preferred: Int?, paired: Set<Int>, recent: [String: Double] = [:]) throws {
         UserDefaults.standard.set(deviceID, forKey: "imic.deviceID")
         UserDefaults.standard.set(preferred.map { macs[$0].id }, forKey: "imic.preferredMacID")
+        UserDefaults.standard.set(preferred.map { macs[$0].id }, forKey: "imic.lastConnectedMacID")
+        UserDefaults.standard.removeObject(forKey: "imic.forgottenMacIDs")
+        UserDefaults.standard.removeObject(forKey: "imic.requiresMacSelection")
         UserDefaults.standard.set(Dictionary(uniqueKeysWithValues: macs.map { ($0.id, $0.name) }), forKey: "imic.macNames")
         UserDefaults.standard.set(recent, forKey: "imic.macLastConnected")
         for index in 0..<3 {
@@ -60,148 +101,179 @@ Task { @MainActor in
     }
     do {
         servers.forEach { $0.start() }
-        try seed(preferred: 0, paired: [0,1,2], recent: [macs[1].id: 10, macs[2].id: 20])
+        try seed(preferred: 0, paired: [0,1,2], recent: [macs[0].id:30, macs[1].id:10, macs[2].id:20])
         var client = makeClient()
-        let started = ProcessInfo.processInfo.systemUptime
-        await client.selectionTestDiscover([macs[1], macs[2]], begin: true)
-        try await Task.sleep(for: .milliseconds(250))
-        try check(!client.phase.isReady, "Fallback raced the preferred grace")
-        try await until("recent paired fallback") { client.phase.isReady }
-        try check(ProcessInfo.processInfo.systemUptime - started >= MacSelection.preferredGrace, "Grace finished early")
-        try check(client.selectedMacID == macs[2].id, "Did not choose the most recent paired Mac")
-        try check(UserDefaults.standard.string(forKey: "imic.preferredMacID") == macs[2].id, "Successful fallback was not remembered")
-        let timestamps = UserDefaults.standard.dictionary(forKey: "imic.macLastConnected") as? [String: Double] ?? [:]
-        try check((timestamps[macs[2].id] ?? 0) > 20, "Authenticated readiness did not update recency")
+        await client.selectionTestDiscover([macs[1],macs[2]], begin:true, expired:true)
+        try await Task.sleep(for:.seconds(1.8))
+        try check(!client.phase.isReady && client.selectedMacID == macs[0].id, "Offline last Mac was replaced after grace")
+        try check(!servers[1].isConnected && !servers[2].isConnected, "Another Mac accepted an unintended connection")
+        await client.selectionTestDiscover([macs[2],macs[1],macs[0]])
+        try await until("last Mac returns") { client.phase.isReady }
+        try check(client.selectedMacID == macs[0].id && servers.filter(\.isConnected).count == 1, "Discovery order allowed multiple ready Macs")
         client.beginSession(901)
-        await client.selectionTestDiscover(macs)
-        try await Task.sleep(for: .milliseconds(150))
-        try check(client.phase.isReady && client.selectedMacID == macs[2].id, "Late discovery switched a live session")
+        await client.selectionTestDiscover([macs[2],macs[1],macs[0]])
+        try await Task.sleep(for:.milliseconds(150))
+        try check(client.selectedMacID == macs[0].id && servers.filter(\.isConnected).count == 1, "Late discovery switched an active session")
         client.cancelSession(901)
         await client.selectionTestStop()
-        print("PASS grace, authenticated fallback identity/recency, late discovery preserves active link")
+        print("PASS offline last device stays selected after grace; delayed discovery and active session keep one Mac")
 
-        try seed(preferred: 0, paired: [0,1,2])
+        try seed(preferred:0, paired:[0,1,2])
         client = makeClient()
-        await client.selectionTestDiscover([macs[1]], begin: true)
-        try await Task.sleep(for: .milliseconds(200))
-        await client.selectionTestDiscover([macs[1],macs[0]])
-        try await until("preferred discovered inside grace") { client.phase.isReady }
-        try check(client.selectedMacID == macs[0].id, "Early fallback stole preferred's connection")
+        let failed = DiscoveredMac(id:macs[0].id,name:"Unavailable",endpoint:.hostPort(host:"127.0.0.1",port:NWEndpoint.Port(rawValue:port+8)!))
+        await client.selectionTestDiscover([failed,macs[1],macs[2]],begin:true,expired:true)
+        try await Task.sleep(for:.seconds(2.5))
+        try check(!client.phase.isReady && client.selectedMacID == macs[0].id, "Failed preferred fell through to another authenticated computer")
+        try check(!servers[1].isConnected && !servers[2].isConnected, "Failed target allowed another Mac to connect")
         await client.selectionTestStop()
-        print("PASS preferred wins when discovered 200ms later")
-
-        try seed(preferred: 0, paired: [0,1,2], recent: [macs[2].id:20, macs[1].id:10])
-        client = makeClient()
-        let failed = DiscoveredMac(id: macs[2].id, name:"Unavailable", endpoint:.hostPort(host:"127.0.0.1",port:NWEndpoint.Port(rawValue:port+8)!))
-        await client.selectionTestDiscover([failed, macs[1]], begin:true, expired:true)
-        try await until("failed candidate falls through") { client.phase.isReady }
-        try check(client.selectedMacID == macs[1].id, "Failed candidate was retried before the next candidate")
-        let failureTimes = UserDefaults.standard.dictionary(forKey:"imic.macLastConnected") as? [String:Double] ?? [:]
-        try check(failureTimes[macs[2].id] == 20, "Failed handshake changed successful recency")
-        await client.selectionTestStop()
-        print("PASS failed network target advances to next candidate without recording success")
-
-        try seed(preferred:nil, paired:[0,1,2], recent:[macs[1].id:20,macs[0].id:10])
-        client = makeClient()
-        let wrongIdentity = DiscoveredMac(id:macs[1].id,name:"Wrong identity",endpoint:macs[2].endpoint)
-        await client.selectionTestDiscover([wrongIdentity,macs[0]],begin:true)
-        try await until("mismatched identity is rejected") { client.phase.isReady }
-        try check(client.selectedMacID == macs[0].id, "Fallback relaxed the expected Mac identity check")
-        await client.selectionTestStop()
-        print("PASS discovered endpoint cannot substitute another Mac identity")
-
-        try seed(preferred:nil, paired:[1,2], recent:[macs[2].id:20,macs[1].id:10])
-        client = makeClient()
-        let unavailable = [1,2].map {
-            DiscoveredMac(id:macs[$0].id,name:"Unavailable \($0)",
-                endpoint:.hostPort(host:"127.0.0.1",port:NWEndpoint.Port(rawValue:port+UInt16($0)+8)!))
-        }
-        await client.selectionTestDiscover(unavailable,begin:true)
-        let retryDeadline = ProcessInfo.processInfo.systemUptime + 6
-        var retryState = await client.selectionTestRetryState()
-        while !retryState.2, ProcessInfo.processInfo.systemUptime < retryDeadline {
-            try await Task.sleep(for:.milliseconds(10))
-            retryState = await client.selectionTestRetryState()
-        }
-        try check(retryState.0 == Set(unavailable.map(\.id)) && retryState.1 == 1 && retryState.2,
-                  "Exhausted candidates did not enter a single backoff")
-        try await Task.sleep(for:.milliseconds(250))
-        let stillWaiting = await client.selectionTestRetryState()
-        try check(stillWaiting.1 == 1 && stillWaiting.2, "Exhausted candidates rapidly retried instead of backing off")
-        await client.selectionTestStop()
-        print("PASS exhausted candidate round uses existing backoff without rapid ping-pong")
+        print("PASS network failure retries the chosen identity without fallback")
 
         try seed(preferred:0, paired:[0,1])
-        stores[0].forgetAll() // The Mac revoked this phone; its local token is stale.
         client = makeClient()
-        var prompted = false
-        let observer = client.$phase.sink { if case .needsCode = $0 { prompted = true } }
-        await client.selectionTestDiscover([macs[0],macs[1]], begin:true)
-        try await until("revoked token fallback") { client.phase.isReady }
-        try check(client.selectedMacID == macs[1].id && !prompted, "Automatic token rejection opened pairing instead of falling back")
-        try check(TokenStore.load(for:macs[0].id) == nil, "Revoked token was not removed")
-        observer.cancel()
+        let wrongIdentity=DiscoveredMac(id:macs[0].id,name:"Wrong identity",endpoint:macs[1].endpoint)
+        await client.selectionTestDiscover([wrongIdentity,macs[1]],begin:true)
+        try await Task.sleep(for:.seconds(1))
+        try check(!client.phase.isReady && !servers[1].isConnected, "Identity mismatch established an unintended connection")
         await client.selectionTestStop()
-        print("PASS revoked automatic token skips pairing and authenticates the next Mac")
+        print("PASS advertised identity cannot substitute another Mac")
 
-        try seed(preferred:0,paired:[0,1])
-        try check(TokenStore.save(Data(repeating:99,count:32),for:macs[0].id), "Cannot prepare stale auth token")
-        client = makeClient()
-        var authPrompted = false
-        let authObserver = client.$phase.sink { if case .needsCode = $0 { authPrompted = true } }
+        for wrongToken in [false,true] {
+            try seed(preferred:0,paired:[0,1])
+            if wrongToken { try check(TokenStore.save(Data(repeating:99,count:32),for:macs[0].id),"Cannot seed invalid token") }
+            else { stores[0].forgetAll() }
+            client=makeClient()
+            var prompted=false
+            let observer=client.$phase.sink { if case .needsCode=$0 { prompted=true } }
+            await client.selectionTestDiscover([macs[0],macs[1]],begin:true)
+            try await until("revoked token removed") { TokenStore.load(for:macs[0].id)==nil }
+            try await Task.sleep(for:.milliseconds(800))
+            try check(!client.phase.isReady && !prompted && !servers[1].isConnected,"Revocation prompted pairing or redirected to another Mac")
+            observer.cancel()
+            client.connect(to:macs[0])
+            try await until("explicit retry can re-pair revoked target") { client.pairing }
+            client.submitCode(stores[0].currentCode())
+            try await until("revoked target manually paired again") { client.phase.isReady }
+            try check(client.selectedMacID==macs[0].id && !servers[1].isConnected,"Explicit repair changed target")
+            await client.selectionTestStop()
+        }
+        print("PASS rejected hello/auth tokens never pair or redirect automatically")
+
+        try seed(preferred:0,paired:[0,1,2],recent:[macs[0].id:30])
+        UserDefaults.standard.removeObject(forKey:"imic.lastConnectedMacID")
+        UserDefaults.standard.set(macs[2].id,forKey:"imic.preferredMacID") // Old build stored an unsuccessful click.
+        client=makeClient()
+        try check(client.selectedMacID==macs[0].id,"Migration used a click instead of authenticated history")
         await client.selectionTestDiscover([macs[0],macs[1]],begin:true)
-        try await until("authentication rejection fallback") { client.phase.isReady }
-        try check(client.selectedMacID == macs[1].id && !authPrompted, "Rejected auth token prompted automatic pairing")
-        try check(TokenStore.load(for:macs[0].id) == nil, "Rejected auth token was retained")
-        authObserver.cancel()
+        try await until("migrated target authenticates") { client.phase.isReady }
+        try check(UserDefaults.standard.string(forKey:"imic.lastConnectedMacID")==macs[0].id,"Ready did not persist successful identity")
+        let offlineChoice = RememberedMac(id:UUID().uuidString,name:"Never advertised fixture")
+        client.selectRememberedMac(offlineChoice)
+        try await until("manual choice publishes") { client.selectedMacID==offlineChoice.id }
+        try check(UserDefaults.standard.string(forKey:"imic.lastConnectedMacID")==macs[0].id,"Manual click changed last successful Mac before authentication")
         await client.selectionTestStop()
-        print("PASS auth rejection removes only the stale token and falls back without pairing")
-
-        try seed(preferred:0, paired:[0,1])
-        servers[0].stop() // This public foreground path creates a real browser: A must really be offline.
-        client = makeClient()
-        await client.selectionTestDiscover([], begin:true)
-        client.selectRememberedMac(RememberedMac(id:macs[0].id,name:macs[0].name))
-        try await until("manual mode published") { client.isManualSelection }
-        await client.selectionTestDiscover([macs[1]])
-        try await Task.sleep(for:.seconds(1.7))
-        try check(!client.phase.isReady && client.selectedMacID == macs[0].id, "Manual offline choice was overridden")
-        client.enterBackground(); client.activate()
-        let deadline = ProcessInfo.processInfo.systemUptime + 3
-        while !(await client.selectionTestHasBrowser()), ProcessInfo.processInfo.systemUptime < deadline {
-            try await Task.sleep(for:.milliseconds(10))
-        }
-        await client.selectionTestDiscover([macs[1]])
-        try await until("foreground resets manual lock") { client.phase.isReady }
-        try check(client.selectedMacID == macs[1].id && !client.isManualSelection, "Foreground did not restore automatic policy: selected=\(client.selectedMacID ?? "nil") expected=\(macs[1].id) manual=\(client.isManualSelection)")
-        client.forgetMac()
-        try await until("forget deletes recency") {
-            (UserDefaults.standard.dictionary(forKey:"imic.macLastConnected") as? [String:Double])?[macs[1].id] == nil
-                && client.selectedMacID == nil
-        }
+        client=makeClient()
+        try check(client.selectedMacID==macs[0].id,"Relaunch did not restore successful device")
         await client.selectionTestStop()
-        print("PASS manual offline wait, foreground unlock, forget removes authenticated recency")
+        print("PASS old data migration and cold launch remember authenticated success rather than a click")
 
-        try seed(preferred:0, paired:[0])
-        client = makeClient()
-        await client.selectionTestDiscover([macs[2]], begin:true, expired:true)
+        try seed(preferred:0,paired:[0,1,2],recent:[macs[0].id:30,macs[2].id:20,macs[1].id:10])
+        client=makeClient()
+        await client.selectionTestDiscover([macs[0]],begin:true)
+        try await until("successful A before changing target") { client.phase.isReady }
+        let waitingChoice=RememberedMac(id:UUID().uuidString,name:"Never advertised D")
+        client.selectRememberedMac(waitingChoice)
+        try await until("manual D waits") { client.selectedMacID==waitingChoice.id && client.isManualSelection }
+        let waitingEpoch=await client.selectionTestEpoch()
+        client.forgetMac(id:macs[0].id)
+        try await until("previous successful A removed") { TokenStore.load(for:macs[0].id)==nil && !client.rememberedMacs.contains { $0.id==macs[0].id } }
+        try check(client.selectedMacID==waitingChoice.id && client.isManualSelection,"Deleting previous successful A interrupted manual D")
+        let afterForgetEpoch=await client.selectionTestEpoch()
+        try check(afterForgetEpoch==waitingEpoch,"Deleting non-current A retired the in-flight target epoch")
+        await client.selectionTestStop()
+        client=makeClient()
+        await client.selectionTestDiscover([macs[2],macs[1]],begin:true,expired:true)
+        try await Task.sleep(for:.seconds(1.8))
+        try check(!client.phase.isReady && !client.pairing && client.selectedMacID==nil,"Deleting the stored successful A restored older history C on cold launch")
+        try check(!servers[2].isConnected && !servers[1].isConnected,"Cold launch connected old history without explicit choice")
+        try check(UserDefaults.standard.bool(forKey:"imic.requiresMacSelection"),"Deleting successful identity did not persist explicit-choice requirement")
+        client.connect(to:macs[1])
+        try await until("explicit new target ready after deleting stored A") { client.phase.isReady }
+        try check(client.selectedMacID==macs[1].id && !UserDefaults.standard.bool(forKey:"imic.requiresMacSelection"),"New authenticated target did not clear deletion pause")
+        await client.selectionTestStop()
+        print("PASS deleting stored success A while manual D waits preserves D; cold launch cannot restore C; explicit B success resumes auto connect")
+
+        try seed(preferred:0,paired:[0,1,2],recent:[macs[0].id:30,macs[2].id:20])
+        client=makeClient()
+        await client.selectionTestDiscover([macs[0]],begin:true)
+        try await until("current Mac ready") { client.phase.isReady }
+        client.beginSession(902)
+        client.forgetMac(id:macs[2].id)
+        try await until("offline other device deleted") { !client.rememberedMacs.contains { $0.id==macs[2].id } }
+        try check(client.phase.isReady && client.selectedMacID==macs[0].id && servers[0].isConnected,"Forgetting another device interrupted current link")
+        try check(!UserDefaults.standard.bool(forKey:"imic.requiresMacSelection"),"Forgetting ordinary non-current C changed automatic restoration policy")
+        try check(TokenStore.load(for:macs[2].id)==nil,"Forgotten token remained")
+        try check((UserDefaults.standard.dictionary(forKey:"imic.macLastConnected") ?? [:])[macs[2].id]==nil,"Forgotten recency remained")
+        client.cancelSession(902)
+        client.forgetMac(id:macs[0].id)
+        try await until("current device deleted") { client.selectedMacID==nil && TokenStore.load(for:macs[0].id)==nil }
+        await client.selectionTestDiscover(macs)
+        try await Task.sleep(for:.seconds(1.8))
+        try check(!client.phase.isReady && !client.pairing && client.selectedMacID==nil,"Forgetting current device immediately reconnected or started pairing")
+        try check(UserDefaults.standard.bool(forKey:"imic.requiresMacSelection"),"Explicit selection pause was not persisted")
+        let failedAfterForget=RememberedMac(id:UUID().uuidString,name:"Offline after forget")
+        client.selectRememberedMac(failedAfterForget)
+        try await until("manual attempt after forgetting") { client.selectedMacID==failedAfterForget.id }
+        try check(UserDefaults.standard.bool(forKey:"imic.requiresMacSelection"),"Unsuccessful manual attempt lifted persisted deletion pause")
+        await client.selectionTestStop()
+        client=makeClient()
+        await client.selectionTestDiscover([macs[1]],begin:true,expired:true)
+        try await Task.sleep(for:.milliseconds(400))
+        try check(!client.phase.isReady && !client.pairing,"Relaunch undid deletion's selection pause")
+        client.selectRememberedMac(RememberedMac(id:macs[1].id,name:macs[1].name))
+        await client.selectionTestDiscover([macs[1]])
+        try await until("explicit selection resumes connection") { client.phase.isReady }
+        try check(client.selectedMacID==macs[1].id && !UserDefaults.standard.bool(forKey:"imic.requiresMacSelection"),"Manual connection did not clear pause")
+        try await until("old server socket closed") { !servers[0].isConnected }
+        try check(servers.filter(\.isConnected).count==1,"Switch retained multiple authenticated server links")
+        await client.selectionTestStop()
+        print("PASS forgetting offline/current devices removes records, keeps unrelated voice link, persists pause and allows explicit reconnect")
+
+        try seed(preferred:0,paired:[0])
+        client=makeClient()
+        await client.selectionTestDiscover([macs[2]],begin:true,expired:true)
         try await Task.sleep(for:.milliseconds(250))
-        try check(!client.phase.isReady && !client.pairing && client.phase == .searching, "Paired-but-offline phone connected an unpaired stranger")
+        try check(!client.phase.isReady && !client.pairing,"Paired phone connected an unpaired stranger")
         await client.selectionTestStop()
-        print("PASS any offline pairing prevents automatic pairing with an unpaired discovery")
+        print("PASS existing pairing prevents accidental new pairing")
 
-        try seed(preferred:nil, paired:[])
-        client = makeClient()
-        await client.selectionTestDiscover([macs[2]], begin:true)
-        try await until("first installation requests pairing") { client.pairing }
-        try check((UserDefaults.standard.dictionary(forKey:"imic.macLastConnected") ?? [:]).isEmpty, "Unauthenticated connection recorded success")
-        try check(UserDefaults.standard.string(forKey:"imic.preferredMacID") == nil, "Unauthenticated hello changed preferred")
+        try seed(preferred:nil,paired:[])
+        client=makeClient()
+        await client.selectionTestDiscover([macs[2]],begin:true)
+        try await until("first installation pairing") { client.pairing }
+        try check(UserDefaults.standard.string(forKey:"imic.lastConnectedMacID")==nil,"Hello recorded success")
         client.submitCode(stores[2].currentCode())
-        try await until("explicit pairing becomes ready") { client.phase.isReady }
-        try check(client.selectedMacID == macs[2].id, "First-install pairing selected wrong Mac")
+        try await until("explicit pairing ready") { client.phase.isReady }
+        try check(UserDefaults.standard.string(forKey:"imic.lastConnectedMacID")==macs[2].id,"Authenticated pair not remembered")
         await client.selectionTestStop()
-        print("PASS first-install single-Mac pairing stays explicit and records success only after ready")
-        print("PASS all automatic Mac selection integration checks")
+        print("PASS first-install pairing remains explicit and success is recorded at ready")
+        try seed(preferred:nil,paired:[])
+        let proxy=try DelayedReplyProxy(port:port+5,serverPort:port+2)
+        let delayed=DiscoveredMac(id:macs[2].id,name:macs[2].name,endpoint:.hostPort(host:"127.0.0.1",port:NWEndpoint.Port(rawValue:port+5)!))
+        client=makeClient()
+        await client.selectionTestDiscover([delayed],begin:true)
+        try await until("delayed pairing prompt") { client.pairing }
+        proxy.pause()
+        client.submitCode(stores[2].currentCode())
+        try await until("encrypted paired/ready replies held") { proxy.buffered>0 }
+        client.forgetMac(id:macs[2].id)
+        try await until("forget while pairing retires target") { client.selectedMacID==nil }
+        proxy.resume()
+        try await Task.sleep(for:.milliseconds(400))
+        try check(TokenStore.load(for:macs[2].id)==nil && !client.phase.isReady && !client.hasPairedMac,"Late paired/ready reply restored forgotten credentials")
+        try check(!client.gestureReady && !client.clearPending,"Retired target retained editing capability")
+        await client.selectionTestStop();proxy.stop()
+        print("PASS delayed encrypted paired/ready replies cannot resurrect forgotten credentials or gestures")
+        print("PASS all sticky Mac and forgetting integration checks")
     } catch {
         fputs("FAIL \(error)\n",stderr); code=1
     }
