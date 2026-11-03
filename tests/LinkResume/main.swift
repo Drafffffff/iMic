@@ -92,7 +92,7 @@ server.start()
 
 Task { @MainActor in
     var exitCode: Int32 = 0
-    let preferenceKeys = ["imic.deviceID", "imic.preferredMacID", "imic.macNames", "imic.macLastConnected"]
+    let preferenceKeys = ["imic.deviceID", "imic.preferredMacID", "imic.macNames", "imic.macLastConnected", "imic.lastConnectedMacID", "imic.forgottenMacIDs", "imic.requiresMacSelection"]
     let saved = preferenceKeys.map { UserDefaults.standard.object(forKey: $0) }
     defer {
         TokenStore.delete(for: store.macID)
@@ -104,6 +104,11 @@ Task { @MainActor in
         try? FileManager.default.removeItem(at: directory)
     }
     do {
+        // Also isolate device-policy keys when this patch is combined with the
+        // independent sticky-target/forget-device change.
+        for key in ["imic.lastConnectedMacID", "imic.forgottenMacIDs", "imic.requiresMacSelection"] {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
         UserDefaults.standard.set(store.macID, forKey: "imic.preferredMacID")
         let client = LinkClient()
         var readyCount = 0

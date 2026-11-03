@@ -356,14 +356,22 @@ final class LinkClient: ObservableObject {
             guard self.foregroundRestartEpoch == nil else { return }
             let returning = self.backgroundAt != nil
             self.backgroundAt = nil
-            if returning { self.resetSelectionLocked() }
+            // A manually chosen target remains explicit while its first hello
+            // or pairing code is pending; foreground must not turn it automatic.
+            if returning, !self.hasPendingManualPairing, !self.needsCode {
+                self.resetSelectionLocked()
+            }
             self.reconnectAttempts = 0
             self.reconnectWork?.cancel()
             self.reconnectWork = nil
             if self.ready, returning {
+                // NWBrowser can retain its old path/results across suspension even
+                // when the authenticated socket remains healthy. Refresh discovery
+                // independently; the ping decides whether transport replacement is needed.
+                if self.directMac == nil, !self.forceBLE { self.startBrowserLocked() }
                 self.probeForegroundLocked()
-            } else if !self.ready, !self.needsCode,
-                      returning || (self.connection == nil && !self.usingBLE) {
+            } else if !self.ready,
+                      returning || (!self.needsCode && self.connection == nil && !self.usingBLE) {
                 self.restartForegroundLocked(reason: "返回前台")
             }
         }
@@ -378,6 +386,15 @@ final class LinkClient: ObservableObject {
             self.foregroundProbeWork = nil
             self.foregroundProbe = nil
         }
+    }
+
+    /// Queue-only: preserve explicit pairing before/after its first hello.
+    /// Selection of already-paired/offline targets remains a separate policy.
+    private var hasPendingManualPairing: Bool {
+        guard manualSelection, !ready else { return false }
+        if needsCode { return true }
+        return (connection != nil || usingBLE)
+            && currentMacID.flatMap { TokenStore.load(for: $0) } == nil
     }
 
     private func probeForegroundLocked() {
@@ -406,17 +423,31 @@ final class LinkClient: ObservableObject {
         // Only an announced old session must be failed on replacement.
         let notifyLoss = activeLinkSession != nil
         let name = currentMacName ?? "Mac"
+        let resumingPairing = needsCode
+        let preservingManualTarget = hasPendingManualPairing
+        let mac = directMac ?? ((resumingPairing || preservingManualTarget) ? lastMac : nil)
         resetSelectionLocked()
-        let mac = directMac
+        if preservingManualTarget { manualSelection = true }
+        // Retire discovery before handing the loss to main. Otherwise an old
+        // browse callback can connect in that gap, advance the epoch, and discard
+        // the pending foreground recovery publication and its fresh browser.
+        browser?.stateUpdateHandler = nil
+        browser?.browseResultsChangedHandler = nil
+        browser?.cancel()
+        browser = nil
+        discoveredMacs.removeAll()
         closeConnectionLocked()
+        needsCode = false
         let epoch = currentEpoch()
         foregroundRestartEpoch = epoch
         reconnectAttempts = 0
         IMicLog.write("iphone.link", "foreground reconnect reason=\(reason)")
         publish {
             self.phase = mac == nil ? .searching : .connecting(name)
-            self.isManualSelection = false
+            self.isManualSelection = preservingManualTarget
             self.transport = nil
+            self.pairing = false
+            self.pairingError = nil
             if notifyLoss { self.onLost?() }
             self.queue.async {
                 guard self.running, self.currentEpoch() == epoch else { return }
@@ -629,6 +660,8 @@ final class LinkClient: ObservableObject {
             connectLocked(to: mac)
             return
         }
+        browser?.stateUpdateHandler = nil
+        browser?.browseResultsChangedHandler = nil
         browser?.cancel()
         let parameters = NWParameters.tcp
         parameters.includePeerToPeer = true
@@ -652,11 +685,16 @@ final class LinkClient: ObservableObject {
             }
             switch state {
             case .failed(let error):
-                self.publish {
-                    self.phase = .failed(L10n.text("Cannot search for Macs · %@", L10n.argument(Self.readable(error))))
+                // Discovery failure is not a failure of an authenticated or
+                // currently connecting transport (including a foreground probe).
+                if !self.ready, self.connection == nil, !self.usingBLE {
+                    self.publish {
+                        self.phase = .failed(L10n.text("Cannot search for Macs · %@", L10n.argument(Self.readable(error))))
+                    }
                 }
-                self.queue.asyncAfter(deadline: .now() + 2) { [weak self] in
-                    guard let self = self, self.running, !self.ready else { return }
+                self.queue.asyncAfter(deadline: .now() + 2) { [weak self, weak browser] in
+                    guard let self, let browser, self.browser === browser,
+                          self.running, !self.ready else { return }
                     self.startBrowserLocked()
                 }
             default:
