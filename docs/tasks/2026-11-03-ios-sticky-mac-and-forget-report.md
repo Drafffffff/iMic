@@ -17,9 +17,9 @@
 - 首次安装、没有配对且只有一台发现时仍可以进入显式配对；仍必须输入有效配对码。已配对用户不会自动对陌生设备弹码。
 - 被 Mac 撤销/拒绝的令牌不触发自动配对；用户可点当前但未 ready 的设备行重新配对，不会因为它已被选中而无响应。
 - 设备页每台已配对 Mac 都有 44×44pt 删除按钮，含离线设备；提供明确中英文辅助功能名称、删除确认与取消。
-- 删除非当前设备只清理该设备的本机令牌、名称和成功时间，不改变当前 epoch、录音会话或传输。
+- 删除非当前设备只清理该设备的本机令牌、名称和成功时间，不改变当前 epoch、录音会话或传输。若它恰好是磁盘上的上次成功目标，同时暂停下次启动的自动恢复；本轮手动选择的在途目标继续等待，不受影响。普通非当前历史设备删除不改变自动恢复策略。
 - 删除当前目标前沿用 `SessionModel.cancelForDeviceSwitch()`，覆盖 listening / transcribing（含补传及等待结果），保留本地文字；清空连接、编辑能力、待处理 clear 和本机配对记录。旧 socket/BLE 回调被身份与 epoch 检查丢弃，迟到的 paired/ready 不能恢复令牌。
-- 当前目标删除后持久暂停自动选择。仅点一个仍离线的设备不会提前解除磁盘暂停；新目标真正 ready 后才解除。附近广播仍可看到已忘记的电脑，但它显示“需要配对”，只能由用户明确重新配对。
+- 当前目标或持久成功目标删除后持久暂停自动选择。仅点一个仍离线的设备不会提前解除磁盘暂停；新目标真正 ready 后才解除。附近广播仍可看到已忘记的电脑，但它显示“需要配对”，只能由用户明确重新配对。
 - 删除仅移除此 iPhone 的配对记录，不远程改动 Mac 端的其他设备授权。
 
 ## 改动边界
@@ -27,7 +27,7 @@
 - `shared/MacSelection.swift`：唯一目标选择、成功目标恢复、单一 BLE 候选策略。
 - `ios/iMic/LinkClient.swift`：成功记录迁移、选择与忘记、BLE 身份限制、独立 DEBUG 设备管理预览。未修改 activate / 前台 probe / restartForegroundLocked，前后台恢复由另一独立 PR 处理。
 - `DeviceSelectionView` / `PairingSheet`：设备删除入口、当前语音确认与明确重配入口。
-- `HomeView` / `SessionModel`：仅 DEBUG 预览入口和忙碌状态夹具；预览不读写真实配对或发送网络内容。
+- `HomeView` / `SessionModel`：仅 DEBUG 预览入口和忙碌状态夹具；预览操作不写真实配对或发送网络内容。
 - `Localizable.xcstrings`：新文案同时有简体中文与英文。
 - 单测和真实回环集成：覆盖恢复、身份、安全和删除；选择脚本产物随机命名，让并行测试的 UserDefaults 域也隔离，只有端口隔离不够。
 
@@ -35,10 +35,10 @@
 
 | 命令 | 结果 | 耗时 | 关键输出 |
 |---|---|---:|---|
-| `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` | PASS | 2.35s | 77 / 77；14项选择/恢复/BLE策略单测 |
-| `IMIC_SELECTION_TEST_PORT=48064 ./scripts/test-ios-mac-selection.sh` | PASS | 23.71s | 三台真实加密服务 + 延迟回复代理；所有断言通过 |
+| `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` | PASS | 3.64s | 77 / 77；14项选择/恢复/BLE策略单测 |
+| `IMIC_SELECTION_TEST_PORT=48064 ./scripts/test-ios-mac-selection.sh` | PASS | 27.32s | 三台真实加密服务 + 延迟回复代理；所有断言通过 |
 | `IMIC_RESUME_TEST_PORT=48024 ./scripts/test-ios-reconnect.sh` | PASS | 20.31s | 健康恢复、黑洞连接、缓冲语音、绕过退避全部通过 |
-| `./scripts/build-ios.sh` | PASS | 9.27s | Simulator Debug BUILD SUCCEEDED；未覆盖用户安装 |
+| `./scripts/build-ios.sh` | PASS | 8.81s | Simulator Debug BUILD SUCCEEDED；未覆盖用户安装 |
 | `xcodebuild test … -only-testing:iMicUITests/DeviceManagementUITests` | PASS | 73.21s session | 英文5 / 5，native点击、确认/取消、重配入口 |
 | `xcodebuild test …/testChineseOfflineDeletionIsLocalizedAndRequiresConfirmation` | PASS | 14.62s test | 中文1 / 1；文案与44pt入口 |
 | `IMIC_TESTFLIGHT_DIR=build/testflight-sticky-final.noindex ./scripts/testflight.sh archive-unsigned` | PASS | 34.40s | 未签名 Release；调试入口 absent，隐私清单 passed |
@@ -58,6 +58,9 @@ Release 归档仅用于校验，没有签名分发或上传。Swift 5 构建仍�
 7. 删除后点从未上线目标仍不解除磁盘暂停；显式选择可用目标并认证成功才解除。
 8. 通过真实字节代理暂存加密 paired/ready 回复，忘记期间再释放，令牌/ready/gesture 不会复活。
 9. 首次配对继续要求有效配对码，已配对用户不会自动连未配对设备。
+10. 成功 A → 手选从未上线 D → 删除非当前但持久成功的 A，D 与 epoch 保持不变；冷启动不恢复更旧 C，明确选择 B 并 ready 后才解除暂停。修复前该真实加密回归失败，修复后通过；删除普通非当前 C 也断言不会改变自动恢复策略。
+
+第 10 项在 `e7ae317` 修复，最新增量验证结果位于 `build/sticky-validation/delete-stored-results.json`。修复前失败日志为 `delete-stored-before-fix.log`；修复后 77 单测、选择全套与 iOS 构建全部通过。此前 UI、重连及 Release 验证对应表中的既有记录，本次未修改这些入口。
 
 模拟器 UI：专用 iPhone 18 Pro / iOS 27.0，5 项英文 + 1 项中文全部通过。英文用例覆盖离线删除/取消、附近删除后需配对、当前删除不换机、进行中语音的明确确认、当前失效配对可重试。中文用例确认本地化名称与删除确认。原生 iOS 27 弹出式确认用点空白取消；测试同时断言配对仍保留。
 
