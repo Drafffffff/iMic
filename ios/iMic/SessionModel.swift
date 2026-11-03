@@ -1294,6 +1294,11 @@ final class SessionModel: ObservableObject {
 
     private func configurePreview() {
         switch previewMode {
+        #if DEBUG
+        case "devices-manage-recording":
+            phase = .listening
+            elapsed = 2.8
+        #endif
         case "listening":
             phase = .listening
             elapsed = 2.8

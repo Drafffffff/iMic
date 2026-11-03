@@ -184,6 +184,8 @@ final class LinkClient: ObservableObject {
     private var polishSaveGeneration: UInt64 = 0
     private var knownNames: [String: String] = [:]
     private var macLastConnected: [String: Double] = [:]
+    private var forgottenMacIDs: Set<String> = []
+    private var autoConnectPaused = false
     private var manualSelection = false
     private var attemptedThisRound: Set<String> = []
     // Revoked tokens cannot cause an automatic pairing prompt on the next retry.
@@ -217,7 +219,7 @@ final class LinkClient: ObservableObject {
         #else
         deviceName = "iMic reconnect test"
         #endif
-        preferredMacID = UserDefaults.standard.string(forKey: "imic.preferredMacID")
+        let legacyPreferred = UserDefaults.standard.string(forKey: "imic.preferredMacID")
 
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
@@ -243,11 +245,23 @@ final class LinkClient: ObservableObject {
         forceBLE = false
         #endif
         knownNames = UserDefaults.standard.dictionary(forKey: "imic.macNames") as? [String: String] ?? [:]
-        if let preferredMacID, knownNames[preferredMacID] == nil {
-            knownNames[preferredMacID] = "Mac"
+        if let legacyPreferred, knownNames[legacyPreferred] == nil {
+            knownNames[legacyPreferred] = "Mac"
         }
         macLastConnected = (UserDefaults.standard.dictionary(forKey: "imic.macLastConnected") as? [String: Double] ?? [:])
             .filter { $0.value.isFinite }
+        forgottenMacIDs = Set(UserDefaults.standard.stringArray(forKey: "imic.forgottenMacIDs") ?? [])
+        autoConnectPaused = UserDefaults.standard.bool(forKey: "imic.requiresMacSelection")
+        let restoration = Set(knownNames.keys).union(macLastConnected.keys).map {
+            MacCandidate(id: $0, paired: TokenStore.load(for: $0) != nil, lastConnected: macLastConnected[$0])
+        }.filter { !forgottenMacIDs.contains($0.id) }
+        preferredMacID = autoConnectPaused ? nil : MacSelection.restoredTarget(restoration,
+            successfulID: UserDefaults.standard.string(forKey: "imic.lastConnectedMacID"), legacyPreferredID: legacyPreferred)
+        #if DEBUG
+        // Explicit loopback fixtures retain their selected endpoint/identity;
+        // unrelated successful-history records must not redirect a debug host.
+        if directMac != nil { preferredMacID = legacyPreferred }
+        #endif
         selectedMacID = preferredMacID
         selectedMacName = preferredMacID.map { knownNames[$0] ?? "Mac" }
         let paired = Set(knownNames.keys.filter { TokenStore.load(for: $0) != nil })
@@ -284,6 +298,12 @@ final class LinkClient: ObservableObject {
                 case "offline": phase = .searching
                 default: phase = .ready(name)
                 }
+            }
+            if mode.hasPrefix("devices-manage") {
+                let nearby = DiscoveredMac(id: "preview-studio", name: "Mac Studio", endpoint: .hostPort(host: "127.0.0.1", port: 2))
+                macs = [mac, nearby]
+                rememberedMacs = [RememberedMac(id: mac.id, name: mac.name), RememberedMac(id: nearby.id, name: nearby.name), RememberedMac(id: "preview-office", name: "Office iMac")]
+                pairedMacIDs = Set(rememberedMacs.map(\.id))
             }
             hasPairedMac = phase.isReady
             gestureReady = phase.isReady
@@ -462,6 +482,8 @@ final class LinkClient: ObservableObject {
         invalidateEpoch()
         queue.async {
             self.manualSelection = true
+            self.autoConnectPaused = false
+            UserDefaults.standard.set(false, forKey: "imic.requiresMacSelection")
             self.attemptedThisRound.removeAll()
             self.publish { self.isManualSelection = true }
             self.preferredMacID = mac.id
@@ -488,6 +510,8 @@ final class LinkClient: ObservableObject {
             self.reconnectWork?.cancel()
             self.reconnectWork = nil
             self.manualSelection = true
+            self.autoConnectPaused = false
+            UserDefaults.standard.set(false, forKey: "imic.requiresMacSelection")
             self.attemptedThisRound.removeAll()
             self.publish { self.isManualSelection = true }
             self.preferredMacID = mac.id
@@ -507,45 +531,76 @@ final class LinkClient: ObservableObject {
         }
     }
 
-    func forgetMac() {
-        guard !startDeferred, !isPreview else { return }
-        invalidateEpoch()
+    /// Forget only this phone's pairing. Other targets and any unrelated live
+    /// session remain untouched. UI confirms before calling for the current Mac.
+    func forgetMac(id: String? = nil) {
+        guard !startDeferred else { return }
+        #if DEBUG
+        if isPreview { forgetPreviewMac(id: id); return }
+        #endif
         queue.async {
-            if let id = self.currentMacID ?? self.preferredMacID {
-                TokenStore.delete(for: id)
+            guard let id = id ?? self.currentMacID ?? self.preferredMacID else { return }
+            let isCurrent = id == self.currentMacID || id == self.preferredMacID
+            if isCurrent {
+                // Advance the epoch and detach receive/state handlers before
+                // deleting the token, so old handshakes cannot save it again.
+                self.closeConnectionLocked()
             }
-            if let id = self.currentMacID ?? self.preferredMacID {
-                self.knownNames.removeValue(forKey: id)
-                self.macLastConnected.removeValue(forKey: id)
-                UserDefaults.standard.set(self.macLastConnected, forKey: "imic.macLastConnected")
-            }
-            self.resetSelectionLocked()
+            TokenStore.delete(for: id)
+            self.knownNames.removeValue(forKey: id)
+            self.macLastConnected.removeValue(forKey: id)
+            self.forgottenMacIDs.insert(id)
             UserDefaults.standard.set(self.knownNames, forKey: "imic.macNames")
-            UserDefaults.standard.removeObject(forKey: "imic.preferredMacID")
-            self.preferredMacID = nil
-            self.currentMacID = nil
-            self.currentMacName = nil
-            self.lastMac = nil
-            self.pendingCode = nil
-            self.needsCode = false
-            self.forcePair = true
-            self.closeConnectionLocked()
-            self.startBrowserLocked()
+            UserDefaults.standard.set(self.macLastConnected, forKey: "imic.macLastConnected")
+            UserDefaults.standard.set(Array(self.forgottenMacIDs).sorted(), forKey: "imic.forgottenMacIDs")
+            if UserDefaults.standard.string(forKey: "imic.lastConnectedMacID") == id {
+                UserDefaults.standard.removeObject(forKey: "imic.lastConnectedMacID")
+            }
+            if UserDefaults.standard.string(forKey: "imic.preferredMacID") == id {
+                UserDefaults.standard.removeObject(forKey: "imic.preferredMacID")
+            }
+            if isCurrent {
+                self.resetSelectionLocked()
+                self.autoConnectPaused = true
+                UserDefaults.standard.set(true, forKey: "imic.requiresMacSelection")
+                self.preferredMacID = nil
+                self.currentMacID = nil
+                self.currentMacName = nil
+                self.lastMac = nil
+                self.pendingCode = nil
+                self.needsCode = false
+                self.forcePair = false
+            }
             let remembered = self.knownNames.map { RememberedMac(id: $0.key, name: $0.value) }
+                .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
             self.publish {
-                self.phase = .searching
-                self.macs = []
-                self.pairingError = nil
-                self.pairing = false
-                self.hasPairedMac = false
-                self.isManualSelection = false
-                self.selectedMacID = nil
-                self.selectedMacName = nil
+                if isCurrent {
+                    self.phase = .searching
+                    self.transport = nil
+                    self.pairingError = nil
+                    self.pairing = false
+                    self.isManualSelection = false
+                    self.selectedMacID = nil
+                    self.selectedMacName = nil
+                }
                 self.rememberedMacs = remembered
                 self.refreshRememberedPublished()
             }
+            if isCurrent { self.startBrowserLocked() }
         }
     }
+
+    #if DEBUG
+    private func forgetPreviewMac(id: String?) {
+        guard let id = id ?? selectedMacID else { return }
+        pairedMacIDs.remove(id)
+        rememberedMacs.removeAll { $0.id == id }
+        if selectedMacID == id {
+            selectedMacID = nil; selectedMacName = nil; phase = .searching
+            transport = nil; hasPairedMac = false; pairing = false
+        }
+    }
+    #endif
 
     // MARK: - Discovery
 
@@ -652,6 +707,7 @@ final class LinkClient: ObservableObject {
     }
 
     private func networkCandidateLocked(_ discovered: [DiscoveredMac]) -> DiscoveredMac? {
+        guard !autoConnectPaused else { return nil }
         let candidates = discovered.map {
             MacCandidate(id: $0.id, paired: TokenStore.load(for: $0.id) != nil,
                          lastConnected: macLastConnected[$0.id])
@@ -660,7 +716,7 @@ final class LinkClient: ObservableObject {
         let expired = graceDeadline.map { ProcessInfo.processInfo.systemUptime >= $0 } ?? true
         let chosen = MacSelection.choose(discovered: candidates, preferredID: preferredMacID,
             graceExpired: expired, hasAnyPairedMac: knownPairedCandidatesLocked().contains { $0.paired },
-            excluded: attemptedThisRound.union(manualSelection ? [] : rejectedPairingIDs),
+            excluded: attemptedThisRound.union(manualSelection ? [] : rejectedPairingIDs.union(forgottenMacIDs)),
             manualSelection: manualSelection, preferredIsPaired: preferredPaired)
         let reason = chosen.map { id in
             manualSelection ? "manual" : id == preferredMacID && preferredPaired ? "preferred" :
@@ -920,7 +976,7 @@ final class LinkClient: ObservableObject {
             if let id = currentMacID {
                 macLastConnected[id] = Date().timeIntervalSince1970
                 UserDefaults.standard.set(macLastConnected, forKey: "imic.macLastConnected")
-                rememberTarget(id: id, name: currentMacName ?? "Mac")
+                rememberTarget(id: id, name: currentMacName ?? "Mac", connected: true)
             }
             needsCode = false
             bleFallbackWork?.cancel()
@@ -1133,13 +1189,13 @@ final class LinkClient: ObservableObject {
     }
 
     private func startBLELocked() {
-        guard running, !ready, !usingBLE else { return }
+        guard running, !ready, !usingBLE, !autoConnectPaused else { return }
         // 蓝牙只接受本机有令牌的身份；手动等待期间绝不跳到其他 Mac。
         guard connection == nil || forceBLE else { return }
         let candidates = knownPairedCandidatesLocked().filter {
             !attemptedThisRound.contains($0.id) && (!manualSelection || $0.id == preferredMacID)
         }
-        let accepted = MacSelection.orderedPaired(candidates, preferredID: preferredMacID)
+        let accepted = MacSelection.bluetoothTargets(candidates, preferredID: preferredMacID, excluded: forgottenMacIDs)
             .filter { UUID(uuidString: $0) != nil }
         guard !accepted.isEmpty else {
             if forceBLE { publish { self.phase = .failed(L10n.text("Pair with your Mac on the same Wi-Fi before using Bluetooth")) } }
@@ -1193,7 +1249,7 @@ final class LinkClient: ObservableObject {
         pendingToken = nil
         forcePair = false
         guard TokenStore.load(for: macID) != nil,
-              !manualSelection || preferredMacID == macID else { bleLost(ble); return }
+              preferredMacID == macID, !forgottenMacIDs.contains(macID) else { bleLost(ble); return }
         currentMacID = macID
         bleSelectedMacID = macID
         currentMacName = knownNames[macID] ?? "Mac"
@@ -1628,10 +1684,15 @@ final class LinkClient: ObservableObject {
 
     private func deliver(_ block: @escaping () -> Void) { publish(block) }
 
-    private func rememberTarget(id: String, name: String) {
+    private func rememberTarget(id: String, name: String, connected: Bool = false) {
         preferredMacID = id
         knownNames[id] = name
-        UserDefaults.standard.set(id, forKey: "imic.preferredMacID")
+        if connected {
+            UserDefaults.standard.set(id, forKey: "imic.preferredMacID")
+            UserDefaults.standard.set(id, forKey: "imic.lastConnectedMacID")
+            forgottenMacIDs.remove(id)
+            UserDefaults.standard.set(Array(forgottenMacIDs).sorted(), forKey: "imic.forgottenMacIDs")
+        }
         UserDefaults.standard.set(knownNames, forKey: "imic.macNames")
         let snapshot = knownNames
         let manual = manualSelection

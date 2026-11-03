@@ -12647,6 +12647,125 @@
           }
         }
       }
+    },
+    "Cancel session and forget": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel session and forget"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消语音并删除"
+          }
+        }
+      }
+    },
+    "Forget Mac": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forget Mac"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除配对设备"
+          }
+        }
+      }
+    },
+    "Cancel this voice session and forget %@?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel this voice session and forget %@?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消当前语音并删除 %@？"
+          }
+        }
+      }
+    },
+    "Forget %@?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forget %@?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除 %@ 的配对？"
+          }
+        }
+      }
+    },
+    "Forget %@, paired Mac": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forget %@, paired Mac"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除已配对设备 %@"
+          }
+        }
+      }
+    },
+    "Recording or recognition will stop. Local text is kept. Enter the pairing code again to reconnect.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording or recognition will stop. Local text is kept. Enter the pairing code again to reconnect."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录音或识别将停止，本地文字会保留。下次连接需要重新输入配对码。"
+          }
+        }
+      }
+    },
+    "This removes the pairing from this iPhone. Enter the pairing code again to reconnect.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This removes the pairing from this iPhone. Enter the pairing code again to reconnect."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从这台 iPhone 删除配对。下次连接需要重新输入配对码。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
