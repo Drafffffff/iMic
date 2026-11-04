@@ -49,6 +49,16 @@ enum TypedTextSafety {
         "com.github.wez.wezterm", "org.tabby"
     ]
 
+    static let embeddedTerminalHostBundles: Set<String> = [
+        "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.todesktop.230313mzl4w4u92",
+        "com.exafunction.windsurf", "com.vscodium", "dev.zed.Zed", "dev.zed.Zed-Preview", "com.sublimetext.4"
+    ]
+
+    static func isEmbeddedTerminalHost(_ bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier else { return false }
+        return embeddedTerminalHostBundles.contains(bundleIdentifier) || bundleIdentifier.hasPrefix("com.jetbrains.")
+    }
+
     /// East Asian wide characters (CJK, kana, Hangul, full-width forms, emoji).
     /// Terminals draw each in two cells, but Terminal.app and Otty report one
     /// cell per character through AX, so their boxes cover half the text.
@@ -65,9 +75,11 @@ enum TypedTextSafety {
 
     static func isTerminal(bundleIdentifier: String?, labels: [String?]) -> Bool {
         if let bundleIdentifier, terminalBundles.contains(bundleIdentifier) { return true }
-        return labels.contains { label in
-            guard let label = label?.lowercased(), !label.isEmpty else { return false }
-            return label.contains("terminal") || label.contains("终端") || label.contains("xterm")
+        let nonEmptyLabels = labels.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        if nonEmptyLabels.isEmpty, isEmbeddedTerminalHost(bundleIdentifier) { return true }
+        return nonEmptyLabels.contains { label in
+            let lower = label.lowercased()
+            return lower.contains("terminal") || lower.contains("终端") || lower.contains("xterm")
         }
     }
 }

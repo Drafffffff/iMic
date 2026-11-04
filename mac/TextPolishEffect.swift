@@ -108,7 +108,7 @@ final class TextPolishEffect: @unchecked Sendable {
         let textSignature: Int?
         /// False when protected content (password fields, DRM) was seen in the
         /// window: AX geometry may still animate, but no screenshot is taken.
-        let allowsCapture: Bool
+        var allowsCapture: Bool
     }
     private let trackingQueue = DispatchQueue(label: "imic.polish-field-geometry", qos: .userInitiated)
     private var trackingSamples = 0
@@ -945,6 +945,7 @@ final class TextPolishEffect: @unchecked Sendable {
         }
         if let focused { candidates.append(focused) }
         var protectedSeen = false
+        var foundTarget: Target?
         let until = ProcessInfo.processInfo.systemUptime + 0.4
         var index = 0
         if let window = read(app, kAXFocusedWindowAttribute), CFGetTypeID(window) == AXUIElementGetTypeID() { candidates.append(window as! AXUIElement) }
@@ -961,9 +962,11 @@ final class TextPolishEffect: @unchecked Sendable {
                 // only rules out screenshots, so AX-located fields keep the effect.
                 if element.map({ CFEqual($0, candidate) }) == true || focused.map({ CFEqual($0, candidate) }) == true { return nil }
                 protectedSeen = true
+                if foundTarget != nil { break }
                 continue
             }
-            if role == "AXTextArea" || role == "AXTextField", let field = frame(position: values[3], size: values[4]),
+            if foundTarget == nil,
+               role == "AXTextArea" || role == "AXTextField", let field = frame(position: values[3], size: values[4]),
                field.width > 10, field.height > 8 {
                 // The captured focused element is preferred. Discovered fields must
                 // actually contain a distinctive suffix of our emitted transcript.
@@ -976,17 +979,22 @@ final class TextPolishEffect: @unchecked Sendable {
                     let ownerFrame = owner.flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? frame($0 as! AXUIElement) : nil }
                     if let window = PolishWindowSelection.choose(windows().filter { $0.frame.intersects(field) }, pid: pid, preferred: ownerFrame),
                        let visible = visibleField(candidate, window: window.frame) {
-                        return Target(element: candidate, ownerWindow: owner.flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? ($0 as! AXUIElement) : nil }, pid: pid, windowID: window.id, windowLayer: window.layer,
-                                      window: window.frame, field: visible, elementFrame: field,
-                                      singleLine: role == kAXTextFieldRole || (read(candidate, "AXMultiline") as? Bool) == false,
-                                      textSignature: value?.hashValue,
-                                      allowsCapture: !protectedSeen)
+                        foundTarget = Target(element: candidate, ownerWindow: owner.flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? ($0 as! AXUIElement) : nil }, pid: pid, windowID: window.id, windowLayer: window.layer,
+                                             window: window.frame, field: visible, elementFrame: field,
+                                             singleLine: role == kAXTextFieldRole || (read(candidate, "AXMultiline") as? Bool) == false,
+                                             textSignature: value?.hashValue,
+                                             allowsCapture: !protectedSeen)
+                        if protectedSeen { break }
                     }
                 }
             }
             if let children = values[5] as? [AXUIElement] { candidates.append(contentsOf: children) }
         }
         guard !token.cancelled else { return nil }
+        if var foundTarget {
+            foundTarget.allowsCapture = !protectedSeen
+            return foundTarget
+        }
         // Window-wide OCR would screenshot the protected content itself.
         guard !protectedSeen else { IMicLog.write("mac.effect", "locate skipped reason=protected_content"); return nil }
         let focusedWindow = read(app, kAXFocusedWindowAttribute)

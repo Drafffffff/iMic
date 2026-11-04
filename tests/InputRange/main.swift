@@ -182,6 +182,22 @@ final class InputRangeTests: XCTestCase {
         XCTAssertNil(InputRangeMatcher.range(in: "existing draft", location: 0,
                                               text: "", context: "draft"))
     }
+
+    func testEmbeddedTerminalHostsDefaultToTerminalWhenAXLabelsMissing() {
+        XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: "com.todesktop.230313mzl4w4u92", labels: []))
+        XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: "com.microsoft.VSCode", labels: [nil, ""]))
+        XCTAssertFalse(TypedTextSafety.isTerminal(bundleIdentifier: "com.microsoft.VSCode", labels: ["editor", "main.swift"]))
+        XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: "com.microsoft.VSCode", labels: ["Integrated Terminal"]))
+    }
+
+    func testSecureInputAndSecureFieldsAreDetected() {
+        XCTAssertTrue(InputTarget.isSecureInputActive(element: nil, secureEventInput: true))
+        XCTAssertFalse(InputTarget.isSecureInputActive(element: nil, secureEventInput: false))
+        XCTAssertTrue(InputTarget.isSecureInputActive(element: nil, secureEventInput: false, role: "AXSecureTextField"))
+        XCTAssertTrue(InputTarget.isSecureInputActive(element: nil, secureEventInput: false, subrole: "AXSecureTextField"))
+        XCTAssertTrue(InputTarget.isSecureInputActive(element: nil, secureEventInput: false, protectedContent: true))
+        XCTAssertFalse(InputTarget.isSecureInputActive(element: nil, secureEventInput: false, role: "AXTextField", subrole: "AXStandardWindow", protectedContent: false))
+    }
 }
 
 let suite = XCTestSuite(forTestCaseClass: InputRangeTests.self)
