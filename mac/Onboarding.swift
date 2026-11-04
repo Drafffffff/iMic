@@ -67,6 +67,17 @@ enum SetupProgress {
     static func clear(_ defaults: UserDefaults = MacPreferences.defaults) {
         defaults.removeObject(forKey: stepKey)
     }
+    static func isCompleted(_ defaults: UserDefaults = MacPreferences.defaults) -> Bool {
+        defaults.integer(forKey: SetupWizard.completedKey) >= SetupWizard.version
+    }
+    static func isSetupInProgress(_ defaults: UserDefaults = MacPreferences.defaults, windowVisible: Bool = false) -> Bool {
+        guard saved(defaults) != nil else { return false }
+        if isCompleted(defaults) && !windowVisible {
+            clear(defaults)
+            return false
+        }
+        return true
+    }
 }
 
 enum SetupLaunchPolicy {
@@ -584,6 +595,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
 
     func windowWillClose(_ notification: Notification) {
         keyTask?.cancel(); keyTask = nil; debounce?.cancel(); keyGeneration = UUID(); keyState = .idle
+        if SetupProgress.isCompleted() { SetupProgress.clear() }
     }
 
     #if DEBUG

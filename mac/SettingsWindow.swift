@@ -451,8 +451,10 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             saveBailian(row, completion: completion); return
         }
         let credentialBefore = resolved(provider)?.key
+        let providerModelBefore = DeepSeekConfiguration.modelName(for: provider)
         let providerEndpointBefore = DeepSeekConfiguration.endpoint(for: provider)
         var bailianCheck: (String, String)?
+        var providerCheck: (key: String, model: String, endpoint: String, rows: [SettingsField: (value: String, generation: UUID)])?
         let request: URLRequest
         do {
             if row.id == "bailian.key" || row.id == "asr.endpoint" {
@@ -463,10 +465,21 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
                 request = check
                 bailianCheck = (key, address)
             } else {
-                let key = kind == "key" ? value : resolved(provider)?.key ?? ""
-                let model = kind == "model" ? value : DeepSeekConfiguration.modelName(for: provider)
-                let endpoint = kind == "endpoint" ? value : DeepSeekConfiguration.endpoint(for: provider)
+                let keyRow = fields["\(provider.rawValue).key"]
+                let modelRow = fields["\(provider.rawValue).model"]
+                let endpointRow = fields["\(provider.rawValue).endpoint"]
+                let keyDraft = keyRow.flatMap { $0.dirty && !$0.value.isEmpty ? $0.value : nil }
+                let modelDraft = modelRow.flatMap { $0.dirty && !$0.value.isEmpty ? $0.value : nil }
+                let endpointDraft = endpointRow.flatMap { $0.dirty && !$0.value.isEmpty ? $0.value : nil }
+                let key = kind == "key" ? value : (keyDraft ?? resolved(provider)?.key ?? "")
+                let model = kind == "model" ? value : (modelDraft ?? providerModelBefore)
+                let endpoint = kind == "endpoint" ? value : (endpointDraft ?? providerEndpointBefore)
                 request = try SettingsValidation.request(provider: provider, key: key, model: model, endpoint: endpoint)
+                var mergedRows: [SettingsField: (value: String, generation: UUID)] = [row: (value, generation)]
+                if kind != "key", let keyRow, let keyDraft { mergedRows[keyRow] = (keyDraft, keyRow.generation) }
+                if kind != "model", let modelRow, let modelDraft { mergedRows[modelRow] = (modelDraft, modelRow.generation) }
+                if kind != "endpoint", let endpointRow, let endpointDraft { mergedRows[endpointRow] = (endpointDraft, endpointRow.generation) }
+                providerCheck = (key, model, endpoint, mergedRows)
             }
         } catch {
             row.message((error as? PolishConfigurationError)?.rawValue ?? L10n.text("Check your configuration."), error: true)
@@ -480,7 +493,9 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             row.task = nil; row.saveButton.isEnabled = true
             guard self.resolved(provider)?.key == credentialBefore,
                   self.app?.endpoint.stringValue == originalASR,
-                  DeepSeekConfiguration.endpoint(for: provider) == providerEndpointBefore else {
+                  DeepSeekConfiguration.modelName(for: provider) == providerModelBefore,
+                  DeepSeekConfiguration.endpoint(for: provider) == providerEndpointBefore,
+                  providerCheck?.rows.allSatisfy({ $0.key.value == $0.value.value && $0.key.generation == $0.value.generation }) ?? true else {
                 row.message(L10n.text("Connection settings changed during verification. Please verify again."), error: true)
                 completion(false); return
             }
@@ -493,14 +508,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
                 completion(false)
             case .success:
                 var saved = true
-                if kind == "key" {
-                    let previous = self.resolved(provider)
-                    // An unchanged external credential is never copied into the application file.
-                    if value != previous?.key {
-                        if self.preview { self.previewKeys[provider] = ResolvedCredential(key: value, source: .app) }
-                        else { saved = PolishCredentials.save(value, for: provider) }
-                    }
-                } else if row.id == "asr.endpoint" {
+                if row.id == "asr.endpoint" {
                     self.defaults.set(value, forKey: "asrEndpoint")
                     self.defaults.removeObject(forKey: "bailian.detectedRegion")
                     self.defaults.set(ASRConfiguration.model, forKey: "asrModel")
@@ -508,25 +516,45 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
                     if let host = URL(string: value)?.host {
                         self.defaults.set(BailianAddress.polish(host), forKey: PolishProvider.bailian.endpointKey)
                     }
-                } else {
-                    self.defaults.set(value, forKey: kind == "model" ? provider.modelKey : provider.endpointKey)
+                } else if let check = providerCheck {
+                    if let keyRow = self.fields["\(provider.rawValue).key"], check.rows[keyRow] != nil {
+                        let previous = self.resolved(provider)
+                        // An unchanged external credential is never copied into the application file.
+                        if check.key != previous?.key {
+                            if self.preview { self.previewKeys[provider] = ResolvedCredential(key: check.key, source: .app) }
+                            else { saved = PolishCredentials.save(check.key, for: provider) }
+                        }
+                    }
+                    if saved {
+                        if let modelRow = self.fields["\(provider.rawValue).model"], check.rows[modelRow] != nil {
+                            self.defaults.set(check.model, forKey: provider.modelKey)
+                        }
+                        if let endpointRow = self.fields["\(provider.rawValue).endpoint"], check.rows[endpointRow] != nil {
+                            self.defaults.set(check.endpoint, forKey: provider.endpointKey)
+                        }
+                    }
                 }
                 guard saved else { row.message(L10n.text("Cannot write to the iMic configuration file."), error: true); completion(false); return }
-                row.markSaved(value); row.hideKey()
-                row.message(L10n.text("✓ Saved · %@", L10n.argument(L10n.time(Date()))))
-                self.stamp(row, value: value, status: L10n.text("Verified"))
+                let savedNotice = L10n.text("✓ Saved · %@", L10n.argument(L10n.time(Date())))
+                for (mergedRow, snapshot) in providerCheck?.rows ?? [row: (value, generation)] {
+                    mergedRow.cancel()
+                    mergedRow.markSaved(snapshot.value); mergedRow.hideKey()
+                    mergedRow.message(savedNotice)
+                    self.stamp(mergedRow, value: snapshot.value, status: L10n.text("Verified"))
+                }
                 if row.id == "bailian.key", !self.preview { VerifiedKeyMemory.remember(value) }
                 self.configurationChanged(); completion(true)
             }
         }
-        if preview {
+        if preview && validationSession == nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                finish(value.contains("bad") ? .failure(.rejected) : .success(()))
+                let rejected = value.contains("bad") || (providerCheck?.key.contains("bad") == true)
+                finish(rejected ? .failure(.rejected) : .success(()))
             }
         } else {
             if let (key, address) = bailianCheck {
                 row.task = SettingsValidation.runBailian(key: key, endpoint: address, completion: finish)
-            } else { row.task = SettingsValidation.run(request, completion: finish) }
+            } else { row.task = SettingsValidation.run(request, session: validationSession, completion: finish) }
         }
     }
     private func saveBailian(_ row: SettingsField, completion: @escaping (Bool) -> Void) {
@@ -678,26 +706,33 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        confirmClose(onAllow: nil, onCancel: nil)
+    }
+    @discardableResult
+    func confirmClose(onAllow: (() -> Void)? = nil, onCancel: (() -> Void)? = nil) -> Bool {
         let dirty = fields.values.filter(\.dirty).sorted {
             let firstKey = $0.id.hasSuffix(".key"), secondKey = $1.id.hasSuffix(".key")
             return firstKey == secondKey ? $0.id < $1.id : firstKey
         }
-        guard !dirty.isEmpty else { return true }
+        guard !dirty.isEmpty else { onAllow?(); return true }
         let alert = NSAlert()
         alert.messageText = dirty.count == 1 ? (dirty[0].id == "bailian.key" ? L10n.text("Your Model Studio Key has not been saved.") : L10n.text("%@ has not been saved.", L10n.argument(dirty[0].title))) : L10n.text("%@ settings have not been saved.", L10n.argument(dirty.count))
         alert.informativeText = L10n.text("Settings are verified before saving. Drafts are kept if verification fails.")
         for title in [L10n.text("Save"), L10n.text("Discard"), L10n.text("Cancel")] { alert.addButton(withTitle: title) }
         alert.beginSheetModal(for: window) { [weak self] response in
-            guard let self else { return }
+            guard let self else { onCancel?(); return }
             switch response {
             case .alertFirstButtonReturn:
                 self.saveSequentially(dirty, index: 0) { saved in
-                    if saved { self.window.close() }
+                    if saved { self.window.close(); onAllow?() }
+                    else { onCancel?() }
                 }
             case .alertSecondButtonReturn:
                 for row in dirty { row.reset() }
                 self.window.close()
-            default: break
+                onAllow?()
+            default:
+                onCancel?()
             }
         }
         return false
@@ -705,6 +740,10 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     private func saveSequentially(_ rows: [SettingsField], index: Int, completion: @escaping (Bool) -> Void) {
         guard index < rows.count else { completion(true); return }
         let row = rows[index]
+        guard row.dirty else {
+            saveSequentially(rows, index: index + 1, completion: completion)
+            return
+        }
         if let provider = PolishProvider(rawValue: row.id.split(separator: ".").first.map(String.init) ?? ""), provider != .bailian {
             select(.advanced)
             app?.polishProviderPicker.selectItem(at: PolishProvider.allCases.firstIndex(of: provider)!)

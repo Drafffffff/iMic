@@ -136,7 +136,8 @@ extension AppDelegate {
         #endif
         return currentSession == nil && !inserting && !clearingInput && !polishEffect.blocksGestures
             && polishTask == nil && inputWork == nil
-            && setupWizard?.window?.isVisible != true && SetupProgress.saved() == nil
+            && setupWizard?.window?.isVisible != true
+            && !SetupProgress.isSetupInProgress(windowVisible: setupWizard?.window?.isVisible == true)
     }
     func prepareForUpdateRestart() {
         // Called only after the idle gate passes; disconnect before Sparkle terminates.

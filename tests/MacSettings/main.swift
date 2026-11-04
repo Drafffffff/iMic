@@ -44,6 +44,20 @@ check(SetupProgress.saved(progressDefaults) == .permissions, "Progress survives 
 SetupProgress.clear(progressDefaults)
 check(SetupProgress.saved(progressDefaults) == nil, "Finishing clears progress")
 
+check(PolishCredentials.valid(String(repeating: "a", count: 4096), for: .custom), "4096-byte custom token is valid")
+check(!PolishCredentials.valid(String(repeating: "a", count: 4097), for: .custom), "Oversized custom token is rejected")
+let tempCredDir = FileManager.default.temporaryDirectory.appendingPathComponent("iMic-cred-test-\(UUID().uuidString)")
+defer { try? FileManager.default.removeItem(at: tempCredDir) }
+try! FileManager.default.createDirectory(at: tempCredDir, withIntermediateDirectories: true)
+let corruptCredURL = tempCredDir.appendingPathComponent("credentials.json")
+let corruptBytes = Data("{not-valid-json".utf8)
+try! corruptBytes.write(to: corruptCredURL)
+check(!PolishCredentials.save("sk-valid-test-credential-1234", for: .bailian, file: CredentialFile(url: corruptCredURL)), "Corrupt credential file refuses silent overwrite")
+check((try? Data(contentsOf: corruptCredURL)) == corruptBytes, "Corrupt credential file contents preserved")
+let oversizedBytes = Data(repeating: 0x20, count: 64_001)
+try! oversizedBytes.write(to: corruptCredURL)
+check(!PolishCredentials.save("sk-valid-test-credential-1234", for: .bailian, file: CredentialFile(url: corruptCredURL)), "Oversized credential file refuses silent overwrite")
+check((try? Data(contentsOf: corruptCredURL)) == oversizedBytes, "Oversized credential file contents preserved")
 let before = fileFingerprint()
 let standardBefore = UserDefaults.standard.object(forKey: "polishProvider") as? String
 let app = AppDelegate()
@@ -115,6 +129,24 @@ check(DeepSeekConfiguration.provider == .deepseek, "Provider switches immediatel
 settings.select(.advanced)
 let advanced = tabs.tabViewItems[4].viewController!.view
 check(allViews(advanced).compactMap { $0 as? NSTextField }.contains { $0.stringValue.contains(L10n.text("This provider has no valid Key. Polish will keep the original text.")) }, "Missing key warning stays visible")
+let customKeyField = allViews(advanced).compactMap { $0 as? SettingsField }.first { $0.id == "custom.key" }!
+let customModelField = allViews(advanced).compactMap { $0 as? SettingsField }.first { $0.id == "custom.model" }!
+let customEndpointField = allViews(advanced).compactMap { $0 as? SettingsField }.first { $0.id == "custom.endpoint" }!
+customKeyField.value = "custom-preview-token"
+customModelField.value = "local-polish-model-v1"
+customEndpointField.value = "http://127.0.0.1:1234/v1/chat/completions"
+check(customKeyField.dirty && customModelField.dirty && customEndpointField.dirty, "All three custom provider drafts start dirty")
+var staleSaveFinished = false
+customKeyField.save { check(!$0, "Changing a sibling draft during async validation aborts save"); staleSaveFinished = true }
+customModelField.value = "local-polish-model"
+wait(until: { staleSaveFinished })
+check(customKeyField.dirty && customModelField.dirty && customEndpointField.dirty, "Aborted save keeps all sibling drafts dirty")
+var customSaved = false
+customKeyField.save { check($0, "First-time custom provider save merges sibling drafts"); customSaved = true }
+wait(until: { customSaved })
+check(!customKeyField.dirty && !customModelField.dirty && !customEndpointField.dirty, "Saving one custom field marks all merged sibling drafts saved")
+check(DeepSeekConfiguration.modelName(for: .custom) == "local-polish-model", "Custom model draft persisted")
+check(DeepSeekConfiguration.endpoint(for: .custom) == "http://127.0.0.1:1234/v1/chat/completions", "Custom endpoint draft persisted")
 app.applyPolishPreferences(LinkPolishPreferences(enabled: false, options: PolishOptions(output: .japanese, mode: .terminal, tone: .rant)), confirmingSave: true)
 check(app.deepseekCheck.state == .off && app.polishFields?.isHidden == true, "Phone preference entry updates the Mac switch")
 check(app.polishModeButtons.selectedSegment == PolishMode.allCases.firstIndex(of: .terminal), "Phone mode reaches the same segmented control")
@@ -360,6 +392,38 @@ SetupProgress.save(.key)
 check(!app.updateIsIdle, "Unfinished setup defers updates even when its window is closed")
 SetupProgress.clear()
 check(app.updateIsIdle, "Finishing setup resumes updates")
+MacPreferences.defaults.set(SetupWizard.version, forKey: SetupWizard.completedKey)
+app.showSetup(at: .key)
+check(app.setupWizard?.window?.isVisible == true && !app.updateIsIdle, "Visible reopened wizard still defers updates while open")
+app.setupWizard?.close()
+check(SetupProgress.saved() == nil && app.updateIsIdle, "Closing a reopened wizard after completion clears inProgressStep and does not block updates")
+SetupProgress.save(.permissions)
+check(app.updateIsIdle && SetupProgress.saved() == nil, "Stale inProgressStep after completed setup does not block updates")
+MacPreferences.defaults.removeObject(forKey: SetupWizard.completedKey)
+
+// Quit / termination draft confirmation callback and pair code rotation in Settings.
+settings.select(.iphone)
+settings.window.makeKeyAndOrderFront(nil)
+let iphonePane = tabs.tabViewItems[2].viewController!.view
+allViews(iphonePane).compactMap { $0 as? NSButton }.first { $0.title == L10n.text("Pair a new iPhone") }!.performClick(nil)
+let pairCodeField = allViews(iphonePane).compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "settingsPairCode" }!
+app.store.overrideCode("111222")
+settings.refreshPairCode()
+let beforePairLabel = pairCodeField.stringValue
+app.rotatePairCode()
+check(pairCodeField.stringValue != beforePairLabel && pairCodeField.stringValue.contains(PairingCode.formatted(app.store.currentCode())), "Regenerate immediately updates the pair code in Settings")
+settings.select(.bailian)
+key.value = "sk-unsaved-quit-draft-key"
+check(key.dirty && settings.window.isVisible, "Draft prepared for termination check")
+var closeAllowed = false
+var closeCancelled = false
+check(!settings.confirmClose(onAllow: { closeAllowed = true }, onCancel: { closeCancelled = true }), "Dirty settings window defers close/quit")
+check(settings.window.attachedSheet != nil, "Quit confirmation presents draft sheet")
+allViews(settings.window.attachedSheet!.contentView!).compactMap { $0 as? NSButton }.first { $0.title == L10n.text("Cancel") }!.performClick(nil)
+wait(until: { settings.window.attachedSheet == nil && closeCancelled })
+check(!closeAllowed && closeCancelled && key.dirty, "Cancelling close sheet invokes onCancel and preserves draft")
+key.reset()
+settings.window.orderOut(nil)
 print("Mac updater settings, menu and recording / typing / clearing / setup gates passed")
 
 #if DEBUG
