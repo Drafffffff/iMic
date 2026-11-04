@@ -344,6 +344,9 @@ struct PairingSheet: View {
                 ForEach(link.macs) { mac in
                     Button {
                         Haptics.shared.play(.selection)
+                        if mac.id != link.selectedMacID {
+                            session.cancelForDeviceSwitch()
+                        }
                         link.connect(to: mac)
                     } label: {
                         HStack(spacing: 10) {

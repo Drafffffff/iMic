@@ -64,6 +64,9 @@ struct HoldControl: UIViewRepresentable {
 
         override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
             super.touchesEnded(touches, with: event)
+            if let point = touches.first?.location(in: self), let startPoint {
+                translation = point.y - startPoint.y
+            }
             let cancelled = translation < -64
             if let touch = touches.first {
                 updatePosition(touch)

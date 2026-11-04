@@ -18,6 +18,7 @@ final class SoundDesign {
 
     private enum State { case cold, warming, ready, failed }
     private var state = State.cold
+    private var generation = 0
     private var ids: [String: SystemSoundID] = [:]
     private var pending: (cue: SoundCue, variant: Int, at: CFTimeInterval)?
     private var observer: NSObjectProtocol?
@@ -34,6 +35,7 @@ final class SoundDesign {
                 // 媒体服务重置后旧 SystemSoundID 全部失效，重新注册。
                 let shared = SoundDesign.shared
                 IMicLog.write("iphone.sound", "media services reset; re-registering")
+                shared.generation &+= 1
                 shared.state = .cold
                 shared.ids.removeAll()
                 shared.warmUp()
@@ -45,11 +47,14 @@ final class SoundDesign {
     func warmUp() {
         guard state == .cold || state == .failed else { return }
         state = .warming
+        generation &+= 1
+        let currentGeneration = generation
         let began = CACurrentMediaTime()
         DispatchQueue.global(qos: .utility).async {
             let result = Self.registerAll()
             DispatchQueue.main.async {
                 let shared = SoundDesign.shared
+                guard shared.generation == currentGeneration else { return }
                 switch result {
                 case .success(let ids):
                     shared.ids = ids
