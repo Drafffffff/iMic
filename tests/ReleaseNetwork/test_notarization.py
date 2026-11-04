@@ -2,9 +2,14 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import select
+import signal
 import subprocess
+import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -127,6 +132,69 @@ class NotarizationTests(unittest.TestCase):
         code, output = release.run(['python3', '-c', 'import time; time.sleep(10)'], timeout=0.05)
         self.assertEqual(code, 124)
         self.assertIn('timeout', output)
+
+    def test_cancel_kills_and_reaps_child_that_ignores_term(self):
+        # A ready handshake makes cancellation deterministic: SIGTERM is already
+        # ignored before communicate is interrupted. The watchdog only prevents
+        # an old implementation from hanging the suite; it cannot satisfy the
+        # assertion that run() itself escalated to SIGKILL.
+        real_popen, real_killpg = subprocess.Popen, os.killpg
+        children = []
+        watchdogs = []
+
+        def launch(*args, **kwargs):
+            child = real_popen(*args, **kwargs)
+            children.append(child)
+            self.assertTrue(select.select([child.stdout], [], [], 5)[0])
+            self.assertEqual(child.stdout.readline(), b'ready\n')
+            communicate = child.communicate
+            first = True
+
+            def interrupted_communicate(*args, **kwargs):
+                nonlocal first
+                if first:
+                    first = False
+                    raise KeyboardInterrupt('cancel fixture')
+                return communicate(*args, **kwargs)
+
+            child.communicate = interrupted_communicate
+
+            def watchdog():
+                try:
+                    real_killpg(child.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+            timer = threading.Timer(5, watchdog)
+            timer.daemon = True
+            timer.start()
+            watchdogs.append(timer)
+            return child
+
+        try:
+            with patch.object(release.subprocess, 'Popen', side_effect=launch), \
+                    patch.object(release.os, 'killpg', wraps=real_killpg) as killpg, \
+                    patch.object(release, 'CANCEL_GRACE_SECONDS', 0.05):
+                with self.assertRaisesRegex(KeyboardInterrupt, 'cancel fixture'):
+                    release.run([sys.executable, '-c',
+                        'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); '
+                        'print("ready", flush=True); time.sleep(60)'])
+                child = children[0]
+                self.assertEqual([call.args for call in killpg.call_args_list],
+                                 [(child.pid, signal.SIGTERM), (child.pid, signal.SIGKILL)])
+                self.assertEqual(child.returncode, -signal.SIGKILL)
+                with self.assertRaises(ChildProcessError):
+                    os.waitpid(child.pid, os.WNOHANG)
+                self.assertTrue(child.stdout.closed)
+        finally:
+            for timer in watchdogs:
+                timer.cancel()
+                timer.join()
+            for child in children:
+                if child.poll() is None:
+                    real_killpg(child.pid, signal.SIGKILL)
+                child.wait(timeout=5)
+                child.stdout.close()
 
 
 if __name__ == '__main__':

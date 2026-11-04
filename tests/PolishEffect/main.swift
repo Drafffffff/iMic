@@ -1,7 +1,70 @@
 import AppKit
+import ApplicationServices
 import XCTest
 
 final class PolishEffectTests: XCTestCase {
+    func testProtectionScanDistinguishesMissingAttributesFromReadFailures() {
+        typealias Attribute = PolishCaptureSafety.Attribute
+        let role = Attribute(value: "AXTextField" as CFString, error: .success)
+        let missing = Attribute(value: nil, error: .attributeUnsupported)
+        let noValue = Attribute(value: nil, error: .noValue)
+        let children = Attribute(value: [] as CFArray, error: .success)
+        let unprotected = Attribute(value: kCFBooleanFalse, error: .success)
+        XCTAssertTrue(PolishCaptureSafety.readableNode(role: role, subrole: missing, protectedContent: unprotected, children: children))
+        XCTAssertTrue(PolishCaptureSafety.readableNode(role: role, subrole: noValue, protectedContent: missing, children: missing))
+        for error in [AXError.cannotComplete, .invalidUIElement, .failure, .apiDisabled] {
+            let failed = Attribute(value: nil, error: error)
+            // A readable role does not prove that an unread child tree is empty,
+            // or that inaccessible protection/subrole flags are false.
+            XCTAssertFalse(PolishCaptureSafety.readableNode(role: role, subrole: missing, protectedContent: unprotected, children: failed))
+            XCTAssertFalse(PolishCaptureSafety.readableNode(role: role, subrole: failed, protectedContent: unprotected, children: children))
+            XCTAssertFalse(PolishCaptureSafety.readableNode(role: role, subrole: missing, protectedContent: failed, children: children))
+        }
+        XCTAssertFalse(PolishCaptureSafety.readableNode(role: missing, subrole: missing, protectedContent: missing, children: missing))
+        XCTAssertFalse(PolishCaptureSafety.readableNode(role: role, subrole: missing, protectedContent: unprotected,
+            children: Attribute(value: "not an AX children array" as CFString, error: .success)))
+        XCTAssertFalse(PolishCaptureSafety.readableNode(role: role, subrole: missing, protectedContent: unprotected,
+            children: Attribute(value: ["not an AX element"] as CFArray, error: .success)))
+    }
+
+    func testBatchedAXErrorsPreserveFailureReason() throws {
+        for expected in [AXError.cannotComplete, .invalidUIElement, .attributeUnsupported, .noValue] {
+            var raw = expected
+            let encoded = try XCTUnwrap(AXValueCreate(.axError, &raw))
+            let decoded = PolishCaptureSafety.Attribute.batched(encoded)
+            XCTAssertEqual(decoded.error, expected)
+            XCTAssertNil(decoded.value)
+        }
+        let role = PolishCaptureSafety.Attribute.batched("AXTextField" as CFString)
+        XCTAssertEqual(role.error, .success)
+        XCTAssertEqual(role.value as? String, "AXTextField")
+    }
+
+    func testCaptureRejectsFallbackWindowOutsideScannedRoot() throws {
+        let root = CGRect(x: 100, y: 100, width: 600, height: 400)
+        let overlapping = root.offsetBy(dx: 30, dy: 20)
+        // choose intentionally supports a geometry fallback for AX animation;
+        // that fallback must never inherit a different window's screenshot trust.
+        let selected = try XCTUnwrap(PolishWindowSelection.choose([
+            .init(id: 7, pid: 42, frame: overlapping, layer: 0, visible: true)
+        ], pid: 42, preferred: root))
+        XCTAssertFalse(PolishCaptureSafety.matchesScannedWindow(selected: selected.frame, scanned: root))
+        XCTAssertFalse(PolishCaptureSafety.matchesScannedWindow(selected: root, scanned: nil))
+        XCTAssertTrue(PolishCaptureSafety.matchesScannedWindow(selected: root, scanned: root))
+        XCTAssertTrue(PolishCaptureSafety.matchesScannedWindow(selected: root.offsetBy(dx: 0.5, dy: 0.5), scanned: root))
+    }
+
+    func testWindowCaptureRequiresCompleteProtectionScan() {
+        // Captured field is early in the tree; an unread sibling may be a secure field.
+        XCTAssertFalse(PolishCaptureSafety.allowsCapture(hasWindow: true, visited: 2, discovered: 3, protectedSeen: false, unreadableSeen: false))
+        // Both node and time budget exhaustion leave undiscovered protection unknown.
+        XCTAssertFalse(PolishCaptureSafety.allowsCapture(hasWindow: true, visited: 2_000, discovered: 2_001, protectedSeen: false, unreadableSeen: false))
+        XCTAssertFalse(PolishCaptureSafety.allowsCapture(hasWindow: true, visited: 3, discovered: 3, protectedSeen: true, unreadableSeen: false))
+        XCTAssertFalse(PolishCaptureSafety.allowsCapture(hasWindow: true, visited: 3, discovered: 3, protectedSeen: false, unreadableSeen: true))
+        XCTAssertFalse(PolishCaptureSafety.allowsCapture(hasWindow: false, visited: 1, discovered: 1, protectedSeen: false, unreadableSeen: false))
+        XCTAssertTrue(PolishCaptureSafety.allowsCapture(hasWindow: true, visited: 3, discovered: 3, protectedSeen: false, unreadableSeen: false))
+    }
+
     func testOverlayFrameNeverMovesToFitTheVisibleWorkArea() {
         _ = NSApplication.shared
         let rect = NSRect(x: -2568, y: 21, width: 2576, height: 1343)

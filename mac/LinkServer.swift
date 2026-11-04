@@ -26,6 +26,9 @@ final class LinkServer {
         var decoder = LinkFrameDecoder()
         var phase: Phase = .awaitingHello
         var cipher: LinkCipher?
+        // Bind authorization to the exact credential used to derive this session.
+        // A replacement token must not authorize an older pending handshake.
+        var sessionToken: Data?
         var privateKey: Curve25519.KeyAgreement.PrivateKey?
         var peerPublicKey: String?
         var deviceID: String?
@@ -233,7 +236,7 @@ final class LinkServer {
     private func handle(_ frame: LinkFrame, from peer: Peer) throws {
         switch peer.phase {
         case .ready:
-            guard let deviceID = peer.deviceID, store.token(for: deviceID) != nil else {
+            guard hasCurrentToken(peer) else {
                 sendErrorAndClose(peer, "auth", L10n.text("Incorrect pairing code or expired connection"))
                 return
             }
@@ -294,7 +297,7 @@ final class LinkServer {
             guard message.t == "auth",
                   let deviceID = peer.deviceID,
                   message.deviceID == nil || message.deviceID == deviceID,
-                  store.token(for: deviceID) != nil else {
+                  hasCurrentToken(peer) else {
                 sendErrorAndClose(peer, "auth", L10n.text("Device token mismatch"))
                 return
             }
@@ -351,6 +354,7 @@ final class LinkServer {
             // 先用配对密钥确认成功，再切换到长期令牌派生的会话密钥。
             try sendLocked(.paired(macID: store.macID, name: store.macName), to: peer, using: pairCipher)
             peer.cipher = try LinkCrypto.sessionCipher(privateKey: key, peerPublicKey: peerPublic, token: token)
+            peer.sessionToken = token
             becomeReady(peer)
 
         case .awaitingHello:
@@ -387,6 +391,7 @@ final class LinkServer {
                     return
                 }
                 peer.cipher = session
+                peer.sessionToken = token
                 peer.phase = .awaitingAuth
                 try sendPlainLocked(.helloReply(
                     macID: store.macID,
@@ -405,6 +410,11 @@ final class LinkServer {
                 DispatchQueue.main.async { [weak self] in self?.onPairRequest?() }
             }
         }
+    }
+
+    private func hasCurrentToken(_ peer: Peer) -> Bool {
+        guard let deviceID = peer.deviceID, let token = peer.sessionToken else { return false }
+        return store.token(for: deviceID) == token
     }
 
     private func becomeReady(_ peer: Peer) {
@@ -449,6 +459,7 @@ final class LinkServer {
         peer.connection.cancel()
         peer.decoder.reset()
         peer.cipher = nil
+        peer.sessionToken = nil
         peer.privateKey = nil
         if wasActive {
             active = nil

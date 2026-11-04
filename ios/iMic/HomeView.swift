@@ -897,22 +897,21 @@ struct HomeView: View {
                 Spacer()
             }
             ZStack(alignment: .trailing) {
-                HUDLabel(text: "PCM / 16K")
-                    .opacity(hasResultText ? 0 : 1)
-                Button {
-                    Haptics.shared.play(.overlayOpen)
-                    showResult = true
-                } label: {
-                    Text(L10n.text("View result  ›"))
-                        .modifier(InstrumentHint())
-                        .frame(minWidth: 74, minHeight: 32)
-                        .contentShape(Rectangle())
+                if hasResultText {
+                    Button {
+                        Haptics.shared.play(.overlayOpen)
+                        showResult = true
+                    } label: {
+                        Text(L10n.text("View result  ›"))
+                            .modifier(InstrumentHint())
+                            .frame(minWidth: 74, minHeight: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L10n.text("View recognition result"))
+                } else {
+                    HUDLabel(text: "PCM / 16K")
                 }
-                .buttonStyle(.plain)
-                .opacity(hasResultText ? 1 : 0)
-                .allowsHitTesting(hasResultText)
-                .accessibilityHidden(!hasResultText)
-                .accessibilityLabel(L10n.text("View recognition result"))
             }
             .frame(width: 98, height: 32, alignment: .trailing)
         }

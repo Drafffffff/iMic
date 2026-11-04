@@ -28,6 +28,7 @@ NETWORK = re.compile(
     r'Record not found|Could not find base64 encoded ticket', re.I)
 AUTH = re.compile(r'\b(?:401|403)\b|unauthorized|forbidden|invalid credentials|'
                   r'No Keychain .* item found|authentication failed', re.I)
+CANCEL_GRACE_SECONDS = 5
 
 
 def network_error(output):
@@ -54,12 +55,24 @@ def run(command, timeout=120, log=None):
         data += f'\nNetwork command timeout after {timeout} seconds\n'.encode()
         code = 124
     except BaseException:
-        if process.poll() is None:
+        # The group may still contain descendants after its leader has exited.
+        # Drain output while waiting, and never let a TERM-resistant child make
+        # cancellation wait forever (or block on a full stdout pipe).
+        try:
             try:
                 os.killpg(process.pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
-            process.wait()
+            try:
+                process.communicate(timeout=CANCEL_GRACE_SECONDS)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.communicate(timeout=CANCEL_GRACE_SECONDS)
+        finally:
+            process.stdout.close()
         raise
     output = data.decode(errors='replace')
     if log:

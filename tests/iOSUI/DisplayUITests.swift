@@ -21,9 +21,17 @@ final class DisplayUITests:XCTestCase{
         app.buttons["设置"].tap()
         XCTAssertTrue(app.buttons["关闭"].waitForExistence(timeout:8))
         let crt=app.buttons["荧光 CRT"]
-        for _ in 0..<4{
-            if crt.isHittable && app.scrollViews.firstMatch.frame.insetBy(dx:0,dy:20).contains(crt.frame){break}
-            app.scrollViews.firstMatch.swipeUp()
+        let scroll=app.scrollViews.firstMatch
+        for _ in 0..<12{
+            let viewport=scroll.frame.insetBy(dx:0,dy:20)
+            if crt.isHittable && viewport.contains(CGPoint(x:crt.frame.midX,y:crt.frame.midY)){break}
+            // Settings can grow above DISPLAY. Move a bounded distance toward
+            // its actual center rather than flinging past it a fixed four times.
+            // SwiftUI can round the control border half a point past the scroll edge.
+            let movingUp=crt.frame.midY>viewport.midY
+            let start=scroll.coordinate(withNormalizedOffset:CGVector(dx:0.5,dy:movingUp ? 0.75:0.3))
+            let end=scroll.coordinate(withNormalizedOffset:CGVector(dx:0.5,dy:movingUp ? 0.4:0.65))
+            start.press(forDuration:0.05,thenDragTo:end,withVelocity:300,thenHoldForDuration:0.1)
         }
         XCTAssertTrue(crt.isHittable)
         record(app,"Display controls before tap")
@@ -77,7 +85,10 @@ final class DisplayUITests:XCTestCase{
         record(app,"After upward clear gesture")
         XCTAssertTrue(app.staticTexts["按住底部横条开始说话"].waitForExistence(timeout:8),
                       "Entering the top drop zone must clear the preview result and return to idle")
-        XCTAssertFalse(app.buttons["查看识别结果"].isHittable)
+        let cleared=XCTNSPredicateExpectation(predicate:NSPredicate(format:"exists == false"),
+            object:app.buttons["查看识别结果"])
+        XCTAssertEqual(XCTWaiter.wait(for:[cleared],timeout:5),.completed,
+            "Clearing must remove the result entry from accessibility after SwiftUI updates")
     }
 
     private func barLuminance(in app:XCUIApplication)->Double{
