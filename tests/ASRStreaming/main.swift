@@ -4,14 +4,34 @@ import XCTest
 private final class RecognitionTransport: ASRMessageTransport {
     private var receiver: ((Result<Data, Error>) -> Void)?
     private(set) var taskID = ""
+    var deferSend = false
+    private var pendingSends: [() -> Void] = []
+    private(set) var sentEvents: [String] = []
+    private(set) var sentAudioChunks: [Data] = []
     func resume() {}
     func send(_ message: ASRWireMessage, completion: @escaping (Error?) -> Void) {
-        if case .text(let text) = message,
-           let data = text.data(using: .utf8),
-           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let header = object["header"] as? [String: Any],
-           let id = header["task_id"] as? String { taskID = id }
-        completion(nil)
+        switch message {
+        case .text(let text):
+            if let data = text.data(using: .utf8),
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let header = object["header"] as? [String: Any] {
+                if let id = header["task_id"] as? String { taskID = id }
+                if let action = header["action"] as? String { sentEvents.append(action) }
+            }
+        case .audio(let pcm):
+            sentEvents.append("audio:\(pcm.count)")
+            sentAudioChunks.append(pcm)
+        }
+        if deferSend {
+            pendingSends.append { completion(nil) }
+        } else {
+            completion(nil)
+        }
+    }
+    func flushNextSend() {
+        guard !pendingSends.isEmpty else { return }
+        let next = pendingSends.removeFirst()
+        next()
     }
     func receive(completion: @escaping (Result<Data, Error>) -> Void) { receiver = completion }
     // Retain a queued receive so cancellation is exercised against an in-flight callback.
@@ -164,6 +184,63 @@ final class ASRStreamingTests: XCTestCase {
         XCTAssertEqual(failures.count, 1)
         XCTAssertEqual(confirmed, [])
         XCTAssertEqual(finals, [])
+    }
+    func testAppendQueuesAndDrainsAllAudioBeforeFinishTaskIsSent() throws {
+        let queuedTransport = RecognitionTransport()
+        queuedTransport.deferSend = true
+        let asr = BailianASR(transportFactory: { _ in queuedTransport })
+        var finalTranscript: String?
+        asr.onFinal = { text, _ in finalTranscript = text }
+        asr.start(key: "sk-isolated-test", endpoint: ASRConfiguration.defaultEndpoint, model: ASRConfiguration.model)
+        // Queue 4,000 bytes (> 3,200 chunk size) before run-task finishes and before task-started arrives.
+        let pcm1 = Data(repeating: 0x11, count: 2000)
+        let pcm2 = Data(repeating: 0x22, count: 2000)
+        asr.append(pcm1)
+        asr.append(pcm2)
+        asr.end()
+        XCTAssertEqual(queuedTransport.sentEvents, ["run-task"])
+        queuedTransport.flushNextSend() // Finish run-task send; still waiting for task-started.
+        XCTAssertEqual(queuedTransport.sentEvents, ["run-task"])
+        try queuedTransport.event("task-started")
+        // First 3,200-byte chunk is sent immediately upon task-started; finish-task must wait.
+        XCTAssertEqual(queuedTransport.sentEvents, ["run-task", "audio:3200"])
+        queuedTransport.flushNextSend()
+        // Remaining 800-byte chunk is sent next; finish-task still not sent until audio finishes.
+        XCTAssertEqual(queuedTransport.sentEvents, ["run-task", "audio:3200", "audio:800"])
+        queuedTransport.flushNextSend()
+        // Now that the audio queue is drained, finish-task is sent.
+        XCTAssertEqual(queuedTransport.sentEvents, ["run-task", "audio:3200", "audio:800", "finish-task"])
+        XCTAssertEqual(queuedTransport.sentAudioChunks.reduce(Data(), +), pcm1 + pcm2)
+        queuedTransport.flushNextSend()
+        try queuedTransport.sentence(1, "完整排队上传。", ended: true)
+        try queuedTransport.event("task-finished")
+        XCTAssertEqual(finalTranscript, "完整排队上传。")
+    }
+    func testTaskFinishedRejectsDiscontiguousSentenceGap() throws {
+        try transport.sentence(1, "第一句。", ended: true)
+        try transport.sentence(3, "第三句。", ended: true)
+        XCTAssertEqual(confirmed, ["第一句。"])
+        try finish()
+        XCTAssertEqual(finals, [])
+        XCTAssertEqual(failures.count, 1)
+        XCTAssertEqual(recognizer.failureCode, "asr_early")
+        XCTAssertNil(recognizer.onPartial)
+        XCTAssertNil(recognizer.onFinal)
+        XCTAssertNil(recognizer.onError)
+
+        // Also reject when sentence_id=1 is missing (e.g. only sentence_id=2 arrived).
+        let secondTransport = RecognitionTransport()
+        let secondASR = BailianASR(transportFactory: { _ in secondTransport })
+        var secondErrors: [String] = []
+        secondASR.onError = { secondErrors.append($0) }
+        secondASR.start(key: "sk-isolated-test", endpoint: ASRConfiguration.defaultEndpoint, model: ASRConfiguration.model)
+        try secondTransport.event("task-started")
+        try secondTransport.sentence(2, "缺了第一句。", ended: true)
+        secondASR.end()
+        try secondTransport.event("task-finished")
+        XCTAssertEqual(secondErrors.count, 1)
+        XCTAssertEqual(secondASR.failureCode, "asr_early")
+        XCTAssertNil(secondASR.onError)
     }
 }
 

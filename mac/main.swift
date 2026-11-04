@@ -11,6 +11,12 @@ private let disableInput = headlessMode || launchArguments.contains("--no-input"
 private let portArgument = launchArguments.first { $0.hasPrefix("--port=") }
     .flatMap { UInt16($0.dropFirst("--port=".count)) }
 
+enum SingleInstance {
+    static var reopenNotification: Notification.Name {
+        Notification.Name("com.drafffffff.imic.reopen.\(getuid())")
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = PairingStore(directory: previewMode == nil ? PairingStore.defaultDirectory : FileManager.default.temporaryDirectory.appendingPathComponent("iMic-preview-\(UUID().uuidString)"))
     lazy var link = LinkServer(store: store, port: portArgument)
@@ -218,10 +224,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard settingsWindow?.isVisible == true, let coordinator = settingsCoordinator else { return .terminateNow }
+        let allowed = coordinator.confirmClose(
+            onAllow: { sender.reply(toApplicationShouldTerminate: true) },
+            onCancel: { sender.reply(toApplicationShouldTerminate: false) }
+        )
+        return allowed ? .terminateNow : .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         watchdog?.invalidate()
         asr?.cancel()
         link.stop()
+        bleBridge?.stop()
     }
 
     // MARK: - Link
@@ -707,10 +723,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, self.currentSession == session else { return }
             self.showCloudFailure(failure, provider: .bailian, recognition: true)
         }
-        recognizer.onError = { [weak self] message in
+        recognizer.onError = { [weak self, weak recognizer] message in
             guard let self = self, self.currentSession == session else { return }
             if self.cloudFailure == nil { self.showCloudFailure(.service, provider: .bailian, recognition: true) }
-            self.abortSession(notifyPhone: true, code: recognizer.failureCode, message: message)
+            self.abortSession(notifyPhone: true, code: recognizer?.failureCode ?? "asr", message: message)
         }
         recognizer.start(
             key: key.stringValue,
@@ -1284,6 +1300,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func rotatePairCode() {
         store.rotateCode()
         setStatus(L10n.text("New pairing code generated"))
+        settingsCoordinator?.refreshPairCode()
         refreshUI()
     }
 
@@ -1502,6 +1519,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func quit() {
+        if settingsWindow?.isVisible == true, let coordinator = settingsCoordinator {
+            if coordinator.confirmClose(onAllow: { [weak self] in self?.performQuit() }) {
+                performQuit()
+            }
+            return
+        }
+        performQuit()
+    }
+
+    private func performQuit() {
         asr?.cancel()
         link.stop()
         bleBridge?.stop()
@@ -1724,7 +1751,7 @@ if headlessMode || previewMode != nil {
     let instanceURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/iMic/instance.lock")
     let instanceLock = SingleInstanceLock(url: instanceURL)
-    let reopenNotification = Notification.Name("com.drafffffff.imic.reopen.\(getuid())")
+    let reopenNotification = SingleInstance.reopenNotification
     do {
         if try !instanceLock.acquire() {
             if let pid = instanceLock.ownerPID {
@@ -1748,8 +1775,20 @@ if headlessMode || previewMode != nil {
     let app = NSApplication.shared
     let delegate = AppDelegate()
     app.delegate = delegate
+    DistributedNotificationCenter.default().addObserver(
+        delegate,
+        selector: #selector(AppDelegate.reopenFromAnotherInstance(_:)),
+        name: reopenNotification,
+        object: String(ProcessInfo.processInfo.processIdentifier),
+        suspensionBehavior: .deliverImmediately
+    )
     withExtendedLifetime(delegate) {
         app.run()
     }
+    DistributedNotificationCenter.default().removeObserver(
+        delegate,
+        name: reopenNotification,
+        object: String(ProcessInfo.processInfo.processIdentifier)
+    )
     instanceLock.release()
 }

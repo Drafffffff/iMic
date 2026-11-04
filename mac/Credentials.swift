@@ -43,7 +43,7 @@ struct ShellCredentials {
     }
     static func validToken(_ key:String)->Bool {
         // A Bearer token is a literal header value, never shell or header syntax.
-        !key.isEmpty && key.unicodeScalars.allSatisfy {
+        (1...4096).contains(key.utf8.count) && key.unicodeScalars.allSatisfy {
             $0.value>32 && $0.value<127 && $0 != "'"
         }
     }
@@ -122,17 +122,27 @@ struct CredentialFile {
         var version=1
         var keys:[String:String]=[:]
     }
+    private func readForModification()throws->Stored {
+        let data:Data
+        do {
+            data=try Data(contentsOf:url)
+        } catch let error as NSError where error.domain==NSCocoaErrorDomain && error.code==NSFileReadNoSuchFileError {
+            return Stored()
+        }
+        guard data.count<=64_000 else {
+            throw NSError(domain:"iMic.Credentials",code:1)
+        }
+        return try JSONDecoder().decode(Stored.self,from:data)
+    }
     private func read()->Stored {
-        guard let data=try? Data(contentsOf:url),data.count<=64_000,
-              let stored=try? JSONDecoder().decode(Stored.self,from:data) else{return Stored()}
-        return stored
+        (try? readForModification()) ?? Stored()
     }
     func key(_ account:String)->String? {
         read().keys[account].flatMap{$0.isEmpty ? nil:$0}
     }
     /// An empty key removes iMic's own entry; external sources are never touched.
     func set(_ key:String?,for account:String)throws {
-        var stored=read()
+        var stored=try readForModification()
         if let key=key,!key.isEmpty {stored.keys[account]=key} else {stored.keys.removeValue(forKey:account)}
         let directory=url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])

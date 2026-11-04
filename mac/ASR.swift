@@ -96,6 +96,7 @@ final class BailianASR {
     // Interim hypotheses and confirmed prefixes are separate callbacks; the caller
     // chooses its preview/input policy. onFinal represents the complete utterance.
     var onPreview: ((String)->Void)?
+    var onPartial: ((String)->Void)? { get { onPreview } set { onPreview = newValue } }
     var onConfirmed: ((String)->Void)?
     var previewEnabled = false
     var onFinal: ((String,Double)->Void)?
@@ -297,13 +298,17 @@ final class BailianASR {
             }
         case "task-finished":
             guard finishSent else{fail(L10n.text("Recognition ended early. Please retry."), code: "asr_early");return}
-            let text=results.keys.sorted().compactMap{results[$0]}.joined(),now=Date()
+            guard confirmedThrough == (results.keys.max() ?? 0) else {
+                fail(L10n.text("Recognition ended early. Please retry."), code: "asr_early"); return
+            }
+            let text=confirmedText,now=Date()
             IMicLog.write("mac.asr", "task finished chars=\(text.count) sentences=\(results.count) queued=\(queuedBytes)")
             let latency=endAt.map{now.timeIntervalSince($0)*1000} ?? 0
+            let finalCallback = onFinal
             onMetrics?(ASRMetrics(connectionMS:readyAt.map{$0.timeIntervalSince(startedAt)*1000} ?? 0,
                 queuedAtEndMS:queuedAtEndMS,uploadTailMS:finishAt.flatMap{finish in endAt.map{finish.timeIntervalSince($0)*1000}} ?? 0,
                 serverFinalMS:finishAt.map{now.timeIntervalSince($0)*1000} ?? 0,endToFinalMS:latency,previews:previewCount))
-            cancel();onFinal?(text,latency)
+            cancel();finalCallback?(text,latency)
         case "task-failed":
             // Display bounded code identifiers only; never echo error_message
             // or request payloads, which can contain credential/audio data.
@@ -321,6 +326,7 @@ final class BailianASR {
         cancelled=true;timer?.invalidate();timer=nil;startupTimer?.invalidate();startupTimer=nil
         completionDeadline=nil;queue.removeAll();queueHead=0;queueOffset=0;queuedBytes=0
         transport?.cancel();transport=nil
+        onPartial=nil;onPreview=nil;onConfirmed=nil;onFinal=nil;onError=nil;onFailure=nil;onMetrics=nil
     }
     private func failTransport(_ error: Error) {
         guard !cancelled else { return }
@@ -329,5 +335,12 @@ final class BailianASR {
         onFailure?(issue)
         fail(issue.title(service: L10n.text("Model Studio")), code: issue.linkCode)
     }
-    private func fail(_ message:String, code: String = "asr"){guard !cancelled else{return};IMicLog.write("mac.asr", "fail reason=\(message) queued=\(queuedBytes)");failureCode = code;cancel();onError?(message)}
+    private func fail(_ message:String, code: String = "asr"){
+        guard !cancelled else{return}
+        IMicLog.write("mac.asr", "fail reason=\(message) queued=\(queuedBytes)")
+        failureCode = code
+        let errorCallback = onError
+        cancel()
+        errorCallback?(message)
+    }
 }
