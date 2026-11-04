@@ -1520,7 +1520,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func quit() {
         if settingsWindow?.isVisible == true, let coordinator = settingsCoordinator {
-            _ = coordinator.confirmClose(onAllow: { [weak self] in self?.performQuit() })
+            if coordinator.confirmClose(onAllow: { [weak self] in self?.performQuit() }) {
+                performQuit()
+            }
             return
         }
         performQuit()

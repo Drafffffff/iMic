@@ -714,7 +714,9 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             let firstKey = $0.id.hasSuffix(".key"), secondKey = $1.id.hasSuffix(".key")
             return firstKey == secondKey ? $0.id < $1.id : firstKey
         }
-        guard !dirty.isEmpty else { onAllow?(); return true }
+        // A true return is synchronous approval. Callbacks are only for a sheet
+        // that deferred the decision (including NSApplication's terminateLater).
+        guard !dirty.isEmpty else { return true }
         let alert = NSAlert()
         alert.messageText = dirty.count == 1 ? (dirty[0].id == "bailian.key" ? L10n.text("Your Model Studio Key has not been saved.") : L10n.text("%@ has not been saved.", L10n.argument(dirty[0].title))) : L10n.text("%@ settings have not been saved.", L10n.argument(dirty.count))
         alert.informativeText = L10n.text("Settings are verified before saving. Drafts are kept if verification fails.")

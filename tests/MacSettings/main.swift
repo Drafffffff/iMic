@@ -423,6 +423,10 @@ allViews(settings.window.attachedSheet!.contentView!).compactMap { $0 as? NSButt
 wait(until: { settings.window.attachedSheet == nil && closeCancelled })
 check(!closeAllowed && closeCancelled && key.dirty, "Cancelling close sheet invokes onCancel and preserves draft")
 key.reset()
+var synchronousCloseCallback = false
+check(settings.confirmClose(onAllow: { synchronousCloseCallback = true }), "Clean settings approve closing synchronously")
+check(!synchronousCloseCallback, "Synchronous approval must not send a terminateLater reply")
+check(app.applicationShouldTerminate(NSApp) == .terminateNow, "Clean settings do not defer application termination")
 settings.window.orderOut(nil)
 print("Mac updater settings, menu and recording / typing / clearing / setup gates passed")
 
