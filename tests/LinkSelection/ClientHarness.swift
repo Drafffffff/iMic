@@ -46,6 +46,29 @@ extension LinkClient {
         }
     }
 
+    func selectionTestRejectedIDs() async -> Set<String> {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: self.rejectedPairingIDs) }
+        }
+    }
+
+    func selectionTestRejectsPostReadyPlaintext() async -> Bool {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                guard let payload = try? LinkMessage.error("auth", "spoofed").encoded() else {
+                    continuation.resume(returning: false)
+                    return
+                }
+                do {
+                    try self.handle(LinkFrame(kind: .json, payload: payload))
+                    continuation.resume(returning: false)
+                } catch {
+                    continuation.resume(returning: true)
+                }
+            }
+        }
+    }
+
     func selectionTestStop() async {
         await withCheckedContinuation { continuation in
             queue.async {

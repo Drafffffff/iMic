@@ -168,6 +168,19 @@ Task { @MainActor in
         try require(proxy.accepted==accepted && losses==0,"Refreshing discovery replaced the healthy voice transport")
         healthy.cancelSession(871)
         print("PASS foreground refreshes discovery while preserving healthy encrypted voice connection")
+        let beforeWatchdog = readyCount
+        await healthy.resumeTestAgeLastReceive(41)
+        try await until("idle watchdog checks healthy encrypted transport") { readyCount > beforeWatchdog && healthy.phase.isReady }
+        try require(proxy.accepted == accepted && losses == 0, "Idle watchdog replaced a healthy socket")
+        let connectionBeforeBlackhole = await healthy.resumeTestConnectionIdentity()
+        let readyBeforeBlackhole = readyCount
+        proxy.blackhole()
+        try await Task.sleep(for: .milliseconds(200))
+        await healthy.resumeTestAgeLastReceive(41)
+        try await until("idle watchdog replaces blackholed transport", timeout: 6) { readyCount > readyBeforeBlackhole && healthy.phase.isReady }
+        let connectionAfterBlackhole = await healthy.resumeTestConnectionIdentity()
+        try require(connectionAfterBlackhole != nil && connectionAfterBlackhole != connectionBeforeBlackhole, "Idle watchdog retained the blackholed socket")
+        print("PASS idle receive watchdog keeps healthy sockets and reauthenticates blackholed sockets")
     } catch {failures+=1;print("FAIL healthy discovery: \(error)")}
     do {
         await healthy.resumeTestFailBrowserWhileReady()
@@ -176,6 +189,38 @@ Task { @MainActor in
         print("PASS browser failure cannot overwrite a healthy link's ready state")
     } catch {failures+=1;print("FAIL discovery presentation: \(error)")}
     await healthy.resumeTestStop()
-    print("Lifecycle regressions: \(6-failures)/6 passed")
+    let lossHandoff=client()
+    do {
+        var lostDelivered=false
+        lossHandoff.onLost={lostDelivered=true}
+        try require(lossHandoff.resumeTestConnectionLossHandoffBlocksAutoConnect(mac),"Bonjour autoConnect bypassed connectionLost main-thread handoff")
+        lossHandoff.activate()
+        try await until("loss callback delivered after handoff") {lostDelivered}
+        let bgCleared = await lossHandoff.resumeTestBackgroundCleared()
+        try require(bgCleared,"activate during loss handoff left backgroundAt set")
+        let ble = await lossHandoff.resumeTestBeginBLEProbe(startedOffset: 0, initialTimeout: 1.5)
+        try await Task.sleep(for: .milliseconds(900))
+        ble.onWriteProgress?()
+        try await Task.sleep(for: .milliseconds(900))
+        ble.onWriteProgress?()
+        try await Task.sleep(for: .milliseconds(300))
+        let aliveAfterProgress = await lossHandoff.resumeTestBLEProbeState()
+        try require(aliveAfterProgress.ready && aliveAfterProgress.probing, "BLE probe timed out prematurely at 1.5s despite write progress")
+        await lossHandoff.resumeTestDeliverSealedDuringProbe()
+        let completedState = await lossHandoff.resumeTestBLEProbeState()
+        try require(completedState.ready && !completedState.probing, "Incoming sealed frame did not complete active BLE probe")
+        let bleLongDrain = await lossHandoff.resumeTestBeginBLEProbe(startedOffset: 60, initialTimeout: 0.2)
+        bleLongDrain.onWriteProgress?()
+        try await Task.sleep(for: .milliseconds(2100))
+        let longDrainState = await lossHandoff.resumeTestBLEProbeState()
+        try require(longDrainState.ready && longDrainState.probing, "Acknowledged BLE upload was disconnected by total elapsed probe time")
+        try await until("BLE probe times out after 10s without acknowledged progress", timeout: 10) {
+            let state = await lossHandoff.resumeTestBLEProbeState()
+            return !state.ready && !state.probing
+        }
+        print("PASS connectionLost handoff gates autoConnect, clears backgroundAt on activate, and BLE probe times out only when progress stalls")
+    } catch {failures+=1;print("FAIL loss handoff / BLE probe: \(error)")}
+    await lossHandoff.resumeTestStop()
+    print("Lifecycle regressions: \(7-failures)/7 passed")
 }
 dispatchMain()
