@@ -176,6 +176,37 @@ Task { @MainActor in
         print("PASS browser failure cannot overwrite a healthy link's ready state")
     } catch {failures+=1;print("FAIL discovery presentation: \(error)")}
     await healthy.resumeTestStop()
-    print("Lifecycle regressions: \(6-failures)/6 passed")
+    let lossHandoff=client()
+    do {
+        var lostDelivered=false
+        lossHandoff.onLost={lostDelivered=true}
+        try require(lossHandoff.resumeTestConnectionLossHandoffBlocksAutoConnect(mac),"Bonjour autoConnect bypassed connectionLost main-thread handoff")
+        lossHandoff.activate()
+        try await until("loss callback delivered after handoff") {lostDelivered}
+        let bgCleared = await lossHandoff.resumeTestBackgroundCleared()
+        try require(bgCleared,"activate during loss handoff left backgroundAt set")
+        let ble = await lossHandoff.resumeTestBeginBLEProbe(startedOffset: 0, initialTimeout: 1.5)
+        try await Task.sleep(for: .milliseconds(900))
+        ble.onWriteProgress?()
+        try await Task.sleep(for: .milliseconds(900))
+        ble.onWriteProgress?()
+        try await Task.sleep(for: .milliseconds(300))
+        let aliveAfterProgress = await lossHandoff.resumeTestBLEProbeState()
+        try require(aliveAfterProgress.ready && aliveAfterProgress.probing, "BLE probe timed out prematurely at 1.5s despite write progress")
+        await lossHandoff.resumeTestDeliverSealedDuringProbe()
+        let completedState = await lossHandoff.resumeTestBLEProbeState()
+        try require(completedState.ready && !completedState.probing, "Incoming sealed frame did not complete active BLE probe")
+        let bleCapped = await lossHandoff.resumeTestBeginBLEProbe(startedOffset: 9.6, initialTimeout: 1.5)
+        bleCapped.onWriteProgress?()
+        try await Task.sleep(for: .milliseconds(250))
+        bleCapped.onWriteProgress?() // Past 10s cap: must not postpone further.
+        try await until("BLE probe outer 10s cap fires timeout", timeout: 1.5) {
+            let state = await lossHandoff.resumeTestBLEProbeState()
+            return !state.ready && !state.probing
+        }
+        print("PASS connectionLost handoff gates autoConnect, clears backgroundAt on activate, and BLE probe timer respects progress + 10s cap")
+    } catch {failures+=1;print("FAIL loss handoff / BLE probe: \(error)")}
+    await lossHandoff.resumeTestStop()
+    print("Lifecycle regressions: \(7-failures)/7 passed")
 }
 dispatchMain()

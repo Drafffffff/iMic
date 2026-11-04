@@ -139,24 +139,44 @@ Task { @MainActor in
 
         for wrongToken in [false,true] {
             try seed(preferred:0,paired:[0,1])
-            if wrongToken { try check(TokenStore.save(Data(repeating:99,count:32),for:macs[0].id),"Cannot seed invalid token") }
+            let seededToken = wrongToken ? Data(repeating:99,count:32) : tokens[0]
+            if wrongToken { try check(TokenStore.save(seededToken,for:macs[0].id),"Cannot seed invalid token") }
             else { stores[0].forgetAll() }
             client=makeClient()
             var prompted=false
             let observer=client.$phase.sink { if case .needsCode=$0 { prompted=true } }
             await client.selectionTestDiscover([macs[0],macs[1]],begin:true)
-            try await until("revoked token removed") { TokenStore.load(for:macs[0].id)==nil }
+            var rejected = false
+            for _ in 0..<200 {
+                if (await client.selectionTestRejectedIDs()).contains(macs[0].id) { rejected = true; break }
+                try await Task.sleep(for:.milliseconds(20))
+            }
+            try check(rejected,"Rejected handshake did not mark target as rejected for automatic retry")
+            try check(TokenStore.load(for:macs[0].id)==seededToken,"Unauthenticated plaintext rejection deleted stored long-term token")
             try await Task.sleep(for:.milliseconds(800))
             try check(!client.phase.isReady && !prompted && !servers[1].isConnected,"Revocation prompted pairing or redirected to another Mac")
             observer.cancel()
+            if !wrongToken {
+                // Simulate recovering to the real Mac after a spoofed unauthenticated pair_required:
+                // the preserved long-term token must still authenticate without re-pairing.
+                try stores[0].trust(deviceID: deviceID, name: "Selection fixture", token: tokens[0])
+                client.connect(to:macs[0])
+                try await until("preserved token authenticates with real Mac") { client.phase.isReady }
+                try check(TokenStore.load(for:macs[0].id)==tokens[0],"Preserved token was not used")
+                let rejectedPlain = await client.selectionTestRejectsPostReadyPlaintext()
+                try check(rejectedPlain,"Accepted plaintext frame after ready")
+                try check(TokenStore.load(for:macs[0].id)==tokens[0],"Post-ready plaintext frame modified token")
+                stores[0].forgetAll()
+            }
             client.connect(to:macs[0])
             try await until("explicit retry can re-pair revoked target") { client.pairing }
             client.submitCode(stores[0].currentCode())
             try await until("revoked target manually paired again") { client.phase.isReady }
             try check(client.selectedMacID==macs[0].id && !servers[1].isConnected,"Explicit repair changed target")
+            try check(TokenStore.load(for:macs[0].id) != nil && TokenStore.load(for:macs[0].id) != seededToken,"Explicit re-pairing did not replace stored token")
             await client.selectionTestStop()
         }
-        print("PASS rejected hello/auth tokens never pair or redirect automatically")
+        print("PASS rejected hello/auth tokens preserve stored token, reject post-ready plaintext, and allow explicit re-pair")
 
         try seed(preferred:0,paired:[0,1,2],recent:[macs[0].id:30])
         UserDefaults.standard.removeObject(forKey:"imic.lastConnectedMacID")

@@ -42,6 +42,7 @@ final class BLELinkClient: NSObject, CBCentralManagerDelegate, CBPeripheralDeleg
     var onConnected: ((String) -> Void)?
     var onData: ((Data) -> Void)?
     var onLost: (() -> Void)?
+    var onWriteProgress: (() -> Void)?
 
     func start(acceptedMacIDs: [String]) {
         queue.async { [self] in
@@ -146,6 +147,7 @@ final class BLELinkClient: NSObject, CBCentralManagerDelegate, CBPeripheralDeleg
         } else {
             pending[head] = item
         }
+        onWriteProgress?()
         reportTransfer()
     }
 
