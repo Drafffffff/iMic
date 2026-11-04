@@ -75,6 +75,15 @@ final class LinkServer {
     init(store: PairingStore, port: UInt16? = nil) {
         self.store = store
         self.fixedPort = port
+        let previousRevoke = store.onRevoke
+        store.onRevoke = { [weak self] deviceID in
+            previousRevoke?(deviceID)
+            if let deviceID {
+                self?.disconnect(deviceID: deviceID)
+            } else {
+                self?.disconnect()
+            }
+        }
     }
 
     func start() {
@@ -93,6 +102,17 @@ final class LinkServer {
     /// 主动断开当前 iPhone（例如用户在设置里解除配对）。
     func disconnect() {
         queue.async { self.closeAllLocked(notify: true) }
+    }
+
+    func disconnect(deviceID: String) {
+        queue.async {
+            for peer in self.pending where peer.deviceID == deviceID {
+                self.closeLocked(peer, notify: false)
+            }
+            if let active = self.active, active.deviceID == deviceID {
+                self.closeLocked(active, notify: true)
+            }
+        }
     }
 
     private func startLocked() {
@@ -213,6 +233,10 @@ final class LinkServer {
     private func handle(_ frame: LinkFrame, from peer: Peer) throws {
         switch peer.phase {
         case .ready:
+            guard let deviceID = peer.deviceID, store.token(for: deviceID) != nil else {
+                sendErrorAndClose(peer, "auth", L10n.text("Incorrect pairing code or expired connection"))
+                return
+            }
             guard frame.kind != .json else {
                 sendErrorAndClose(peer, "protocol_plaintext", L10n.text("Plaintext frames are not accepted after connection"))
                 return
@@ -267,12 +291,14 @@ final class LinkServer {
                 return
             }
             IMicLog.write("mac.link", "handshake message=\(message.t)")
-            guard message.t == "auth", message.deviceID == nil || message.deviceID == peer.deviceID else {
+            guard message.t == "auth",
+                  let deviceID = peer.deviceID,
+                  message.deviceID == nil || message.deviceID == deviceID,
+                  store.token(for: deviceID) != nil else {
                 sendErrorAndClose(peer, "auth", L10n.text("Device token mismatch"))
                 return
             }
             becomeReady(peer)
-
         case .awaitingPair:
             guard frame.kind == .sealedJSON,
                   let key = peer.privateKey,

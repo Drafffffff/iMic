@@ -129,10 +129,12 @@ public struct LinkFrameDecoder {
             frames.append(LinkFrame(kind: kind, payload: Data(buffer[start..<(start + length)])))
             offset = start + length
         }
-        if offset == buffer.count {
-            buffer.removeAll(keepingCapacity: true)
-        } else if offset >= 4096 {
-            buffer.removeFirst(offset)
+        if offset > 0 {
+            if offset == buffer.count {
+                buffer.removeAll(keepingCapacity: true)
+            } else {
+                buffer.removeFirst(offset)
+            }
         }
         return frames
     }

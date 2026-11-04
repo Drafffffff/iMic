@@ -49,8 +49,26 @@ if [ "${IMIC_KEEP_SIMULATOR:-0}" != 1 ]; then
   xcrun simctl terminate booted "$IMIC_SIM_BUNDLE_ID" 2>/dev/null || true
 fi
 
+MAC_BIN="${IMIC_BUILD_DIR:-$ROOT/build/mac.noindex}/iMic.app/Contents/MacOS/iMic"
+if [ "${IMIC_SKIP_MAC_BUILD:-0}" != 1 ]; then
+  NEED_MAC_BUILD=0
+  if [ ! -x "$MAC_BIN" ]; then
+    NEED_MAC_BUILD=1
+  else
+    for src in "$ROOT"/mac/*.swift "$ROOT"/shared/*.swift; do
+      if [ "$src" -nt "$MAC_BIN" ]; then
+        NEED_MAC_BUILD=1
+        break
+      fi
+    done
+  fi
+  if [ "$NEED_MAC_BUILD" -eq 1 ]; then
+    "$ROOT/scripts/build-mac.sh"
+  fi
+fi
+
 echo "==> 3/4 启动无界面 Mac（端口 ${PORT}，配对码 ${CODE}）"
-"${IMIC_BUILD_DIR:-$ROOT/build/mac.noindex}/iMic.app/Contents/MacOS/iMic" \
+"$MAC_BIN" \
   --headless --pair-code="$CODE" --no-input --port="$PORT" > "$LOG" 2>&1 &
 MAC_PID=$!
 for _ in $(seq 1 40); do

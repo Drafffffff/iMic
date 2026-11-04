@@ -162,8 +162,11 @@ if [ -n "$RELEASE_IDENTITY" ]; then
   SIGNATURE=$("$ROOT/build/vendor/Sparkle/bin/sign_update" -p "$DMG")
   swift "$ROOT/tools/verify-update.swift" "$ROOT/mac/sparkle-public-key.txt" "$SIGNATURE" "$DMG"
 fi
-if [ "$DMG" != "$OUT/$MAC_NAME" ]; then mv -f "$DMG" "$OUT/$MAC_NAME"; fi
-DMG="$OUT/$MAC_NAME"
+PENDING_DMG=""
+if [ "$DMG" != "$OUT/$MAC_NAME" ]; then
+  PENDING_DMG="$DMG"
+  cp -f "$PENDING_DMG" "$OUT/$MAC_NAME"
+fi
 
 "$ROOT/scripts/package-ios.sh" "$OUT"
 (
@@ -176,6 +179,13 @@ if [ -n "$RELEASE_IDENTITY" ]; then
   python3 "$ROOT/tools/appcast.py" update "$ROOT/site/appcast.xml" "$BUILD" "$VERSION" "$OUT/$MAC_NAME" "$SIGNATURE" "$NOTES"
   echo "appcast 已在本地更新。先上传 DMG 到 Release，再提交并推送 site/appcast.xml；本脚本不会发布。"
 fi
+if [ -n "$PENDING_DMG" ]; then
+  rm -f "$PENDING_DMG" "${PENDING_DMG%.dmg}.notarization.json"
+  case "$(dirname "$PENDING_DMG")" in
+    "$ROOT/build/notarization-pending/"*) rm -rf "$(dirname "$PENDING_DMG")" ;;
+  esac
+fi
+DMG="$OUT/$MAC_NAME"
 printf '\n发布文件：\n%s\n%s\n%s\n' "$OUT/$MAC_NAME" "$OUT/$IOS_NAME" "$OUT/SHA256SUMS.txt"
 if [ -z "$RELEASE_IDENTITY" ] || [ -z "$NOTARY_PROFILE" ]; then
   echo "Mac 版未公证，首次打开可能需要在系统设置中手动允许。"

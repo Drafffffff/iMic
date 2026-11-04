@@ -112,6 +112,18 @@ final class LinkWireTests: XCTestCase {
         XCTAssertEqual(frames.map { String(decoding: $0.payload, as: UTF8.self) }, ["one", "two"])
     }
 
+    func testCompleteFrameFollowedByPartialFrameAdvancesDecoderOffset() throws {
+        let frameA = LinkFrame(kind: .json, payload: Data("alpha".utf8))
+        let frameB = LinkFrame(kind: .json, payload: Data("bravo".utf8))
+        let wireA = LinkWire.encode(frameA)
+        let wireB = LinkWire.encode(frameB)
+        var decoder = LinkFrameDecoder()
+        let firstBatch = try decoder.append(wireA + wireB.prefix(2))
+        XCTAssertEqual(firstBatch, [frameA])
+        let secondBatch = try decoder.append(Data(wireB.dropFirst(2)))
+        XCTAssertEqual(secondBatch, [frameB])
+    }
+
     func testRejectsOversizedFrame() {
         var decoder = LinkFrameDecoder()
         let header = Data([0xff, 0xff, 0xff, 0xff, 1])
@@ -343,6 +355,44 @@ final class LinkCryptoTests: XCTestCase {
         )
         let sealed = try phoneCipher.seal(Data("audio".utf8))
         XCTAssertEqual(try macCipher.open(sealed), Data("audio".utf8))
+    }
+
+    func testCipherProducesDistinctNoncesAndDeterministicSessionKey() throws {
+        let phonePrivBytes = Data((1...32).map { UInt8($0) })
+        let macPrivBytes = Data((33...64).map { UInt8($0) })
+        let token = Data((65...96).map { UInt8($0) })
+        let phoneKey = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: phonePrivBytes)
+        let macKey = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: macPrivBytes)
+        let cipher1 = try LinkCrypto.sessionCipher(
+            privateKey: phoneKey,
+            peerPublicKey: LinkCrypto.publicKeyBase64(macKey),
+            token: token
+        )
+        let cipher2 = try LinkCrypto.sessionCipher(
+            privateKey: macKey,
+            peerPublicKey: LinkCrypto.publicKeyBase64(phoneKey),
+            token: token
+        )
+        XCTAssertEqual(
+            cipher1.key.withUnsafeBytes { Data($0) },
+            cipher2.key.withUnsafeBytes { Data($0) }
+        )
+
+        let plaintext = Data("deterministic-session-key-test".utf8)
+        let ciphertext1 = try cipher1.seal(plaintext)
+        let ciphertext2 = try cipher1.seal(plaintext)
+        XCTAssertNotEqual(ciphertext1.prefix(12), ciphertext2.prefix(12))
+        XCTAssertEqual(try cipher2.open(ciphertext1), plaintext)
+        XCTAssertEqual(try cipher2.open(ciphertext2), plaintext)
+
+        let knownNonce = try AES.GCM.Nonce(data: Data((0..<12).map { UInt8($0) }))
+        let knownSealed = try XCTUnwrap(AES.GCM.seal(plaintext, using: cipher1.key, nonce: knownNonce).combined)
+        let reopenedCipher = try LinkCrypto.sessionCipher(
+            privateKey: phoneKey,
+            peerPublicKey: LinkCrypto.publicKeyBase64(macKey),
+            token: token
+        )
+        XCTAssertEqual(try reopenedCipher.open(knownSealed), plaintext)
     }
 
     func testTamperingIsRejected() throws {
