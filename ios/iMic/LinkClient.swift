@@ -417,7 +417,9 @@ final class LinkClient: ObservableObject {
         IMicLog.write("iphone.link", "foreground probe transport=\(usingBLE ? "ble" : "tcp")")
         if usingBLE {
             foregroundProbe = (stamp, started, false)
-            scheduleForegroundProbeTimeoutLocked(stamp: stamp, epoch: epoch, after: 1.5)
+            // Audio may be queued ahead of ping. Bound the lack of acknowledged
+            // progress, not total drain time; pong gets its own deadline below.
+            scheduleForegroundProbeTimeoutLocked(stamp: stamp, epoch: epoch, after: 10.0)
             sendSealed(.ping(stamp)) { [weak self] success in
                 guard let self, self.currentEpoch() == epoch,
                       let probe = self.foregroundProbe, probe.stamp == stamp else { return }
@@ -1398,10 +1400,7 @@ final class LinkClient: ObservableObject {
     private func bleWriteProgressed(_ ble: BLELinkClient) {
         guard usingBLE, bleClient === ble,
               let probe = foregroundProbe, !probe.pingDispatched else { return }
-        let elapsed = ProcessInfo.processInfo.systemUptime - probe.started
-        let remaining = min(1.5, 10.0 - elapsed)
-        guard remaining > 0 else { return }
-        scheduleForegroundProbeTimeoutLocked(stamp: probe.stamp, epoch: currentEpoch(), after: remaining)
+        scheduleForegroundProbeTimeoutLocked(stamp: probe.stamp, epoch: currentEpoch(), after: 10.0)
     }
 
     private func bleConnected(_ ble: BLELinkClient, macID: String) {

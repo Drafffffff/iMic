@@ -112,7 +112,17 @@ extension LinkClient {
         await withCheckedContinuation { continuation in
             queue.async {
                 self.lastReceiveAt = ProcessInfo.processInfo.systemUptime - seconds
+                // Exercise the production timer handler now, without a 15s wait.
+                self.receiveWatchdog?.schedule(deadline: .now(), repeating: 15)
                 continuation.resume()
+            }
+        }
+    }
+
+    func resumeTestConnectionIdentity() async -> ObjectIdentifier? {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                continuation.resume(returning: self.connection.map { ObjectIdentifier($0) })
             }
         }
     }
