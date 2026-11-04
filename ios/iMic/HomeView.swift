@@ -373,6 +373,9 @@ struct HomeView: View {
                 onboarding.receivedFirstResult(pasted: session.pasted)
             }
             if phase == .listening { loadSpent = false }
+            if phase != .listening && !pressing && !session.isRecordingRequested {
+                interactionStart = false
+            }
             if phase == .listening || phase == .idle {
                 if !stringMotion.isClearing { receiver.reset() }
                 showResult = false
@@ -727,7 +730,7 @@ struct HomeView: View {
                     pressing = false
                     cancelArmed = false
                     interactionStart = false
-                    if session.phase == .listening {
+                    if session.phase == .listening || session.isRecordingRequested {
                         session.endListening(cancelled: cancelled)
                     }
                 },
@@ -745,11 +748,15 @@ struct HomeView: View {
         .accessibilityHint(statusLine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction {
-            if session.phase == .listening {
+            if session.phase == .listening || session.isRecordingRequested {
+                interactionStart = false
                 session.endListening(cancelled: false)
             } else {
                 receiver.updateTouch(xFraction: 0.5)
                 beginInteraction()
+                if session.phase != .listening && !session.isRecordingRequested {
+                    interactionStart = false
+                }
             }
         }
     }
@@ -855,7 +862,6 @@ struct HomeView: View {
         guard !interactionStart else { return }
         if onboarding.localHome && onboarding.step == .practice && !onboarding.action.bar { return }
         if onboarding.presented && onboarding.step == .welcome { onboarding.startPractice() }
-        interactionStart = true
         if !session.practiceActive && onboarding.connectionDeferred { startConnection() }
         if !canRecordNow {
             Haptics.shared.play(.pairingRequired)
@@ -870,10 +876,14 @@ struct HomeView: View {
         if stringProcessing {
             return
         }
+        interactionStart = true
         if session.phase == .error || session.phase == .result {
             session.reset()
         }
         session.beginListening()
+        if session.phase != .listening && !session.isRecordingRequested {
+            interactionStart = false
+        }
     }
 
     // MARK: - Footer
@@ -887,22 +897,21 @@ struct HomeView: View {
                 Spacer()
             }
             ZStack(alignment: .trailing) {
-                HUDLabel(text: "PCM / 16K")
-                    .opacity(hasResultText ? 0 : 1)
-                Button {
-                    Haptics.shared.play(.overlayOpen)
-                    showResult = true
-                } label: {
-                    Text(L10n.text("View result  ›"))
-                        .modifier(InstrumentHint())
-                        .frame(minWidth: 74, minHeight: 32)
-                        .contentShape(Rectangle())
+                if hasResultText {
+                    Button {
+                        Haptics.shared.play(.overlayOpen)
+                        showResult = true
+                    } label: {
+                        Text(L10n.text("View result  ›"))
+                            .modifier(InstrumentHint())
+                            .frame(minWidth: 74, minHeight: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L10n.text("View recognition result"))
+                } else {
+                    HUDLabel(text: "PCM / 16K")
                 }
-                .buttonStyle(.plain)
-                .opacity(hasResultText ? 1 : 0)
-                .allowsHitTesting(hasResultText)
-                .accessibilityHidden(!hasResultText)
-                .accessibilityLabel(L10n.text("View recognition result"))
             }
             .frame(width: 98, height: 32, alignment: .trailing)
         }

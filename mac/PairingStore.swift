@@ -18,6 +18,7 @@ final class PairingStore {
         var version: Int
         var macID: String
         var devices: [String: PairedDevice]
+        var updatedAt: Date?
     }
 
     private let directory: URL
@@ -31,6 +32,7 @@ final class PairingStore {
 
     /// 任何 UI 刷新都通过此回调，服务端只负责状态。
     var onChange: (() -> Void)?
+    var onRevoke: ((String?) -> Void)?
 
     init(directory: URL = PairingStore.defaultDirectory) {
         self.directory = directory
@@ -46,7 +48,9 @@ final class PairingStore {
         }
         activeCode = PairingCode.make()
         codeExpiresAt = Date().addingTimeInterval(IMicLink.pairingCodeLifetime)
-        try? save()
+        lock.lock()
+        try? saveLocked()
+        lock.unlock()
     }
 
     var macID: String {
@@ -142,8 +146,13 @@ final class PairingStore {
         throttle.reset()
         activeCode = PairingCode.make()
         codeExpiresAt = Date().addingTimeInterval(IMicLink.pairingCodeLifetime)
-        lock.unlock()
-        try save()
+        do {
+            try saveLocked()
+            lock.unlock()
+        } catch {
+            lock.unlock()
+            throw error
+        }
         notify()
     }
 
@@ -153,16 +162,36 @@ final class PairingStore {
         throttle.reset()
         activeCode = PairingCode.make()
         codeExpiresAt = Date().addingTimeInterval(IMicLink.pairingCodeLifetime)
+        let saveError: Error?
+        do {
+            try saveLocked()
+            saveError = nil
+        } catch {
+            saveError = error
+        }
         lock.unlock()
-        try? save()
+        if let saveError {
+            IMicLog.write("mac.pair", "forgetAll save failed=\(String(describing: saveError))")
+        }
+        onRevoke?(nil)
         notify()
     }
 
     func forget(deviceID: String) {
         lock.lock()
         stored.devices.removeValue(forKey: deviceID)
+        let saveError: Error?
+        do {
+            try saveLocked()
+            saveError = nil
+        } catch {
+            saveError = error
+        }
         lock.unlock()
-        try? save()
+        if let saveError {
+            IMicLog.write("mac.pair", "forget device=\(deviceID) save failed=\(String(describing: saveError))")
+        }
+        onRevoke?(deviceID)
         notify()
     }
 
@@ -177,7 +206,8 @@ final class PairingStore {
         DispatchQueue.main.async { [weak self] in self?.onChange?() }
     }
 
-    private func save() throws {
+    private func saveLocked() throws {
+        stored.updatedAt = Date()
         try FileManager.default.createDirectory(
             at: directory,
             withIntermediateDirectories: true,

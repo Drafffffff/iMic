@@ -10,11 +10,11 @@
 | 平台 | iOS / iPhone，iOS 17.0+ |
 | Bundle ID | `art.malette.imic.app` |
 | 发布团队 | KE CHENG / `5H39F98ND4` |
-| 当前版本 / Build | `1.4.5` / `4` |
+| 当前版本 / Build | `1.4.7` / `9` |
 | 建议 SKU | `imic-ios` |
 | 主要语言 | 简体中文 |
 | 测试反馈邮箱 | `i0.0ia@qq.com` |
-| Mac 配套客户端 | https://github.com/Drafffffff/iMic/releases/tag/v1.4.4 |
+| Mac 配套客户端 | https://github.com/Drafffffff/iMic/releases/tag/v1.4.7 |
 
 iOS 发布 Bundle ID 为 `art.malette.imic.app`。前两次真机自动签名已将旧 iOS ID 占用在 Personal Team 中；新 ID 仅允许团队 `5H39F98ND4` 签名。Mac 端仍为 `com.drafffffff.imic`。
 
@@ -48,7 +48,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 
 `archive` 和 `archive-unsigned` 二选一，不要对同一路径重复归档。已有归档不会被脚本覆盖。签名归档因缺少账号失败且未生成归档时，可以直接运行 `archive-unsigned`。未签名归档不能安装或分发，`check` 通过也不代表分发签名通过；只有 `export` 的分发校验成功，才有可交给 Transporter 上传的 IPA。
 
-默认输出目录为 `build/testflight.noindex/<版本>-<Build>/`（当前为 `1.4.5-4/`）；`1.4.3-2/` 是旧 Bundle ID 的历史归档，不能用于分发。用 `IMIC_TESTFLIGHT_DIR` 指定其他目录时，后续 `check/export/upload` 须使用相同目录。输出包括 `iMic.xcarchive`、构建日志、校验报告、归档源码快照 `source.zip`，以及成功导出后的 `export/iMic.ipa`。本地归档不修改开发工程、已安装的 Mac 应用或手机应用。应用许可证和第三方说明在签名前打入包内，图标由 `tools/icon.swift` 生成。
+默认输出目录为 `build/testflight.noindex/<版本>-<Build>/`（当前为 `1.4.7-9/`）；`1.4.3-2/` 是旧 Bundle ID 的历史归档，不能用于分发。用 `IMIC_TESTFLIGHT_DIR` 指定其他目录时，后续 `check/export/upload` 须使用相同目录。输出包括 `iMic.xcarchive`、构建日志、校验报告、归档源码快照 `source.zip`，以及成功导出后的 `export/iMic.ipa`。本地归档不修改开发工程、已安装的 Mac 应用或手机应用。应用许可证和第三方说明在签名前打入包内，图标由 `tools/icon.swift` 生成。
 
 发布只允许团队 `5H39F98ND4`；`IMIC_TEAM_ID` 指向其他团队时会在任何签名前退出。`VERSION` 和 `ios/project.yml` 的 Marketing Version 必须一致。每次新的上传递增 `ios/project.yml` 的 `CURRENT_PROJECT_VERSION`；也可临时指定 `IMIC_BUILD_NUMBER=4 ./scripts/testflight.sh archive`，同一归档后续的 `check/export/upload` 也要使用同一覆盖值。输出目录可通过 `IMIC_TESTFLIGHT_DIR` 指定。
 
@@ -88,7 +88,7 @@ IMIC_PROFILE_PATH=/绝对路径/iMic-AppStore.mobileprovision ./scripts/testflig
 
 iMic is an iPhone companion app for a macOS speech-input utility. A Mac running macOS 13 or later is required to test the complete workflow. There is no iMic account or iMic subscription.
 
-1. Download the signed and notarized macOS companion from https://github.com/Drafffffff/iMic/releases/tag/v1.4.4 (the macOS universal DMG). Move iMic.app to Applications and open it.
+1. Download the signed and notarized macOS companion from https://github.com/Drafffffff/iMic/releases/tag/v1.4.7 (the macOS universal DMG). Move iMic.app to Applications and open it.
 2. Complete the Mac setup: grant Accessibility access for text input and configure a valid Alibaba Cloud Model Studio (DashScope/Bailian) API key. Screen Recording is optional and only supports a local visual effect. The key belongs in the Mac setup, not on the iPhone.
 3. Connect both devices to the same Wi-Fi. Open the iPhone app, allow Local Network and Microphone access, select the Mac, and enter the six-digit code currently displayed by the Mac. Speech Recognition permission enables temporary Apple Speech previews; the Mac recognition path remains available if this permission is declined.
 4. On the Mac, open a new TextEdit document and place the insertion point in it. On the iPhone, press and hold the bottom recording area, say a sentence, and release. The recognized text should appear in TextEdit and on the iPhone. Slide upward while recording to cancel.

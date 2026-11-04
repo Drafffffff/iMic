@@ -5,6 +5,53 @@ import Vision
 import CoreText
 import CoreImage
 
+/// A bounded AX walk proves absence of protected content only after the whole
+/// known window tree was visited. A missing root or unreadable node is unknown.
+enum PolishCaptureSafety {
+    struct Attribute {
+        let value: CFTypeRef?
+        let error: AXError
+
+        static func batched(_ value: CFTypeRef) -> Attribute {
+            if CFGetTypeID(value) == AXValueGetTypeID(), AXValueGetType(value as! AXValue) == .axError {
+                var error = AXError.failure
+                _ = AXValueGetValue(value as! AXValue, .axError, &error)
+                return Attribute(value: nil, error: error)
+            }
+            return Attribute(value: value, error: .success)
+        }
+
+        // Optional AX attributes may legitimately be absent on a leaf. A timeout
+        // or invalid element cannot prove the absence of children/protection.
+        func readable(optional: Bool = true, accepts: (CFTypeRef) -> Bool) -> Bool {
+            if error == .attributeUnsupported || error == .noValue { return optional }
+            guard error == .success, let value else { return false }
+            return accepts(value)
+        }
+    }
+
+    static func readableNode(role: Attribute, subrole: Attribute, protectedContent: Attribute, children: Attribute) -> Bool {
+        role.readable(optional: false) { $0 is String }
+            && subrole.readable { $0 is String }
+            && protectedContent.readable { CFGetTypeID($0) == CFBooleanGetTypeID() }
+            && children.readable {
+                guard let children = $0 as? [AnyObject] else { return false }
+                return children.allSatisfy { CFGetTypeID($0) == AXUIElementGetTypeID() }
+            }
+    }
+
+    static func matchesScannedWindow(selected: CGRect, scanned: CGRect?) -> Bool {
+        guard let scanned else { return false }
+        return abs(selected.minX-scanned.minX) < 2 && abs(selected.minY-scanned.minY) < 2
+            && abs(selected.width-scanned.width) < 2 && abs(selected.height-scanned.height) < 2
+    }
+
+    static func allowsCapture(hasWindow: Bool, visited: Int, discovered: Int,
+                              protectedSeen: Bool, unreadableSeen: Bool) -> Bool {
+        hasWindow && visited >= discovered && !protectedSeen && !unreadableSeen
+    }
+}
+
 private final class EffectCancellation: @unchecked Sendable {
     private let lock = NSLock()
     private var value = false
@@ -108,7 +155,7 @@ final class TextPolishEffect: @unchecked Sendable {
         let textSignature: Int?
         /// False when protected content (password fields, DRM) was seen in the
         /// window: AX geometry may still animate, but no screenshot is taken.
-        let allowsCapture: Bool
+        var allowsCapture: Bool
     }
     private let trackingQueue = DispatchQueue(label: "imic.polish-field-geometry", qos: .userInitiated)
     private var trackingSamples = 0
@@ -833,14 +880,20 @@ final class TextPolishEffect: @unchecked Sendable {
     /// Several attributes in one IPC round trip; unsupported ones come back nil.
     /// Falls back to single reads when the target rejects the batched call.
     private static func read(_ element: AXUIElement, _ attributes: [String]) -> [CFTypeRef?] {
+        readWithStatus(element, attributes).map { $0.error == .success ? $0.value : nil }
+    }
+
+    private static func readWithStatus(_ element: AXUIElement, _ attributes: [String]) -> [PolishCaptureSafety.Attribute] {
         var values: CFArray?
         guard AXUIElementCopyMultipleAttributeValues(element, attributes as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &values) == .success,
               let array = values as? [AnyObject], array.count == attributes.count else {
-            return attributes.map { read(element, $0) }
+            return attributes.map { attribute in
+                var value: CFTypeRef?
+                let error = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+                return PolishCaptureSafety.Attribute(value: value, error: error)
+            }
         }
-        return array.map { value in
-            CFGetTypeID(value) == AXValueGetTypeID() && AXValueGetType(value as! AXValue) == .axError ? nil : value
-        }
+        return array.map(PolishCaptureSafety.Attribute.batched)
     }
     private static func frame(_ element: AXUIElement) -> CGRect? {
         let values = read(element, [kAXPositionAttribute, kAXSizeAttribute])
@@ -945,25 +998,34 @@ final class TextPolishEffect: @unchecked Sendable {
         }
         if let focused { candidates.append(focused) }
         var protectedSeen = false
+        var unreadableSeen = false
+        var foundTarget: Target?
         let until = ProcessInfo.processInfo.systemUptime + 0.4
         var index = 0
-        if let window = read(app, kAXFocusedWindowAttribute), CFGetTypeID(window) == AXUIElementGetTypeID() { candidates.append(window as! AXUIElement) }
+        let focusedWindow = read(app, kAXFocusedWindowAttribute).flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? ($0 as! AXUIElement) : nil }
+        if let focusedWindow { candidates.append(focusedWindow) }
         while index < candidates.count, index < 2_000, !token.cancelled, ProcessInfo.processInfo.systemUptime < until {
             let candidate = candidates[index]; index += 1
             AXUIElementSetMessagingTimeout(candidate, 0.06)
             // One round trip per node: large web/Electron trees exhaust the
             // 0.4s budget quickly when every attribute is its own IPC call.
-            let values = read(candidate, [kAXRoleAttribute, kAXSubroleAttribute, "AXProtectedContent",
-                                          kAXPositionAttribute, kAXSizeAttribute, kAXChildrenAttribute])
+            let attributes = readWithStatus(candidate, [kAXRoleAttribute, kAXSubroleAttribute, "AXProtectedContent",
+                                                       kAXPositionAttribute, kAXSizeAttribute, kAXChildrenAttribute])
+            let values = attributes.map { $0.error == .success ? $0.value : nil }
             let role = values[0] as? String
-            if values[1] as? String == kAXSecureTextFieldSubrole || (values[2] as? Bool) == true {
+            if !PolishCaptureSafety.readableNode(role: attributes[0], subrole: attributes[1], protectedContent: attributes[2], children: attributes[5]) {
+                unreadableSeen = true
+            }
+            if role == "AXSecureTextField" || values[1] as? String == kAXSecureTextFieldSubrole || (values[2] as? Bool) == true {
                 // Never decorate the secure field itself. Elsewhere in the window it
                 // only rules out screenshots, so AX-located fields keep the effect.
                 if element.map({ CFEqual($0, candidate) }) == true || focused.map({ CFEqual($0, candidate) }) == true { return nil }
                 protectedSeen = true
+                if foundTarget != nil { break }
                 continue
             }
-            if role == "AXTextArea" || role == "AXTextField", let field = frame(position: values[3], size: values[4]),
+            if foundTarget == nil,
+               role == "AXTextArea" || role == "AXTextField", let field = frame(position: values[3], size: values[4]),
                field.width > 10, field.height > 8 {
                 // The captured focused element is preferred. Discovered fields must
                 // actually contain a distinctive suffix of our emitted transcript.
@@ -976,22 +1038,34 @@ final class TextPolishEffect: @unchecked Sendable {
                     let ownerFrame = owner.flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? frame($0 as! AXUIElement) : nil }
                     if let window = PolishWindowSelection.choose(windows().filter { $0.frame.intersects(field) }, pid: pid, preferred: ownerFrame),
                        let visible = visibleField(candidate, window: window.frame) {
-                        return Target(element: candidate, ownerWindow: owner.flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? ($0 as! AXUIElement) : nil }, pid: pid, windowID: window.id, windowLayer: window.layer,
-                                      window: window.frame, field: visible, elementFrame: field,
-                                      singleLine: role == kAXTextFieldRole || (read(candidate, "AXMultiline") as? Bool) == false,
-                                      textSignature: value?.hashValue,
-                                      allowsCapture: !protectedSeen)
+                        foundTarget = Target(element: candidate, ownerWindow: owner.flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? ($0 as! AXUIElement) : nil }, pid: pid, windowID: window.id, windowLayer: window.layer,
+                                             window: window.frame, field: visible, elementFrame: field,
+                                             singleLine: role == kAXTextFieldRole || (read(candidate, "AXMultiline") as? Bool) == false,
+                                             textSignature: value?.hashValue,
+                                             allowsCapture: !protectedSeen)
+                        if protectedSeen { break }
                     }
                 }
             }
             if let children = values[5] as? [AXUIElement] { candidates.append(contentsOf: children) }
         }
         guard !token.cancelled else { return nil }
+        let allowsCapture = PolishCaptureSafety.allowsCapture(hasWindow: focusedWindow != nil,
+            visited: index, discovered: candidates.count, protectedSeen: protectedSeen, unreadableSeen: unreadableSeen)
+        let scannedWindowFrame = allowsCapture ? focusedWindow.flatMap { frame($0) } : nil
+        if var foundTarget {
+            // A captured field may belong to a different window than the focused
+            // root we scanned. Its AX geometry remains usable, but not a screenshot.
+            let sameWindow = foundTarget.ownerWindow.flatMap { owner in focusedWindow.map { CFEqual(owner, $0) } } ?? false
+            foundTarget.allowsCapture = allowsCapture && sameWindow
+                && PolishCaptureSafety.matchesScannedWindow(selected: foundTarget.window, scanned: scannedWindowFrame)
+            return foundTarget
+        }
         // Window-wide OCR would screenshot the protected content itself.
-        guard !protectedSeen else { IMicLog.write("mac.effect", "locate skipped reason=protected_content"); return nil }
-        let focusedWindow = read(app, kAXFocusedWindowAttribute)
-        let preferred = focusedWindow.flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? frame($0 as! AXUIElement) : nil }
+        guard allowsCapture else { IMicLog.write("mac.effect", "locate skipped reason=protected_or_incomplete_scan"); return nil }
+        let preferred = scannedWindowFrame
         guard let window = PolishWindowSelection.choose(windows(), pid: pid, preferred: preferred) else { return nil }
+        guard PolishCaptureSafety.matchesScannedWindow(selected: window.frame, scanned: preferred) else { return nil }
         IMicLog.write("mac.effect", "locate fallback=window_ocr layer=\(window.layer)")
         return Target(element: nil, ownerWindow: nil, pid: pid, windowID: window.id, windowLayer: window.layer,
                       window: window.frame, field: window.frame, elementFrame: window.frame,

@@ -26,6 +26,9 @@ final class LinkServer {
         var decoder = LinkFrameDecoder()
         var phase: Phase = .awaitingHello
         var cipher: LinkCipher?
+        // Bind authorization to the exact credential used to derive this session.
+        // A replacement token must not authorize an older pending handshake.
+        var sessionToken: Data?
         var privateKey: Curve25519.KeyAgreement.PrivateKey?
         var peerPublicKey: String?
         var deviceID: String?
@@ -75,6 +78,15 @@ final class LinkServer {
     init(store: PairingStore, port: UInt16? = nil) {
         self.store = store
         self.fixedPort = port
+        let previousRevoke = store.onRevoke
+        store.onRevoke = { [weak self] deviceID in
+            previousRevoke?(deviceID)
+            if let deviceID {
+                self?.disconnect(deviceID: deviceID)
+            } else {
+                self?.disconnect()
+            }
+        }
     }
 
     func start() {
@@ -93,6 +105,17 @@ final class LinkServer {
     /// 主动断开当前 iPhone（例如用户在设置里解除配对）。
     func disconnect() {
         queue.async { self.closeAllLocked(notify: true) }
+    }
+
+    func disconnect(deviceID: String) {
+        queue.async {
+            for peer in self.pending where peer.deviceID == deviceID {
+                self.closeLocked(peer, notify: false)
+            }
+            if let active = self.active, active.deviceID == deviceID {
+                self.closeLocked(active, notify: true)
+            }
+        }
     }
 
     private func startLocked() {
@@ -213,6 +236,10 @@ final class LinkServer {
     private func handle(_ frame: LinkFrame, from peer: Peer) throws {
         switch peer.phase {
         case .ready:
+            guard hasCurrentToken(peer) else {
+                sendErrorAndClose(peer, "auth", L10n.text("Incorrect pairing code or expired connection"))
+                return
+            }
             guard frame.kind != .json else {
                 sendErrorAndClose(peer, "protocol_plaintext", L10n.text("Plaintext frames are not accepted after connection"))
                 return
@@ -267,12 +294,14 @@ final class LinkServer {
                 return
             }
             IMicLog.write("mac.link", "handshake message=\(message.t)")
-            guard message.t == "auth", message.deviceID == nil || message.deviceID == peer.deviceID else {
+            guard message.t == "auth",
+                  let deviceID = peer.deviceID,
+                  message.deviceID == nil || message.deviceID == deviceID,
+                  hasCurrentToken(peer) else {
                 sendErrorAndClose(peer, "auth", L10n.text("Device token mismatch"))
                 return
             }
             becomeReady(peer)
-
         case .awaitingPair:
             guard frame.kind == .sealedJSON,
                   let key = peer.privateKey,
@@ -325,6 +354,7 @@ final class LinkServer {
             // 先用配对密钥确认成功，再切换到长期令牌派生的会话密钥。
             try sendLocked(.paired(macID: store.macID, name: store.macName), to: peer, using: pairCipher)
             peer.cipher = try LinkCrypto.sessionCipher(privateKey: key, peerPublicKey: peerPublic, token: token)
+            peer.sessionToken = token
             becomeReady(peer)
 
         case .awaitingHello:
@@ -361,6 +391,7 @@ final class LinkServer {
                     return
                 }
                 peer.cipher = session
+                peer.sessionToken = token
                 peer.phase = .awaitingAuth
                 try sendPlainLocked(.helloReply(
                     macID: store.macID,
@@ -379,6 +410,11 @@ final class LinkServer {
                 DispatchQueue.main.async { [weak self] in self?.onPairRequest?() }
             }
         }
+    }
+
+    private func hasCurrentToken(_ peer: Peer) -> Bool {
+        guard let deviceID = peer.deviceID, let token = peer.sessionToken else { return false }
+        return store.token(for: deviceID) == token
     }
 
     private func becomeReady(_ peer: Peer) {
@@ -423,6 +459,7 @@ final class LinkServer {
         peer.connection.cancel()
         peer.decoder.reset()
         peer.cipher = nil
+        peer.sessionToken = nil
         peer.privateKey = nil
         if wasActive {
             active = nil

@@ -18,6 +18,7 @@ final class SoundDesign {
 
     private enum State { case cold, warming, ready, failed }
     private var state = State.cold
+    private var generation = 0
     private var ids: [String: SystemSoundID] = [:]
     private var pending: (cue: SoundCue, variant: Int, at: CFTimeInterval)?
     private var observer: NSObjectProtocol?
@@ -34,6 +35,7 @@ final class SoundDesign {
                 // 媒体服务重置后旧 SystemSoundID 全部失效，重新注册。
                 let shared = SoundDesign.shared
                 IMicLog.write("iphone.sound", "media services reset; re-registering")
+                shared.generation &+= 1
                 shared.state = .cold
                 shared.ids.removeAll()
                 shared.warmUp()
@@ -45,11 +47,21 @@ final class SoundDesign {
     func warmUp() {
         guard state == .cold || state == .failed else { return }
         state = .warming
+        generation &+= 1
+        let currentGeneration = generation
         let began = CACurrentMediaTime()
         DispatchQueue.global(qos: .utility).async {
             let result = Self.registerAll()
             DispatchQueue.main.async {
                 let shared = SoundDesign.shared
+                guard shared.generation == currentGeneration else {
+                    if case .success(let staleIDs) = result {
+                        // Only this abandoned registration owns these handles. Keep any
+                        // handle already adopted by the current generation after a reset.
+                        Self.dispose(staleIDs, preserving: Set(shared.ids.values))
+                    }
+                    return
+                }
                 switch result {
                 case .success(let ids):
                     shared.ids = ids
@@ -111,13 +123,20 @@ final class SoundDesign {
 
     // MARK: - Rendering
 
+    nonisolated private static func dispose(_ ids: [String: SystemSoundID],
+                                            preserving retained: Set<SystemSoundID> = []) {
+        for id in Set(ids.values).subtracting(retained) {
+            AudioServicesDisposeSystemSoundID(id)
+        }
+    }
+
     nonisolated private static func registerAll() -> Result<[String: SystemSoundID], Error> {
+        var ids: [String: SystemSoundID] = [:]
         do {
             let directory = try FileManager.default
                 .url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
                 .appendingPathComponent("iMicSounds-v\(SoundSynth.renderVersion)", isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            var ids: [String: SystemSoundID] = [:]
             let silent = SoundPatch(cutoff: 1_000, glow: 0, peakDB: -96, voices: [])
             let primeURL = directory.appendingPathComponent("\(primeKey).wav")
             try SoundSynth.wav(silent).write(to: primeURL, options: .atomic)
@@ -138,6 +157,7 @@ final class SoundDesign {
             }
             return .success(ids)
         } catch {
+            dispose(ids)
             return .failure(error)
         }
     }

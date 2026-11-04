@@ -28,6 +28,7 @@ NETWORK = re.compile(
     r'Record not found|Could not find base64 encoded ticket', re.I)
 AUTH = re.compile(r'\b(?:401|403)\b|unauthorized|forbidden|invalid credentials|'
                   r'No Keychain .* item found|authentication failed', re.I)
+CANCEL_GRACE_SECONDS = 5
 
 
 def network_error(output):
@@ -35,9 +36,11 @@ def network_error(output):
 
 
 def digest(path):
+    sha = hashlib.sha256()
     with path.open('rb') as f:
-        return hashlib.file_digest(f, 'sha256').hexdigest()
-
+        while chunk := f.read(1024 * 1024):
+            sha.update(chunk)
+    return sha.hexdigest()
 
 def run(command, timeout=120, log=None):
     # Kill the entire child process group on timeout, not just xcrun's wrapper.
@@ -51,6 +54,26 @@ def run(command, timeout=120, log=None):
         data, _ = process.communicate()
         data += f'\nNetwork command timeout after {timeout} seconds\n'.encode()
         code = 124
+    except BaseException:
+        # The group may still contain descendants after its leader has exited.
+        # Drain output while waiting, and never let a TERM-resistant child make
+        # cancellation wait forever (or block on a full stdout pipe).
+        try:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                process.communicate(timeout=CANCEL_GRACE_SECONDS)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.communicate(timeout=CANCEL_GRACE_SECONDS)
+        finally:
+            process.stdout.close()
+        raise
     output = data.decode(errors='replace')
     if log:
         log.write_text(output)
@@ -101,7 +124,7 @@ class Notarization:
         # Use normal, non-progress output so that ID survives a transport failure.
         code, output = self.command('submit.log', 'notarytool', 'submit', str(self.dmg),
                                     '--keychain-profile', self.profile, '--no-wait', '--no-progress')
-        match = re.search(r'^\s*id:\s*([0-9a-fA-F-]{36})\s*$', output, re.M)
+        match = re.search(r'(?:^\s*id:\s*|"id"\s*:\s*")([0-9a-fA-F-]{36})', output, re.M)
         if match:
             self.submission = str(uuid.UUID(match[1]))
             self.save()

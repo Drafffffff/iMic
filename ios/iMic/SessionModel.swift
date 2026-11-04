@@ -44,11 +44,14 @@ final class SessionModel: ObservableObject {
     private var debugDidRun = false
     private var audioGeneration: UInt64 = 0
     private var audioStandbyTask: Task<Void, Never>?
-    private var audioAuthorizationTask: Task<Void, Never>?
+    private var ownsAudioCapture = false
+    private var audioColdStarting = false
 
     private var wantsRecording = false
+    var isRecordingRequested: Bool { wantsRecording }
     private var session: UInt16 = 0
     private var activeSession: UInt16?
+    private var activeSessionMacID: String?
     private var frames: UInt32 = 0
     private var samples = 0
     private var pending = Data()
@@ -217,7 +220,8 @@ final class SessionModel: ObservableObject {
     func deactivateAudio() {
         audioStandbyTask?.cancel()
         audioStandbyTask = nil
-        audioAuthorizationTask?.cancel()
+        ownsAudioCapture = false
+        audioColdStarting = false
         wantsRecording = false
         audioGeneration &+= 1
         audio.stop()
@@ -229,9 +233,11 @@ final class SessionModel: ObservableObject {
     private func startAudioEngine() -> Bool {
         audioStandbyTask?.cancel()
         audioStandbyTask = nil
-        if audio.isRunning, audio.matchesPreferredConfiguration { audio.setMonitoring(true); return true }
-        // A Settings change invalidates only the old warm capture, at the next hold.
+        if ownsAudioCapture, audio.isRunning, audio.matchesPreferredConfiguration { audio.setMonitoring(true); return true }
+        // A Settings change or prior self-test invalidates the old capture, at the next hold.
         if audio.isRunning { audio.stop(); preRoll.removeAll() }
+        ownsAudioCapture = true
+        audioColdStarting = true
         audioGeneration &+= 1
         let generation = audioGeneration
         // Starts in the background: capture begins at once and PCM flows when the engine is up.
@@ -252,6 +258,8 @@ final class SessionModel: ObservableObject {
             onFailure: { [weak self] message in
                 DispatchQueue.main.async { [weak self] in
                     guard let self, self.audioGeneration == generation else { return }
+                    self.ownsAudioCapture = false
+                    self.audioColdStarting = false
                     self.handleAudioFailure(message)
                 }
             },
@@ -259,13 +267,18 @@ final class SessionModel: ObservableObject {
                 // AudioCapture delivers this on the main queue.
                 MainActor.assumeIsolated {
                     guard let self, self.audioGeneration == generation else { return }
+                    self.audioColdStarting = false
                     if let error {
+                        self.ownsAudioCapture = false
                         self.audioGeneration &+= 1
                         self.handleAudioFailure(error is CaptureRouteError ? error.localizedDescription : L10n.text("Microphone failed to start"))
                         return
                     }
                     // 重启触感引擎，但不更改已运行的 playAndRecord 音频会话。
                     Haptics.shared.prepare(force: true)
+                    if self.phase == .listening, self.wantsRecording {
+                        Haptics.shared.play(.recordingStarted)
+                    }
                 }
             }
         )
@@ -284,8 +297,8 @@ final class SessionModel: ObservableObject {
     /// A short lease retains 150ms pre-roll for consecutive utterances; it never
     /// starts a cold engine and expires even while ASR/network work is pending.
     private func updateAudioStandby() {
-        // Local practice must not arm the capture watchdog through phase changes.
-        guard !practiceActive else { return }
+        // Local practice or active MIC TEST must not arm the capture watchdog through phase changes.
+        guard !practiceActive, ownsAudioCapture else { return }
         if wantsRecording || phase == .listening {
             audio.setMonitoring(true)
             audioStandbyTask?.cancel()
@@ -297,9 +310,11 @@ final class SessionModel: ObservableObject {
         audioStandbyTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(5)) }
             catch { return }
-            guard let self, !Task.isCancelled, !self.wantsRecording,
+            guard let self, !Task.isCancelled, self.ownsAudioCapture, !self.wantsRecording,
                   self.phase != .listening else { return }
             self.audioStandbyTask = nil
+            self.ownsAudioCapture = false
+            self.audioColdStarting = false
             self.audioGeneration &+= 1
             self.audio.stop()
             self.preRoll.removeAll(keepingCapacity: true)
@@ -369,12 +384,6 @@ final class SessionModel: ObservableObject {
         }
     }
 
-    /// 两个系统弹窗串行出现；拒绝任一权限也允许完成引导。
-    func prepareFirstUsePermissions() async {
-        micDenied = !(await AudioCapture.requestPermission())
-        await speechPreview.prepareAuthorization()
-    }
-
     func beginListening() {
         if practiceActive { practice.begin(spectrum: spectrumStore); return }
         guard !link.clearPending, !spectrumStore.stringMotion.isClearing else { return }
@@ -411,16 +420,18 @@ final class SessionModel: ObservableObject {
         } else {
             Task {
                 let granted = await AudioCapture.requestPermission()
-                guard wantsRecording, UIApplication.shared.applicationState == .active else { return }
+                micDenied = !granted
+                guard wantsRecording, UIApplication.shared.applicationState == .active else {
+                    wantsRecording = false
+                    return
+                }
                 guard granted else {
                     wantsRecording = false
-                    micDenied = true
                     phase = .error
                     message = L10n.text("Microphone access is off")
                     Haptics.shared.play(.error)
                     return
                 }
-                micDenied = false
                 guard startAudioEngine() else {
                     wantsRecording = false
                     phase = .error
@@ -521,6 +532,7 @@ final class SessionModel: ObservableObject {
         guard wantsRecording else { return }
         session = UInt16.random(in: 1...65535)
         activeSession = session
+        activeSessionMacID = link.selectedMacID
         submissionGeneration &+= 1
         endInFlight = false
         isUploading = false
@@ -569,8 +581,10 @@ final class SessionModel: ObservableObject {
 
         startLivePreview()
 
-        // 真正开始采集后才给“可以说话”的强触觉：短促双击 + 极短低频。
-        Haptics.shared.play(.recordingStarted)
+        // 真正开始采集后才给“可以说话”的强触觉；冷启动由音频完成回调触发。
+        if !audioColdStarting {
+            Haptics.shared.play(.recordingStarted)
+        }
     }
 
     private func processPending() {
@@ -658,6 +672,7 @@ final class SessionModel: ObservableObject {
             announcedSession = false
             pendingEnd = false
             activeSession = nil
+            activeSessionMacID = nil
             buffered.removeAll()
             pending.removeAll()
             audioJournal.removeAll(keepingCapacity: true)
@@ -820,6 +835,10 @@ final class SessionModel: ObservableObject {
             IMicLog.write("iphone.session", "beginStreaming blocked session=\(session) active=\(activeSession != nil) ready=\(link.phase.isReady) buffered=\(buffered.count)")
             return
         }
+        if let targetMacID = activeSessionMacID, targetMacID != link.selectedMacID {
+            cancelForDeviceSwitch()
+            return
+        }
         streaming = true
         if !announcedSession {
             link.beginSession(session)
@@ -913,6 +932,7 @@ final class SessionModel: ObservableObject {
         endInFlight = false
         isUploading = false
         activeSession = nil
+        activeSessionMacID = nil
         syntheticActive = false
         announcedSession = false
         stopLivePreview()
@@ -1001,6 +1021,7 @@ final class SessionModel: ObservableObject {
         syntheticOffset = 0
         session = UInt16.random(in: 1...65535)
         activeSession = session
+        activeSessionMacID = link.selectedMacID
         submissionGeneration &+= 1
         endInFlight = false
         isUploading = false
@@ -1088,6 +1109,10 @@ final class SessionModel: ObservableObject {
         IMicLog.write("iphone.session", "link ready phase=\(phase) session=\(session) announced=\(announcedSession) samples=\(samples) frames=\(frames) buffered=\(buffered.count)")
         guard phase == .listening || phase == .transcribing else { return }
         guard activeSession != nil else { return }
+        if let targetMacID = activeSessionMacID, targetMacID != link.selectedMacID {
+            cancelForDeviceSwitch()
+            return
+        }
         // 链路在按住的前 0.5 秒就绪时也不提前发送，等本地短按判定通过。
         guard pendingEnd || samples - preRollSamplesAdded >= IMicLink.minimumSamples else { return }
         beginStreaming()
@@ -1116,6 +1141,7 @@ final class SessionModel: ObservableObject {
         syntheticData.removeAll()
         stopVisualInput()
         activeSession = nil
+        activeSessionMacID = nil
         streaming = false
         pendingEnd = false
         syntheticActive = false
@@ -1209,6 +1235,7 @@ final class SessionModel: ObservableObject {
         streaming = false
         pendingEnd = false
         activeSession = nil
+        activeSessionMacID = nil
         phase = .idle
         message = nil
         notice = nil

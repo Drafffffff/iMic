@@ -15,13 +15,32 @@ spec.loader.exec_module(appcast)
 
 class AppcastTests(unittest.TestCase):
     def setUp(self):
+        (ROOT / 'build').mkdir(parents=True, exist_ok=True)
         self.work = tempfile.TemporaryDirectory(dir=ROOT / 'build', prefix='updater-unit-')
         self.root = Path(self.work.name)
         for name in ('mac', 'site', 'scripts', 'tools'):
             (self.root / name).mkdir()
-        for name in ('scripts/package-release.sh', 'tools/appcast.py', 'site/appcast.xml', 'VERSION', 'MAC_BUILD', 'mac/sparkle-public-key.txt'):
+        for name in ('scripts/package-release.sh', 'tools/appcast.py'):
             shutil.copyfile(ROOT / name, self.root / name)
         self.feed = self.root / 'site/appcast.xml'
+        self.feed.write_text(
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">\n'
+            '  <channel>\n'
+            '    <title>iMic Mac 更新</title>\n'
+            '    <link>https://drafffffff.github.io/iMic/</link>\n'
+            '    <description>iMic macOS 更新</description>\n'
+            '    <language>zh-cn</language>\n'
+            '  </channel>\n'
+            '</rss>\n',
+            encoding='utf-8',
+        )
+        (self.root / 'VERSION').write_text('1.4.0\n', encoding='utf-8')
+        (self.root / 'MAC_BUILD').write_text('1\n', encoding='utf-8')
+        (self.root / 'mac/sparkle-public-key.txt').write_text(
+            'PLACEHOLDER_REPLACE_WITH_PUBLISHER_ED25519_PUBLIC_KEY\n',
+            encoding='utf-8',
+        )
         self.signature = base64.b64encode(b's' * 64).decode()
         (self.root / 'test.dmg').write_bytes(b'final stapled archive fixture')
         (self.root / 'notes.md').write_text('Update <script> & details')

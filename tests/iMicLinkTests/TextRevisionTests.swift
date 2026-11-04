@@ -69,6 +69,10 @@ final class TextRevisionTests: XCTestCase {
         XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: "com.microsoft.VSCode", labels: [nil, "xterm-helper-textarea"]))
         XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: nil, labels: ["终端"]))
         XCTAssertFalse(TypedTextSafety.isTerminal(bundleIdentifier: "com.apple.TextEdit", labels: ["文本", nil, ""]))
+        XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: "com.todesktop.230313mzl4w4u92", labels: []))
+        XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: "com.microsoft.VSCode", labels: [nil, ""]))
+        XCTAssertFalse(TypedTextSafety.isTerminal(bundleIdentifier: "com.microsoft.VSCode", labels: ["editor", "main.swift"]))
+        XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: "com.microsoft.VSCode", labels: ["Integrated Terminal"]))
     }
 
     func testWideCharacterDetectionForTerminalGeometry() {

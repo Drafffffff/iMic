@@ -145,6 +145,7 @@ final class LinkClient: ObservableObject {
     private let queue = DispatchQueue(label: "imic.link.ios")
     private var browser: NWBrowser?
     private var connection: NWConnection?
+    // TCP 与 BLE 共用增量解码器：只保留残帧，已返回的完整帧不得再次交付。
     private var decoder = LinkFrameDecoder()
     private var privateKey = LinkCrypto.makePrivateKey()
     private var serverPublic: String?
