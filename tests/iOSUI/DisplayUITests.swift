@@ -6,7 +6,7 @@ final class DisplayUITests:XCTestCase{
 
     private func launch(_ mode:String="idle")->XCUIApplication{
         let app=XCUIApplication()
-        app.launchArguments=["--ui-preview=\(mode)"]
+        app.launchArguments=["-AppleLanguages","(zh-Hans)","-AppleLocale","zh_Hans","--ui-preview=\(mode)"]
         app.launch()
         XCTAssertTrue(app.buttons["设置"].waitForExistence(timeout:15))
         return app

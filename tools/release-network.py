@@ -35,9 +35,11 @@ def network_error(output):
 
 
 def digest(path):
+    sha = hashlib.sha256()
     with path.open('rb') as f:
-        return hashlib.file_digest(f, 'sha256').hexdigest()
-
+        while chunk := f.read(1024 * 1024):
+            sha.update(chunk)
+    return sha.hexdigest()
 
 def run(command, timeout=120, log=None):
     # Kill the entire child process group on timeout, not just xcrun's wrapper.
@@ -51,6 +53,14 @@ def run(command, timeout=120, log=None):
         data, _ = process.communicate()
         data += f'\nNetwork command timeout after {timeout} seconds\n'.encode()
         code = 124
+    except BaseException:
+        if process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            process.wait()
+        raise
     output = data.decode(errors='replace')
     if log:
         log.write_text(output)
@@ -101,7 +111,7 @@ class Notarization:
         # Use normal, non-progress output so that ID survives a transport failure.
         code, output = self.command('submit.log', 'notarytool', 'submit', str(self.dmg),
                                     '--keychain-profile', self.profile, '--no-wait', '--no-progress')
-        match = re.search(r'^\s*id:\s*([0-9a-fA-F-]{36})\s*$', output, re.M)
+        match = re.search(r'(?:^\s*id:\s*|"id"\s*:\s*")([0-9a-fA-F-]{36})', output, re.M)
         if match:
             self.submission = str(uuid.UUID(match[1]))
             self.save()

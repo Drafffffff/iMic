@@ -1,0 +1,21 @@
+name: CI
+on:
+  push:
+    branches: [codex/ui-phosphor-wireframe]
+  pull_request:
+    branches: [codex/ui-phosphor-wireframe]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - run: swift test
+      - run: python3 tools/check-l10n.py
+      - run: python3 tools/check-site.py
+      - run: python3 -m unittest discover -s tests/Updater

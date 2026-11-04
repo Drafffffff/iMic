@@ -56,15 +56,29 @@ def main():
     # Generated icons/project are reproduced by archive-unsigned, so compare code,
     # project settings and source resources before claiming a matching revision.
     with zipfile.ZipFile(args.archive.parent / 'source.zip') as snapshot:
+        seen = set()
         for item in snapshot.infolist():
             relative = pathlib.PurePosixPath(item.filename)
             if len(relative.parts) < 2 or '__MACOSX' in relative.parts or item.is_dir():
                 continue
             name = pathlib.PurePosixPath(*relative.parts[1:]).as_posix()
-            if name.startswith('ios/iMic.xcodeproj/') or name.startswith('ios/iMic/Assets.xcassets/AppIcon.appiconset/'):
+            if (name == 'icon-gen'
+                    or name.startswith('ios/iMic.xcodeproj/')
+                    or name.startswith('ios/iMic/Assets.xcassets/AppIcon.appiconset/')):
                 continue
-            if 'Source/' + name in entries and snapshot.read(item) != entries['Source/' + name]:
+            key = 'Source/' + name
+            if key not in entries or snapshot.read(item) != entries[key]:
                 raise ValueError(f'Archive source differs from committed source: {name}')
+            seen.add(key)
+        expected = {
+            key for key in entries
+            if key.startswith(('Source/ios/iMic/', 'Source/shared/', 'Source/tests/iOSUI/', 'Source/licenses/'))
+            or key in ('Source/ios/project.yml', 'Source/ios/Info.plist', 'Source/tools/icon.swift',
+                       'Source/LICENSE', 'Source/THIRD_PARTY_NOTICES.md')
+        } - {key for key in entries if key.startswith('Source/ios/iMic/Assets.xcassets/AppIcon.appiconset/')}
+        missing = sorted(expected - seen)
+        if missing:
+            raise ValueError(f'Archive source missing committed source: {missing[0]}')
     entries['SOURCE-REVISION.txt'] = subprocess.check_output(['git', '-C', str(args.root), 'rev-parse', 'HEAD'])
     entries['README.txt'] = (
         'Unsigned iMic TestFlight handoff. No signing or upload has been performed.\n'
