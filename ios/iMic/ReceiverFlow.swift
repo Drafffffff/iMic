@@ -59,6 +59,14 @@ final class ReceiverFlowStore: ObservableObject {
     /// The caller has validated and queued Return at the first upward neutral crossing.
     func fire() { renderer?.fire() }
 
+    #if DEBUG
+    func debugCollapse(elapsed: Double?, ending: PhosphorCollapse.Ending, reduced: Bool = false) {
+        renderer?.debugCollapse(elapsed:elapsed,ending:ending,reduced:reduced)
+    }
+    var debugCollapseSample: PhosphorCollapse.Sample? { renderer?.debugCollapseSample }
+    var debugArtworkRasterCount: Int? { renderer?.debugArtworkRasterCount }
+    #endif
+
     func cancelFlight() {
         pending.removeAll(keepingCapacity: true)
         pendingHead = 0
@@ -84,6 +92,8 @@ struct ReceiverFlowView: UIViewRepresentable {
     var effect: PhosphorEffect = .crt
     var clearEnabled = false
     var pressed = false
+    var recordingElapsed: TimeInterval? = nil
+    var recordingEnding: PhosphorCollapse.Ending = .cancelled
     var processing = false
     var ready = false
     var attach: PhosphorAttachStyle = .flow
@@ -101,6 +111,7 @@ struct ReceiverFlowView: UIViewRepresentable {
                        source: sourceFrame, reduced: reduceMotion, artwork: artwork,
                        dimmed: dimmed, effect: effect, reduceTransparency: reduceTransparency,
                        clearEnabled: clearEnabled, pressed: pressed,
+                       recordingElapsed: recordingElapsed, recordingEnding: recordingEnding,
                        processing: processing, ready: ready, attach: attach)
     }
 
@@ -115,6 +126,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         guard drawing != nil, window != nil, positioned else { return false }
         return store?.hasPending == true || spectrum?.ink.releaseWaveActive == true
             || (artworkState != nil && scene.needsStatusFrames(at: CACurrentMediaTime()))
+            || (artworkState != nil && scene.needsCollapseFrames(at: CACurrentMediaTime()))
             || particles.contains { $0.phase != .attached || CGFloat(CACurrentMediaTime() - $0.started) < $0.duration + 0.3 }
             || !debris.isEmpty
     }
@@ -191,6 +203,14 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
     private var artworkState: PhosphorArtworkState?
     private var pendingArtwork: PhosphorArtworkState?
     private var artworkFailures=0
+    #if DEBUG
+    private(set) var debugArtworkRasterCount=0
+    var debugCollapseSample:PhosphorCollapse.Sample{scene.collapse(at:CACurrentMediaTime())}
+    func debugCollapse(elapsed:Double?,ending:PhosphorCollapse.Ending,reduced:Bool){
+        scene.setRecording(elapsed:elapsed,ending:ending,reduced:reduced,now:CACurrentMediaTime())
+        wake()
+    }
+    #endif
     private var elapsedText=""
     private var clearArtworkWidth:CGFloat=0
     private var clearEnabled=false
@@ -240,6 +260,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
                    artwork: PhosphorArtworkState? = nil, dimmed: Bool = false,
                    effect: PhosphorEffect = .crt, reduceTransparency: Bool = false,
                    clearEnabled:Bool=false, pressed:Bool=false,
+                   recordingElapsed:TimeInterval?=nil, recordingEnding:PhosphorCollapse.Ending = .cancelled,
                    processing:Bool=false, ready:Bool=false, attach:PhosphorAttachStyle = .flow) {
         if scene.attachStyle != attach { scene.attachStyle = attach; spectrum.wake() }
         let changed = self.store !== store || self.spectrum !== spectrum || self.torus != torus
@@ -255,6 +276,9 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
         self.source = source
         self.dimmed = dimmed
         self.clearEnabled=clearEnabled
+        scene.setRecording(elapsed:artwork == nil ? nil:recordingElapsed, ending:recordingEnding,
+                           reduced:reduced, now:CACurrentMediaTime())
+        if artwork != nil && scene.needsCollapseFrames(at:CACurrentMediaTime()) { spectrum.wake() }
         scene.setPressed(pressed,now:CACurrentMediaTime())
         scene.setStatus(processing:processing,ready:ready,now:CACurrentMediaTime())
         if scene.needsStatusFrames(at:CACurrentMediaTime()) { spectrum.wake() }
@@ -304,6 +328,9 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
 
     private func updateArtwork(_ artwork:PhosphorArtworkState,drawing:WaveTextRenderer){
         guard artwork.size.width>10,artwork.size.height>10 else{return}
+        #if DEBUG
+        debugArtworkRasterCount+=1
+        #endif
         let began=CACurrentMediaTime()
         defer{
             let ms=(CACurrentMediaTime()-began)*1000
@@ -320,7 +347,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
             }
         }
         let image=ImageRenderer(content:PhosphorArtwork(state:artwork).environment(\.displayScale,scale))
-        image.scale=scale;image.isOpaque=true;image.colorMode = .nonLinear
+        image.scale=scale;image.isOpaque=false;image.colorMode = .nonLinear
         image.proposedSize=ProposedViewSize(artwork.size)
         do{
             guard let cg=image.cgImage else{throw WaveTextRenderer.RenderError.allocation}
@@ -342,7 +369,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
     }
 
     /// Rasterize only `region` of the full artwork: the same view, offset and clipped, so the
-    /// grid and every element stay aligned with the untouched pixels around it.
+    /// foreground elements stay aligned with the untouched pixels around them.
     private func patchArtwork(_ artwork:PhosphorArtworkState,region:CGRect,scale:CGFloat,drawing:WaveTextRenderer)throws{
         let bounds=CGRect(origin:.zero,size:artwork.size)
         let r=region.intersection(bounds)
@@ -354,7 +381,7 @@ final class ReceiverFlowSurface: UIView, StringMotionRendering {
             .frame(width:snapped.width,height:snapped.height,alignment:.topLeading)
             .clipped()
         let image=ImageRenderer(content:view)
-        image.scale=scale;image.isOpaque=true;image.colorMode = .nonLinear
+        image.scale=scale;image.isOpaque=false;image.colorMode = .nonLinear
         image.proposedSize=ProposedViewSize(snapped.size)
         guard let cg=image.cgImage else{throw WaveTextRenderer.RenderError.allocation}
         try drawing.replaceArtwork(cg,at:(Int((snapped.minX*scale).rounded()),Int((snapped.minY*scale).rounded())))

@@ -46,6 +46,20 @@ final class SessionModel: ObservableObject {
     private var audioStandbyTask: Task<Void, Never>?
     private var ownsAudioCapture = false
     private var audioColdStarting = false
+    // Visual observation only; never delays capture, recognition or submission.
+    @Published private var visualCaptureOffset: TimeInterval?
+    var recordingVisualElapsed: TimeInterval? {
+        guard phase == .listening else { return nil }
+        if practiceActive || isPreview { return elapsed }
+        guard link.phase.isReady else { return nil }
+        if syntheticActive { return elapsed }
+        guard let visualCaptureOffset else { return nil }
+        return max(0, elapsed - visualCaptureOffset)
+    }
+    var recordingVisualEnding: PhosphorCollapse.Ending {
+        let submitted = phase == .transcribing || phase == .result
+        return submitted && (practiceActive || isPreview || link.phase.isReady) ? .sent : .cancelled
+    }
 
     private var wantsRecording = false
     var isRecordingRequested: Bool { wantsRecording }
@@ -277,6 +291,7 @@ final class SessionModel: ObservableObject {
                     // 重启触感引擎，但不更改已运行的 playAndRecord 音频会话。
                     Haptics.shared.prepare(force: true)
                     if self.phase == .listening, self.wantsRecording {
+                        self.visualCaptureOffset = Date().timeIntervalSince(self.startedAt)
                         Haptics.shared.play(.recordingStarted)
                     }
                 }
@@ -558,6 +573,7 @@ final class SessionModel: ObservableObject {
         copied = false
         elapsed = 0
         startedAt = Date()
+        visualCaptureOffset = audioColdStarting ? nil : 0
         phase = .listening
         syntheticActive = false
         waveformTrace.begin(source: .microphone)
