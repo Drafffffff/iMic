@@ -140,6 +140,8 @@ struct HomeView: View {
                                              effect: PhosphorEffect(rawValue: displayMaterial) ?? .crt,
                                              clearEnabled: canUseString && session.pullDeleteEnabled,
                                              pressed: pressing && session.phase == .listening,
+                                             recordingElapsed: session.recordingVisualElapsed,
+                                             recordingEnding: session.recordingVisualEnding,
                                              processing: stringProcessing || debugStringStatus == 1,
                                              ready: stringReady || debugStringStatus == 2,
                                              attach: PhosphorAttachStyle(rawValue: attachStyle) ?? .flow)

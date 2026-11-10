@@ -84,8 +84,8 @@ struct PhosphorArtwork: View {
 
     var body: some View {
         ZStack(alignment:.topLeading){
-            Theme.ink
-            grid
+            // Foreground only. Metal draws the grid underneath and applies the
+            // same continuous page warp to artwork, coil, glyphs and background.
             header.frame(width:width,height:62,alignment:.top)
                 .position(x:state.size.width/2,y:state.content.minY+45)
             divider.frame(width:width,height:10)
@@ -109,14 +109,6 @@ struct PhosphorArtwork: View {
             .environment(\.dynamicTypeSize,state.dynamicType)
     }
 
-    private var grid:some View{
-        Canvas{context,size in
-            var path=Path()
-            for x in stride(from:0.0,through:size.width,by:26){path.move(to:CGPoint(x:x,y:0));path.addLine(to:CGPoint(x:x,y:size.height))}
-            for y in stride(from:0.0,through:size.height,by:26){path.move(to:CGPoint(x:0,y:y));path.addLine(to:CGPoint(x:size.width,y:y))}
-            context.stroke(path,with:.color(.white.opacity(0.065)),lineWidth:1/max(1,displayScale))
-        }.frame(width:state.size.width,height:state.size.height)
-    }
     private var header:some View{
         HStack(alignment:.top,spacing:0){
             InstrumentIdentity()
