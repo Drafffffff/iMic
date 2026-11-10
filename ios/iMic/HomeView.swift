@@ -573,7 +573,7 @@ struct HomeView: View {
     }
     private var guideHeader: String? {
         guard guideStatus else { return nil }
-        if onboarding.step == .welcome { return "GUIDE · " + L10n.text("Used iMic") }
+        if onboarding.step == .welcome { return "GUIDE · " + L10n.text("Used VoxChord") }
         let progress = onboarding.step == .practice ? onboarding.action.progress.replacingOccurrences(of: " / ", with: "/0") : "3/03"
         return "GUIDE 0" + progress + " · " + L10n.text("Skip")
     }
@@ -771,7 +771,7 @@ struct HomeView: View {
                 guard canUseString else {
                     stringGestureBlocked = true
                     stringMotion.cancel()
-                    stringHint = link.gestureSupported ? L10n.text("Wait for your Mac to finish before pulling the string") : L10n.text("Update iMic on your Mac to enable string controls")
+                    stringHint = link.gestureSupported ? L10n.text("Wait for your Mac to finish before pulling the string") : L10n.text("Update VoxChord on your Mac to enable string controls")
                     return
                 }
                 guard !clearTriggeredThisGesture else { return }
@@ -1063,7 +1063,7 @@ struct HomeView: View {
             case .connecting(let name): return L10n.text("Connecting to %@", L10n.argument(name))
             case .needsCode: return L10n.text("Enter the pairing code shown on your Mac")
             case .failed: return L10n.text("Connection unavailable. Tap the top right to retry.")
-            case .idle: return L10n.text("Open iMic on your Mac")
+            case .idle: return L10n.text("Open VoxChord on your Mac")
             case .ready: return ""
             }
         }
@@ -1108,7 +1108,7 @@ struct HomeView: View {
     private var stringControlHint: String {
         if session.practiceActive { return onboarding.action.prompt }
         guard linkReady else { return L10n.text("Connect to a Mac to use the string") }
-        guard link.gestureSupported else { return L10n.text("Update iMic on your Mac to enable string controls") }
+        guard link.gestureSupported else { return L10n.text("Update VoxChord on your Mac to enable string controls") }
         if link.clearPending { return L10n.text("Clearing the text field…") }
         if session.phase == .listening { return L10n.text("Finish recording and typing before pulling the string") }
         guard link.gestureReady, session.phase != .transcribing, !session.isUploading else {

@@ -328,7 +328,7 @@ final class PolishProviderTests: XCTestCase {
         XCTAssertEqual(BailianIssue.classify(status: 403, code: "access_denied", message: "Access denied by IP address restrictions."), .ip)
         XCTAssertEqual(BailianIssue.classify(error: URLError(.timedOut)), .network)
         XCTAssertTrue(BailianIssue.network.message.contains(L10n.text("Cannot connect to Model Studio. Check your network. Office networks may block Alibaba Cloud domains. Retry once connected.")))
-        XCTAssertTrue(BailianIssue.unsupported("region").message.contains(L10n.text("This Key belongs to %@, which does not currently support iMic's speech model. Select Singapore in Model Studio and create a new Key.", "region")))
+        XCTAssertTrue(BailianIssue.unsupported("region").message.contains(L10n.text("This Key belongs to %@, which does not currently support VoxChord's speech model. Select Singapore in Model Studio and create a new Key.", "region")))
     }
 
     private func discover(key: String? = nil, base: String = "", timeout: TimeInterval = 1,

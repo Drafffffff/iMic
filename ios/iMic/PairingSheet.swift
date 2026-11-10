@@ -216,7 +216,7 @@ struct PairingSheet: View {
                 .foregroundStyle(Theme.orange)
                 .lineLimit(2)
                 .truncationMode(.middle)
-            Text(L10n.text("Find the 6-digit pairing code in the iMic window on your Mac."))
+            Text(L10n.text("Find the 6-digit pairing code in the VoxChord window on your Mac."))
                 .modifier(InstrumentHint())
             ZStack {
                 HStack(spacing: 7) {
@@ -270,7 +270,7 @@ struct PairingSheet: View {
 
             HStack(spacing: 8) {
                 Rectangle().fill(Theme.orange.opacity(0.5)).frame(width: 3, height: 3)
-                Text(L10n.text("The pairing code changes every 10 minutes. Once paired, iMic remembers this Mac."))
+                Text(L10n.text("The pairing code changes every 10 minutes. Once paired, VoxChord remembers this Mac."))
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)

@@ -1405,7 +1405,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let allowed = CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess()
         polishSweepHint.stringValue = allowed
             ? L10n.text("Screen Recording allowed. Screenshots and OCR are processed only on this Mac. Failure to locate text does not block typing.")
-            : L10n.text("Allow iMic in System Settings → Privacy & Security → Screen Recording. Typing still works without permission.")
+            : L10n.text("Allow VoxChord in System Settings → Privacy & Security → Screen Recording. Typing still works without permission.")
     }
 
     @objc func openBluetoothSettings() {
@@ -1495,7 +1495,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func completeInputTest() {
         guard currentSession == nil else { return }
-        guard let succeeded = insert(L10n.text("iMic typing test")) else {
+        guard let succeeded = insert(L10n.text("VoxChord typing test")) else {
             scheduleInput { [weak self] in self?.completeInputTest() }
             return
         }

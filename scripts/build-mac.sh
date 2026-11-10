@@ -113,8 +113,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>CFBundleIdentifier</key><string>com.drafffffff.imic</string>
 <key>CFBundleDevelopmentRegion</key><string>en</string>
 <key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string></array>
-<key>CFBundleName</key><string>iMic</string>
-<key>CFBundleDisplayName</key><string>iMic</string>
+<key>CFBundleName</key><string>VoxChord</string>
+<key>CFBundleDisplayName</key><string>VoxChord</string>
 <key>CFBundleIconFile</key><string>iMic</string>
 <key>CFBundleExecutable</key><string>iMic</string>
 <key>CFBundlePackageType</key><string>APPL</string>
@@ -130,11 +130,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
-<key>NSLocalNetworkUsageDescription</key><string>iMic connects to your iPhone over an encrypted local network or peer-to-peer voice link.</string>
-<key>NSBluetoothAlwaysUsageDescription</key><string>iMic connects to your iPhone over Bluetooth when the local network is unavailable.</string>
-<key>NSScreenCaptureUsageDescription</key><string>iMic locates text in the target field on this Mac for the polish highlight. Screenshots are never saved or uploaded.</string>
+<key>NSLocalNetworkUsageDescription</key><string>VoxChord connects to your iPhone over an encrypted local network or peer-to-peer voice link.</string>
+<key>NSBluetoothAlwaysUsageDescription</key><string>VoxChord connects to your iPhone over Bluetooth when the local network is unavailable.</string>
+<key>NSScreenCaptureUsageDescription</key><string>VoxChord locates text in the target field on this Mac for the polish highlight. Screenshots are never saved or uploaded.</string>
 <key>NSBonjourServices</key><array><string>_imic._tcp</string></array>
-<key>NSHumanReadableCopyright</key><string>iMic · Voice input, one step less.</string>
+<key>NSHumanReadableCopyright</key><string>VoxChord · Voice input, one step less.</string>
 </dict></plist>
 PLIST
 if [ "$CONFIG" = debug ] && [ "${IMIC_UPDATE_TEST:-0}" = 1 ]; then

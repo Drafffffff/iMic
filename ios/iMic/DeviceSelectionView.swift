@@ -89,7 +89,7 @@ struct DeviceSelectionView: View {
                         }.frame(height: 62, alignment: .top)
                         HUDDivider(store: session.spectrumStore, connected: link.phase.isReady).frame(height: 10)
                         InstrumentStatus(label: "LINK / MAC", word: linkWord,
-                            description: L10n.text(needsPairing ? "Enter the pairing code shown on your Mac" : "Open iMic on your Mac"),
+                            description: L10n.text(needsPairing ? "Enter the pairing code shown on your Mac" : "Open VoxChord on your Mac"),
                             detail: link.macs.isEmpty ? L10n.text("Allow Local Network to find your Mac") : nil, teaching: true)
                             .padding(.top, 36).padding(.bottom, 30)
                         VStack(alignment: .leading, spacing: 16) {
@@ -119,7 +119,7 @@ struct DeviceSelectionView: View {
                                 Hairline()
                                 Button { showDownload = true } label: {
                                     HStack {
-                                        Text(L10n.text("No iMic on your Mac yet?")).modifier(InstrumentHint(color: Theme.ivory))
+                                        Text(L10n.text("No VoxChord on your Mac yet?")).modifier(InstrumentHint(color: Theme.ivory))
                                         Spacer(); HUDLabel(text: "GET ›", color: Theme.orange)
                                     }.frame(minHeight: 44)
                                 }.accessibilityIdentifier("onboarding.download")
@@ -156,7 +156,7 @@ struct DeviceSelectionView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     sectionTitle(L10n.text("Nearby Macs"), suffix: "\(link.macs.count)")
                     if link.macs.isEmpty {
-                        Text(L10n.text("No Mac found. Open iMic on your computer. Connect over the same Wi-Fi or nearby Bluetooth."))
+                        Text(L10n.text("No Mac found. Open VoxChord on your computer. Connect over the same Wi-Fi or nearby Bluetooth."))
                             .font(.system(size: 13))
                             .foregroundStyle(Theme.muted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -175,7 +175,7 @@ struct DeviceSelectionView: View {
                         }
                     }
                 }
-                Text(L10n.text("Switching keeps your pairings. iMic will reconnect only to the selected Mac and will not switch to another computer automatically."))
+                Text(L10n.text("Switching keeps your pairings. VoxChord will reconnect only to the selected Mac and will not switch to another computer automatically."))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)

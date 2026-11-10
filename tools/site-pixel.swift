@@ -66,6 +66,6 @@ for y in 0..<bitmap.pixelsHigh {
 let shapes = cells.map { c in
     "<rect x=\"\(c.run.x)\" y=\"\(c.y)\" width=\"\(c.run.width)\" height=\"\(c.height)\" fill=\"\(c.run.ink == 2 ? "#ff4a00" : "#f2f0e6")\"/>"
 }.joined()
-let mark = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 \(bitmap.pixelsWide) \(bitmap.pixelsHigh)\" width=\"\(bitmap.pixelsWide)\" height=\"\(bitmap.pixelsHigh)\" shape-rendering=\"crispEdges\"><title>iMic</title>\(shapes)</svg>\n"
+let mark = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 \(bitmap.pixelsWide) \(bitmap.pixelsHigh)\" width=\"\(bitmap.pixelsWide)\" height=\"\(bitmap.pixelsHigh)\" shape-rendering=\"crispEdges\"><title>VoxChord</title>\(shapes)</svg>\n"
 try mark.write(to: output.appendingPathComponent("imic.svg"), atomically: true, encoding: .utf8)
 print("Generated mixed-case App wordmark: \(bitmap.pixelsWide)×\(bitmap.pixelsHigh), \(cells.count) merged pixel rectangles")

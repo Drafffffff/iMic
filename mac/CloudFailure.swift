@@ -26,7 +26,7 @@ enum BailianIssue: Error, Equatable {
     var message: String {
         switch self {
         case .invalidKey: return L10n.text("The Key is invalid, deleted, or incomplete. Copy it again. For a sub-workspace, paste the console's Base URL under Advanced options.")
-        case .plan: return L10n.text("This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. iMic needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page.")
+        case .plan: return L10n.text("This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. VoxChord needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page.")
         case .permission: return L10n.text("This Key or workspace lacks model access. Set Key permissions to All in Model Studio, or select qwen-audio-3.1-asr-flash-message and deepseek-v4.1-flash, and activate the speech model.")
         case .ip: return L10n.text("The Key's IP allowlist blocked this network. Disable IP restrictions in Model Studio or add your network's public IP address.")
         case .billing: return L10n.text("Your account has overdue charges or no free quota remaining. International new-user quota is offered for eligible Singapore models. Complete your account information, add funds, and check Free Quota Only and budget settings before retrying.")
@@ -37,7 +37,7 @@ enum BailianIssue: Error, Equatable {
         case .network: return L10n.text("Cannot connect to Model Studio. Check your network. Office networks may block Alibaba Cloud domains. Retry once connected.")
         case .ambiguous: return L10n.text("Multiple regions accepted this Key, so its region could not be uniquely identified. Paste the console's Base URL under Advanced options.")
         case .address: return L10n.text("Unsupported service address. Use an allowed Model Studio API Host (hostname only) or an HTTPS URL ending in /compatible-mode/v1 or /api/v1 (port 443). Plan addresses and other hosts are not supported.")
-        case .unsupported(let region): return L10n.text("This Key belongs to %@, which does not currently support iMic's speech model. Select Singapore in Model Studio and create a new Key.", L10n.argument(region))
+        case .unsupported(let region): return L10n.text("This Key belongs to %@, which does not currently support VoxChord's speech model. Select Singapore in Model Studio and create a new Key.", L10n.argument(region))
         case .service(200): return L10n.text("Could not read Model Studio's model list. Retry later or check the console's Base URL under Advanced options.")
         case .service(let status): return L10n.text("Model Studio could not verify your Key (HTTP %@). Retry later or check the console's Base URL under Advanced options.", L10n.argument(status))
         }

@@ -160,8 +160,8 @@ check(DeepSeekConfiguration.options.mode == .agent && DeepSeekConfiguration.opti
 check(menuMode.state == .on && app.polishModeButtons.selectedSegment == 0, "Menu and settings checks agree")
 let settingsIndex = app.statusMenu.items.firstIndex { $0.title == L10n.text("Settings…") }!
 let websiteItem = app.statusMenu.items[settingsIndex + 1]
-check(websiteItem.title == L10n.text("iMic website and help…") && websiteItem.action == #selector(AppDelegate.openWebsite), "Website help follows settings in menu")
-let websiteButton = allViews(advanced).compactMap { $0 as? NSButton }.first { $0.title == L10n.text("iMic website ↗") }
+check(websiteItem.title == L10n.text("VoxChord website and help…") && websiteItem.action == #selector(AppDelegate.openWebsite), "Website help follows settings in menu")
+let websiteButton = allViews(advanced).compactMap { $0 as? NSButton }.first { $0.title == L10n.text("VoxChord website ↗") }
 check(websiteButton?.action == #selector(AppDelegate.openWebsite), "Advanced help shares the menu action")
 check(SetupLinks.website.absoluteString == "https://drafffffff.github.io/iMic/" + (L10n.isChinese ? "" : "en/"), "Shared website destination")
 app.openWebsite() // Preview must return before opening the browser.

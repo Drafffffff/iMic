@@ -68,7 +68,7 @@ final class MacUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDeleg
         }
         if let message = pendingMessage {
             pendingMessage = nil
-            let alert = NSAlert(); alert.messageText = L10n.text("iMic Update"); alert.informativeText = message
+            let alert = NSAlert(); alert.messageText = L10n.text("VoxChord Update"); alert.informativeText = message
             alert.runModal()
         }
         guard Self.configured else { return }

@@ -1,6 +1,6 @@
 <div align="center">
 
-# iMic
+# VoxChord
 
 **一只手机，接管所有输入。**
 

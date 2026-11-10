@@ -239,7 +239,7 @@ struct PolishPreferencesSection: View {
             }
         }
         guard link.polishPreferencesSupported else {
-            return (L10n.text("This Mac does not support phone settings yet"), L10n.text("Update iMic on your Mac to set mode, tone, and output language from your phone."))
+            return (L10n.text("This Mac does not support phone settings yet"), L10n.text("Update VoxChord on your Mac to set mode, tone, and output language from your phone."))
         }
         if link.polishPreferencesSaving {
             return (L10n.text("Waiting for your Mac · Not saved yet"), "")

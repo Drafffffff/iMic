@@ -7,7 +7,7 @@
 	<key>CFBundleLocalizations</key>
 	<array><string>en</string><string>zh-Hans</string></array>
 	<key>CFBundleDisplayName</key>
-	<string>iMic</string>
+	<string>VoxChord</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -31,15 +31,15 @@
 		<string>_imic._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>iMic finds and connects to your Mac on your local network.</string>
+	<string>VoxChord finds and connects to your Mac on your local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>iMic uses your microphone to send your voice to your Mac for recognition in real time.</string>
+	<string>VoxChord uses your microphone to send your voice to your Mac for recognition in real time.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>iMic uses Apple Speech for temporary live preview text. The model on your Mac still corrects the final result.</string>
+	<string>VoxChord uses Apple Speech for temporary live preview text. The model on your Mac still corrects the final result.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>iMic connects to your Mac over Bluetooth when the local network is unavailable.</string>
+	<string>VoxChord connects to your Mac over Bluetooth when the local network is unavailable.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>iMic establishes a local voice link with your Mac over Bluetooth.</string>
+	<string>VoxChord establishes a local voice link with your Mac over Bluetooth.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

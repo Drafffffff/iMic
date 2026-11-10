@@ -780,6 +780,8 @@ final class LinkClient: ObservableObject {
                 var name: String?
                 if case let .service(serviceName, _, _, _) = result.endpoint {
                     name = serviceName
+                        .replacingOccurrences(of: "VoxChord · ", with: "")
+                        .replacingOccurrences(of: "VoxChord - ", with: "")
                         .replacingOccurrences(of: "iMic · ", with: "")
                         .replacingOccurrences(of: "iMic - ", with: "")
                 }
@@ -1168,7 +1170,7 @@ final class LinkClient: ObservableObject {
                     self.polishPreferencesError = preferences == pending
                         ? nil : L10n.text("Your Mac confirmed different values. Showing the preferences actually saved on your Mac.")
                 } else if !supported, pending != nil {
-                    self.polishPreferencesError = L10n.text("This Mac no longer supports changing polish preferences from your phone. Update iMic on your Mac.")
+                    self.polishPreferencesError = L10n.text("This Mac no longer supports changing polish preferences from your phone. Update VoxChord on your Mac.")
                 } else if !stillSaving {
                     self.polishPreferencesError = nil
                 }

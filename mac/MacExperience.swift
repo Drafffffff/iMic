@@ -25,13 +25,13 @@ extension AppDelegate: NSMenuDelegate {
         }
         let mode = item(L10n.text("Conversion mode"), nil); mode.submenu = modes; menu.addItem(mode)
         menu.addItem(.separator())
-        menu.addItem(item(L10n.text("Open iMic"), #selector(show)))
+        menu.addItem(item(L10n.text("Open VoxChord"), #selector(show)))
         menu.addItem(item(L10n.text("Settings…"), #selector(showSettings), key: ","))
-        menu.addItem(item(L10n.text("iMic website and help…"), #selector(openWebsite)))
+        menu.addItem(item(L10n.text("VoxChord website and help…"), #selector(openWebsite)))
         menu.addItem(item(L10n.text("Check for updates…"), #selector(checkForUpdates)))
         menu.addItem(item(L10n.text("Pair a new iPhone…"), #selector(pairNewPhone)))
         menu.addItem(.separator())
-        menu.addItem(item(L10n.text("Quit iMic"), #selector(quit), key: "q"))
+        menu.addItem(item(L10n.text("Quit VoxChord"), #selector(quit), key: "q"))
         statusMenu = menu
         let appMenu = NSMenu(); let root = NSMenuItem(); root.submenu = menu
         appMenu.addItem(root)

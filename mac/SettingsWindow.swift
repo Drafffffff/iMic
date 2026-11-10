@@ -62,7 +62,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         if app.preview == "settings-external-key" {
             previewKeys[.bailian] = ResolvedCredential(key: "sk-preview-external-credential", source: .environment("DASHSCOPE_API_KEY"))
         } else if app.preview == "settings-empty" { previewKeys.removeAll() }
-        window.title = L10n.text("iMic Settings"); window.isReleasedWhenClosed = false
+        window.title = L10n.text("VoxChord Settings"); window.isReleasedWhenClosed = false
         window.appearance = NSAppearance(named: .darkAqua); window.backgroundColor = .imicInk
         window.delegate = self
         tabs.tabStyle = .toolbar
@@ -221,7 +221,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             key.debounce = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
         }
-        let override = action(L10n.text("Use the Key saved in iMic"), #selector(overrideBailianKey))
+        let override = action(L10n.text("Use the Key saved in VoxChord"), #selector(overrideBailianKey))
         override.identifier = NSUserInterfaceItemIdentifier("overrideBailianKey")
         override.isHidden = resolved(.bailian)?.source.isExternal != true
         app.deepseekCheck = app.checkbox(L10n.text("Enable AI polish and conversion"), #selector(AppDelegate.toggleDeepSeek), key: "deepseekEnabled", defaultValue: DeepSeekConfiguration.enabled)
@@ -330,7 +330,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             var views: [NSView] = []
             if provider != .bailian {
                 views.append(field("\(provider.rawValue).key", "\(provider.title) Key", resolved(provider)?.key ?? "", secure: true))
-                let override = action(L10n.text("Use the Key saved in iMic"), #selector(overrideServiceKey(_:)))
+                let override = action(L10n.text("Use the Key saved in VoxChord"), #selector(overrideServiceKey(_:)))
                 override.identifier = NSUserInterfaceItemIdentifier(provider.rawValue)
                 override.isHidden = resolved(provider)?.source.isExternal != true
                 views.append(override)
@@ -349,7 +349,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             field("asr.endpoint", L10n.text("Recognition service address"), app.endpoint.stringValue),
             note(L10n.text("Only Model Studio inference addresses are supported. Must match the Key's region or workspace.")),
             app.divider(), app.linkButton(L10n.text("Reopen setup…"), #selector(AppDelegate.showSetupAction)),
-            app.linkButton(L10n.text("iMic website ↗"), #selector(AppDelegate.openWebsite))], spacing: 10)
+            app.linkButton(L10n.text("VoxChord website ↗"), #selector(AppDelegate.openWebsite))], spacing: 10)
     }
 
     private var previewKeys: [PolishProvider: ResolvedCredential] = [
@@ -374,7 +374,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
                 row.setEditable(credential?.source.isExternal != true)
             }
             row.source.isHidden = false
-            row.source.stringValue = credential.map { L10n.text("Source: %@ · iMic configuration takes priority over environment variables and shell files.", L10n.argument($0.source.tag)) } ?? L10n.text("No Key configured yet.")
+            row.source.stringValue = credential.map { L10n.text("Source: %@ · VoxChord configuration takes priority over environment variables and shell files.", L10n.argument($0.source.tag)) } ?? L10n.text("No Key configured yet.")
         }
         for row in fields.values where !row.dirty && row.feedback.stringValue.isEmpty {
             let prefix = "settings.validation.\(row.id)."
@@ -417,12 +417,12 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     @objc private func overrideServiceKey(_ sender: NSButton) {
         guard let id = sender.identifier?.rawValue else { return }
         fields["\(id).key"]?.setEditable(true)
-        fields["\(id).key"]?.message(L10n.text("After saving, the Key in iMic takes priority."))
+        fields["\(id).key"]?.message(L10n.text("After saving, the Key in VoxChord takes priority."))
         sender.isHidden = true
     }
     @objc private func overrideBailianKey(_ sender: NSButton) {
         fields["bailian.key"]?.setEditable(true)
-        fields["bailian.key"]?.message(L10n.text("After saving, the Key in iMic takes priority."))
+        fields["bailian.key"]?.message(L10n.text("After saving, the Key in VoxChord takes priority."))
         sender.isHidden = true
     }
 
@@ -442,9 +442,9 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             if saved {
                 if preview { previewKeys.removeValue(forKey: provider) }
                 row.markSaved(resolved(provider)?.key ?? "")
-                row.message(L10n.text("Removed the Key saved in iMic."))
+                row.message(L10n.text("Removed the Key saved in VoxChord."))
                 configurationChanged()
-            } else { row.message(L10n.text("Cannot write to the iMic configuration file."), error: true) }
+            } else { row.message(L10n.text("Cannot write to the VoxChord configuration file."), error: true) }
             completion(saved); return
         }
         if row.id == "bailian.key" || row.id == "bailian.base" {
@@ -534,7 +534,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
                         }
                     }
                 }
-                guard saved else { row.message(L10n.text("Cannot write to the iMic configuration file."), error: true); completion(false); return }
+                guard saved else { row.message(L10n.text("Cannot write to the VoxChord configuration file."), error: true); completion(false); return }
                 let savedNotice = L10n.text("✓ Saved · %@", L10n.argument(L10n.time(Date())))
                 for (mergedRow, snapshot) in providerCheck?.rows ?? [row: (value, generation)] {
                     mergedRow.cancel()
@@ -589,7 +589,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
                 if key != credential?.key {
                     if self.preview { self.previewKeys[.bailian] = ResolvedCredential(key: key, source: .app) }
                     else if !PolishCredentials.save(key, for: .bailian) {
-                        row.message(L10n.text("Cannot write to the iMic configuration file."), error: true); completion(false); return
+                        row.message(L10n.text("Cannot write to the VoxChord configuration file."), error: true); completion(false); return
                     }
                 }
                 selection.apply(self.defaults)
@@ -664,7 +664,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         loginSettingsButton.isHidden = true
         guard !preview, SetupLocation.classify(PermissionApplication.current) == .applications else {
             loginCheck.isEnabled = false; loginCheck.state = .off
-            loginHint.stringValue = L10n.text("Set up launch at login from the iMic app in Applications.")
+            loginHint.stringValue = L10n.text("Set up launch at login from the VoxChord app in Applications.")
             return
         }
         loginCheck.isEnabled = true
@@ -673,13 +673,13 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
             loginCheck.state = .on; loginHint.stringValue = L10n.text("Starts in the menu bar when you log in to your Mac.")
         case .requiresApproval:
             loginCheck.state = .on
-            loginHint.stringValue = L10n.text("Allow iMic in System Settings → General → Login Items.")
+            loginHint.stringValue = L10n.text("Allow VoxChord in System Settings → General → Login Items.")
             loginSettingsButton.isHidden = false
         case .notRegistered:
             loginCheck.state = .off; loginHint.stringValue = L10n.text("Will not start automatically when you log in to your Mac.")
         case .notFound:
             loginCheck.state = .off; loginCheck.isEnabled = false
-            loginHint.stringValue = L10n.text("macOS could not find this app's login item. Reopen iMic from Applications.")
+            loginHint.stringValue = L10n.text("macOS could not find this app's login item. Reopen VoxChord from Applications.")
         @unknown default:
             loginCheck.state = .off; loginCheck.isEnabled = false
             loginHint.stringValue = L10n.text("Cannot read the login item status.")

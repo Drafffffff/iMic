@@ -209,7 +209,7 @@ extension AppDelegate {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        statusItem.button?.setAccessibilityLabel("iMic")
+        statusItem.button?.setAccessibilityLabel("VoxChord")
 
         buildStatusMenu()
 
@@ -219,7 +219,7 @@ extension AppDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "iMic"
+        window.title = "VoxChord"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
@@ -238,9 +238,9 @@ extension AppDelegate {
             logo.widthAnchor.constraint(equalToConstant: 26),
             logo.heightAnchor.constraint(equalToConstant: 26)
         ])
-        let wordmark = label("iMic", size: 18, color: .imicIvory, mono: true, weight: .semibold)
+        let wordmark = label("VoxChord", size: 18, color: .imicIvory, mono: true, weight: .semibold)
         wordmark.attributedStringValue = NSAttributedString(
-            string: "iMic",
+            string: "VoxChord",
             attributes: [
                 .font: NSFont.monospacedSystemFont(ofSize: 18, weight: .semibold),
                 .foregroundColor: NSColor.imicIvory,
@@ -295,7 +295,7 @@ extension AppDelegate {
         pairCollapseButton = linkButton(L10n.text("Collapse"), #selector(hidePairCode))
         pairActions.addArrangedSubview(pairCollapseButton)
         pairPanel.addArrangedSubview(pairActions)
-        firstPairSteps.stringValue = L10n.text("01   Install and open iMic on your iPhone\n\n02   Connect your iPhone and Mac to the same Wi-Fi\n\n03   Tap the computer name at the top of your iPhone and enter the pairing code")
+        firstPairSteps.stringValue = L10n.text("01   Install and open VoxChord on your iPhone\n\n02   Connect your iPhone and Mac to the same Wi-Fi\n\n03   Tap the computer name at the top of your iPhone and enter the pairing code")
         firstPairSteps.font = .systemFont(ofSize: 13)
         firstPairSteps.textColor = .imicMuted
         firstPairSteps.preferredMaxLayoutWidth = 388
@@ -304,7 +304,7 @@ extension AppDelegate {
         pairedNames.font = .systemFont(ofSize: 14, weight: .medium)
         pairedNames.textColor = .imicIvory; pairedNames.preferredMaxLayoutWidth = 388
         pairedNames.maximumNumberOfLines = 3; pairedNames.lineBreakMode = .byTruncatingTail
-        let waitingHint = label(L10n.text("Open iMic on your iPhone to connect automatically.\nKeep both devices on the same network."), size: 12)
+        let waitingHint = label(L10n.text("Open VoxChord on your iPhone to connect automatically.\nKeep both devices on the same network."), size: 12)
         for view in [waitingTitle, pairedNames, waitingHint,
                      linkButton(L10n.text("Pair a new iPhone…"), #selector(pairNewPhone))] {
             waitingPanel.addArrangedSubview(view)
@@ -452,8 +452,8 @@ extension AppDelegate {
         pairHint.stringValue = pairingRequested
             ? L10n.text("Enter this pairing code on your iPhone to establish an encrypted connection.")
             : store.isPaired
-                ? L10n.text("Open iMic on your iPhone to connect automatically. New devices use the pairing code above.")
-                : L10n.text("Open iMic on your iPhone, tap the computer name at the top, and enter this pairing code.")
+                ? L10n.text("Open VoxChord on your iPhone to connect automatically. New devices use the pairing code above.")
+                : L10n.text("Open VoxChord on your iPhone, tap the computer name at the top, and enter this pairing code.")
 
         copyButton.title = L10n.text("Copy text")
         copyButton.isEnabled = !transcriptText.isEmpty
