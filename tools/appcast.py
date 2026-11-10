@@ -87,7 +87,7 @@ def main():
                 if version == a.version or enc.get('url') == url:
                     channel.remove(item)
             item = ET.Element('item')
-            ET.SubElement(item, 'title').text = f'iMic {a.version} ({a.build})'
+            ET.SubElement(item, 'title').text = f'VoxChord {a.version} ({a.build})'
             ET.SubElement(item, 'pubDate').text = formatdate(usegmt=True)
             ET.SubElement(item, f'{{{NS}}}version').text = str(a.build)
             ET.SubElement(item, f'{{{NS}}}shortVersionString').text = a.version

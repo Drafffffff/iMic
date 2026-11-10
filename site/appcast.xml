@@ -2,6 +2,52 @@
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
   <channel>
     <item>
+      <title>VoxChord 1.4.8 (6)</title>
+      <pubDate>Tue, 10 Nov 2026 15:30:16 GMT</pubDate>
+      <sparkle:version>6</sparkle:version>
+      <sparkle:shortVersionString>1.4.8</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description>&lt;pre&gt;# VoxChord 1.4.8
+
+## 主要更新
+
+iMic 正式更名为 **VoxChord**。
+
+### iPhone
+
+- **新名称与字标**：主屏名称、主页像素字标 `VOXCHORD`、配对与设备页、首次引导、润色偏好及系统权限说明统一使用 VoxChord。
+- **兼容旧版 Mac**：设备列表同时识别新旧两种 Mac 服务名，连接仍在运行 iMic 1.4.7 的 Mac 不受影响。
+
+### Mac
+
+- **新名称**：菜单栏、主窗口、设置、首次引导、权限提示、更新提示与错误信息统一使用 VoxChord；在「访达」与系统设置中显示为 VoxChord。
+
+### 官网与文档
+
+- 官网像素字标、页面文案、README 与隐私说明更新为 VoxChord。
+
+### 保持不变
+
+- 已有配对、Key、偏好设置与辅助功能授权继续有效，无需重新配对或重新授权。Bundle ID、应用包文件名 `iMic.app`、局域网服务类型、加密握手、本地配置目录与下载地址均未变化，自动更新照常进行。
+
+建议 Mac 与 iPhone 同时更新至 **1.4.8**。
+
+## 下载与安装
+
+- **macOS 13+**：`iMic-1.4.8-macOS-universal.dmg`，支持 Apple Silicon 与 Intel，使用 Developer ID 签名并通过 Apple 公证。
+- **iPhone / iOS 17+**：可从官网的 TestFlight 链接安装；本版本的上传结果会在发布记录中补充。
+- **自行签名安装**：`iMic-1.4.8-iOS-unsigned.ipa` 是未签名真机包，需使用自己的 Apple ID 或开发团队重新签名，不能直接点击安装。
+- **校验**：两个安装包与 `SHA256SUMS.txt` 放在同一目录，执行 `shasum -a 256 -c SHA256SUMS.txt`。
+- 完整源码对应本 Release 的 `v1.4.8` 标签。
+
+## 构建
+
+- Mac：1.4.8（6）。
+- iOS TestFlight：1.4.8（10）。
+&lt;/pre&gt;</description>
+      <enclosure url="https://github.com/Drafffffff/iMic/releases/download/v1.4.8/iMic-1.4.8-macOS-universal.dmg" length="2796444" type="application/octet-stream" sparkle:edSignature="6HUz7EauXM9fMVHMlPXzrCOE/3tBPUK8Oxi7kANG4DhvNXG74VOmf9eegMmvYLpA2zfEJKQGzh0sOaqQ5rqyAQ==" />
+    </item>
+    <item>
       <title>iMic 1.4.7 (5)</title>
       <pubDate>Wed, 04 Nov 2026 15:33:38 GMT</pubDate>
       <sparkle:version>5</sparkle:version>
