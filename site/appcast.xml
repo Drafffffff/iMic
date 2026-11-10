@@ -2,6 +2,42 @@
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
   <channel>
     <item>
+      <title>VoxChord 1.4.9 (7)</title>
+      <pubDate>Tue, 10 Nov 2026 18:51:15 GMT</pubDate>
+      <sparkle:version>7</sparkle:version>
+      <sparkle:shortVersionString>1.4.9</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description>&lt;pre&gt;# VoxChord 1.4.9
+
+## 主要更新
+
+### iPhone
+
+- **录音时空间坍缩**：连续说话较久时，主页四周会逐渐轻微收拢，中心与接收线圈保持清晰稳定，边缘渐入模糊与色散，提醒你已经说了一段时间；松手发送时轻轻弹回，取消时平稳恢复。
+- **减少动态效果**：开启系统「减少动态效果」时不做形变，改为柔和的边缘变暗。
+
+### Mac
+
+- 与 iPhone 保持同一版本号，功能无变化。
+
+建议 Mac 与 iPhone 同时更新至 **1.4.9**。
+
+## 下载与安装
+
+- **macOS 13+**：`iMic-1.4.9-macOS-universal.dmg`，支持 Apple Silicon 与 Intel，使用 Developer ID 签名并通过 Apple 公证。
+- **iPhone / iOS 17+**：可从官网的 TestFlight 链接安装；本版本的上传结果会在发布记录中补充。
+- **自行签名安装**：`iMic-1.4.9-iOS-unsigned.ipa` 是未签名真机包，需使用自己的 Apple ID 或开发团队重新签名，不能直接点击安装。
+- **校验**：两个安装包与 `SHA256SUMS.txt` 放在同一目录，执行 `shasum -a 256 -c SHA256SUMS.txt`。
+- 完整源码对应本 Release 的 `v1.4.9` 标签。
+
+## 构建
+
+- Mac：1.4.9（7）。
+- iOS TestFlight：1.4.9（11）。
+&lt;/pre&gt;</description>
+      <enclosure url="https://github.com/Drafffffff/iMic/releases/download/v1.4.9/iMic-1.4.9-macOS-universal.dmg" length="2796400" type="application/octet-stream" sparkle:edSignature="XLC4Z6PuwRX722/0mhhnl4grSWm18NYq0FK92rhw6Cn9D3BMdRQmQrWkrrXu6TJdAD+thKlKROVMMN8QCdhnDA==" />
+    </item>
+    <item>
       <title>VoxChord 1.4.8 (6)</title>
       <pubDate>Tue, 10 Nov 2026 15:30:16 GMT</pubDate>
       <sparkle:version>6</sparkle:version>
