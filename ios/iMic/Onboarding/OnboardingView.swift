@@ -39,7 +39,7 @@ struct MacDownloadView: View {
         .presentationBackground(Theme.ink)
         .onAppear {
             let next = NSUserActivity(activityType: NSUserActivityTypeBrowsingWeb)
-            next.webpageURL = OnboardingLinks.download; next.title = L10n.text("Get iMic for Mac")
+            next.webpageURL = OnboardingLinks.download; next.title = L10n.text("Get VoxChord for Mac")
             next.isEligibleForHandoff = true; next.becomeCurrent(); activity = next
         }
         .onDisappear { activity?.invalidate(); activity = nil }
@@ -199,7 +199,7 @@ struct GuideSettingsSection: View {
     var onPresentationChanged: (Bool) -> Void = { _ in }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            GuideTitle(text: "GUIDE", cell: 1.6).accessibilityLabel(L10n.text("How to use iMic"))
+            GuideTitle(text: "GUIDE", cell: 1.6).accessibilityLabel(L10n.text("How to use VoxChord"))
             Button(L10n.text("Practice gestures again")) {
                 dismiss()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { onboarding.startPractice(replay: true) }

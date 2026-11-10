@@ -47,7 +47,7 @@ public enum LinkStatusText {
         "asr_long": "Recognition result too long. Please make a shorter recording.",
         "asr_early": "Recognition ended early. Please retry.",
         "cloud_invalidKey": "The Key is invalid, deleted, or incomplete. Copy it again. For a sub-workspace, paste the console's Base URL under Advanced options.",
-        "cloud_plan": "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. iMic needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page.",
+        "cloud_plan": "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. VoxChord needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page.",
         "cloud_permission": "This Key or workspace lacks model access. Set Key permissions to All in Model Studio, or select qwen-audio-3.1-asr-flash-message and deepseek-v4.1-flash, and activate the speech model.",
         "cloud_ip": "The Key's IP allowlist blocked this network. Disable IP restrictions in Model Studio or add your network's public IP address.",
         "cloud_billing": "Your account has overdue charges or no free quota remaining. International new-user quota is offered for eligible Singapore models. Complete your account information, add funds, and check Free Quota Only and budget settings before retrying.",
@@ -59,7 +59,7 @@ public enum LinkStatusText {
         "cloud_ambiguous": "Multiple regions accepted this Key, so its region could not be uniquely identified. Paste the console's Base URL under Advanced options.",
         "cloud_address": "Unsupported service address. Paste the official Model Studio pay-as-you-go Base URL (HTTPS, port 443, /compatible-mode/v1). Plan endpoints and other hosts are not supported.",
         "cloud_service": "Model Studio could not complete the request. Please retry later.",
-        "cloud_unsupported": "This region does not support iMic’s speech model. Create a Key in Singapore (international) or Beijing (China)."
+        "cloud_unsupported": "This region does not support VoxChord’s speech model. Create a Key in Singapore (international) or Beijing (China)."
 ]
     public static func text(code: String?, message: String?, fallback: String) -> String {
         guard let code, let key = keys[code] else { return message ?? fallback }

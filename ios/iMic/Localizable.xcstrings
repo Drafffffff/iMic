@@ -188,53 +188,53 @@
         }
       }
     },
-    "01   Install and open iMic on your iPhone\n\n02   Connect your iPhone and Mac to the same Wi-Fi\n\n03   Tap the computer name at the top of your iPhone and enter the pairing code": {
+    "01   Install and open VoxChord on your iPhone\n\n02   Connect your iPhone and Mac to the same Wi-Fi\n\n03   Tap the computer name at the top of your iPhone and enter the pairing code": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "01   Install and open iMic on your iPhone\n\n02   Connect your iPhone and Mac to the same Wi-Fi\n\n03   Tap the computer name at the top of your iPhone and enter the pairing code"
+            "value": "01   Install and open VoxChord on your iPhone\n\n02   Connect your iPhone and Mac to the same Wi-Fi\n\n03   Tap the computer name at the top of your iPhone and enter the pairing code"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "01   在 iPhone 上安装并打开 iMic\n\n02   让 iPhone 与 Mac 连接同一 Wi-Fi\n\n03   点 iPhone 顶部的电脑名称，输入配对码"
+            "value": "01   在 iPhone 上安装并打开 VoxChord\n\n02   让 iPhone 与 Mac 连接同一 Wi-Fi\n\n03   点 iPhone 顶部的电脑名称，输入配对码"
           }
         }
       }
     },
-    "1. Download and open iMic on your Mac (macOS 13 or later)\n\n2. Follow the Mac setup guide to enter your Model Studio (Bailian) API Key\n\n3. Return here to continue": {
+    "1. Download and open VoxChord on your Mac (macOS 13 or later)\n\n2. Follow the Mac setup guide to enter your Model Studio (Bailian) API Key\n\n3. Return here to continue": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "1. Download and open iMic on your Mac (macOS 13 or later)\n\n2. Follow the Mac setup guide to enter your Model Studio (Bailian) API Key\n\n3. Return here to continue"
+            "value": "1. Download and open VoxChord on your Mac (macOS 13 or later)\n\n2. Follow the Mac setup guide to enter your Model Studio (Bailian) API Key\n\n3. Return here to continue"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "1. 在 Mac 上下载并打开 iMic（macOS 13 及以上）\n\n2. 按 Mac 上的设置向导填入百炼 API Key\n\n3. 回到这里继续"
+            "value": "1. 在 Mac 上下载并打开 VoxChord（macOS 13 及以上）\n\n2. 按 Mac 上的设置向导填入百炼 API Key\n\n3. 回到这里继续"
           }
         }
       }
     },
-    "1. Is iMic open on your Mac? Look for the microphone icon in the menu bar.": {
+    "1. Is VoxChord open on your Mac? Look for the microphone icon in the menu bar.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "1. Is iMic open on your Mac? Look for the microphone icon in the menu bar."
+            "value": "1. Is VoxChord open on your Mac? Look for the microphone icon in the menu bar."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "1. Mac 上的 iMic 是否已打开？菜单栏能看到麦克风图标。"
+            "value": "1. Mac 上的 VoxChord 是否已打开？菜单栏能看到麦克风图标。"
           }
         }
       }
@@ -341,19 +341,19 @@
         }
       }
     },
-    "5. Is your Mac's firewall blocking incoming connections to iMic?": {
+    "5. Is your Mac's firewall blocking incoming connections to VoxChord?": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "5. Is your Mac's firewall blocking incoming connections to iMic?"
+            "value": "5. Is your Mac's firewall blocking incoming connections to VoxChord?"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "5. Mac 的防火墙是否阻止了 iMic 的传入连接？"
+            "value": "5. Mac 的防火墙是否阻止了 VoxChord 的传入连接？"
           }
         }
       }
@@ -528,19 +528,19 @@
         }
       }
     },
-    "After saving, the Key in iMic takes priority.": {
+    "After saving, the Key in VoxChord takes priority.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "After saving, the Key in iMic takes priority."
+            "value": "After saving, the Key in VoxChord takes priority."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "保存后将优先使用 iMic 中的 Key。"
+            "value": "保存后将优先使用 VoxChord 中的 Key。"
           }
         }
       }
@@ -596,13 +596,13 @@
         }
       }
     },
-    "Allow iMic in System Settings → General → Login Items.": {
+    "Allow VoxChord in System Settings → General → Login Items.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Allow iMic in System Settings → General → Login Items."
+            "value": "Allow VoxChord in System Settings → General → Login Items."
           }
         },
         "zh-Hans": {
@@ -613,53 +613,53 @@
         }
       }
     },
-    "Allow iMic in System Settings → Privacy & Security → Screen Recording. Typing still works without permission.": {
+    "Allow VoxChord in System Settings → Privacy & Security → Screen Recording. Typing still works without permission.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Allow iMic in System Settings → Privacy & Security → Screen Recording. Typing still works without permission."
+            "value": "Allow VoxChord in System Settings → Privacy & Security → Screen Recording. Typing still works without permission."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "请在系统设置 → 隐私与安全性 → 屏幕录制中允许 iMic；未授权时仍正常输入。"
+            "value": "请在系统设置 → 隐私与安全性 → 屏幕录制中允许 VoxChord；未授权时仍正常输入。"
           }
         }
       }
     },
-    "Allow iMic to find and connect to\ndevices on your local network?": {
+    "Allow VoxChord to find and connect to\ndevices on your local network?": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Allow iMic to find and connect to\ndevices on your local network?"
+            "value": "Allow VoxChord to find and connect to\ndevices on your local network?"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "允许 iMic 寻找并连接\n本地网络上的设备？"
+            "value": "允许 VoxChord 寻找并连接\n本地网络上的设备？"
           }
         }
       }
     },
-    "Allow iMic to type": {
+    "Allow VoxChord to type": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Allow iMic to type"
+            "value": "Allow VoxChord to type"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "允许 iMic 输入文字"
+            "value": "允许 VoxChord 输入文字"
           }
         }
       }
@@ -1208,19 +1208,19 @@
         }
       }
     },
-    "Cannot connect to your Mac. Make sure iMic is open on your Mac.": {
+    "Cannot connect to your Mac. Make sure VoxChord is open on your Mac.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cannot connect to your Mac. Make sure iMic is open on your Mac."
+            "value": "Cannot connect to your Mac. Make sure VoxChord is open on your Mac."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法连接 Mac，请确认 Mac 上的 iMic 已打开"
+            "value": "无法连接 Mac，请确认 Mac 上的 VoxChord 已打开"
           }
         }
       }
@@ -1310,19 +1310,19 @@
         }
       }
     },
-    "Cannot write to the iMic configuration file.": {
+    "Cannot write to the VoxChord configuration file.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cannot write to the iMic configuration file."
+            "value": "Cannot write to the VoxChord configuration file."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法写入 iMic 配置文件。"
+            "value": "无法写入 VoxChord 配置文件。"
           }
         }
       }
@@ -3452,19 +3452,19 @@
         }
       }
     },
-    "Drag iMic to Applications and open it from there first. Otherwise, permission will be lost the next time you open it.": {
+    "Drag VoxChord to Applications and open it from there first. Otherwise, permission will be lost the next time you open it.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Drag iMic to Applications and open it from there first. Otherwise, permission will be lost the next time you open it."
+            "value": "Drag VoxChord to Applications and open it from there first. Otherwise, permission will be lost the next time you open it."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "请先把 iMic 拖到「应用程序」文件夹，再从那里打开，否则授权在下次打开时会失效。"
+            "value": "请先把 VoxChord 拖到「应用程序」文件夹，再从那里打开，否则授权在下次打开时会失效。"
           }
         }
       }
@@ -3843,19 +3843,19 @@
         }
       }
     },
-    "Find the 6-digit pairing code in the iMic window on your Mac.": {
+    "Find the 6-digit pairing code in the VoxChord window on your Mac.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Find the 6-digit pairing code in the iMic window on your Mac."
+            "value": "Find the 6-digit pairing code in the VoxChord window on your Mac."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在 Mac 的 iMic 窗口里找到 6 位配对码。"
+            "value": "在 Mac 的 VoxChord 窗口里找到 6 位配对码。"
           }
         }
       }
@@ -4183,19 +4183,19 @@
         }
       }
     },
-    "Get iMic for Mac": {
+    "Get VoxChord for Mac": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Get iMic for Mac"
+            "value": "Get VoxChord for Mac"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "获取 iMic Mac 版"
+            "value": "获取 VoxChord Mac 版"
           }
         }
       }
@@ -4421,13 +4421,13 @@
         }
       }
     },
-    "How to use iMic": {
+    "How to use VoxChord": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "How to use iMic"
+            "value": "How to use VoxChord"
           }
         },
         "zh-Hans": {
@@ -4846,19 +4846,19 @@
         }
       }
     },
-    "Is iMic installed on your Mac?": {
+    "Is VoxChord installed on your Mac?": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Is iMic installed on your Mac?"
+            "value": "Is VoxChord installed on your Mac?"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mac 上装好 iMic 了吗？"
+            "value": "Mac 上装好 VoxChord 了吗？"
           }
         }
       }
@@ -5169,19 +5169,19 @@
         }
       }
     },
-    "Local Network access is off, so iMic cannot find your Mac. Enable Local Network in Settings → iMic.": {
+    "Local Network access is off, so VoxChord cannot find your Mac. Enable Local Network in Settings → VoxChord.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Local Network access is off, so iMic cannot find your Mac. Enable Local Network in Settings → iMic."
+            "value": "Local Network access is off, so VoxChord cannot find your Mac. Enable Local Network in Settings → VoxChord."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "本地网络权限已关闭，iMic 无法找到 Mac。请在「设置 → iMic」中打开「本地网络」。"
+            "value": "本地网络权限已关闭，VoxChord 无法找到 Mac。请在「设置 → VoxChord」中打开「本地网络」。"
           }
         }
       }
@@ -5934,19 +5934,19 @@
         }
       }
     },
-    "No Mac found. Open iMic on your computer. Connect over the same Wi-Fi or nearby Bluetooth.": {
+    "No Mac found. Open VoxChord on your computer. Connect over the same Wi-Fi or nearby Bluetooth.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No Mac found. Open iMic on your computer. Connect over the same Wi-Fi or nearby Bluetooth."
+            "value": "No Mac found. Open VoxChord on your computer. Connect over the same Wi-Fi or nearby Bluetooth."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "尚未发现 Mac。请打开电脑上的 iMic；同一 Wi-Fi 或附近蓝牙均可连接。"
+            "value": "尚未发现 Mac。请打开电脑上的 VoxChord；同一 Wi-Fi 或附近蓝牙均可连接。"
           }
         }
       }
@@ -6410,87 +6410,87 @@
         }
       }
     },
-    "Open iMic": {
+    "Open VoxChord": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open iMic"
+            "value": "Open VoxChord"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "打开 iMic"
+            "value": "打开 VoxChord"
           }
         }
       }
     },
-    "Open iMic on your Mac": {
+    "Open VoxChord on your Mac": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open iMic on your Mac"
+            "value": "Open VoxChord on your Mac"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在 Mac 上打开 iMic"
+            "value": "在 Mac 上打开 VoxChord"
           }
         }
       }
     },
-    "Open iMic on your iPhone to connect automatically.\nKeep both devices on the same network.": {
+    "Open VoxChord on your iPhone to connect automatically.\nKeep both devices on the same network.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open iMic on your iPhone to connect automatically.\nKeep both devices on the same network."
+            "value": "Open VoxChord on your iPhone to connect automatically.\nKeep both devices on the same network."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "打开 iPhone 上的 iMic 即可自动连接。\n请保持两台设备在同一网络。"
+            "value": "打开 iPhone 上的 VoxChord 即可自动连接。\n请保持两台设备在同一网络。"
           }
         }
       }
     },
-    "Open iMic on your iPhone to connect automatically. New devices use the pairing code above.": {
+    "Open VoxChord on your iPhone to connect automatically. New devices use the pairing code above.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open iMic on your iPhone to connect automatically. New devices use the pairing code above."
+            "value": "Open VoxChord on your iPhone to connect automatically. New devices use the pairing code above."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "打开 iPhone 上的 iMic 会自动连接。新设备输入上方配对码。"
+            "value": "打开 iPhone 上的 VoxChord 会自动连接。新设备输入上方配对码。"
           }
         }
       }
     },
-    "Open iMic on your iPhone, tap the computer name at the top, and enter this pairing code.": {
+    "Open VoxChord on your iPhone, tap the computer name at the top, and enter this pairing code.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open iMic on your iPhone, tap the computer name at the top, and enter this pairing code."
+            "value": "Open VoxChord on your iPhone, tap the computer name at the top, and enter this pairing code."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在 iPhone 上打开 iMic，点顶部的电脑名称，输入这个配对码。"
+            "value": "在 iPhone 上打开 VoxChord，点顶部的电脑名称，输入这个配对码。"
           }
         }
       }
@@ -6546,19 +6546,19 @@
         }
       }
     },
-    "Optional · Polish highlight. macOS may ask you to reopen iMic. Setup will return to this step.": {
+    "Optional · Polish highlight. macOS may ask you to reopen VoxChord. Setup will return to this step.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Optional · Polish highlight. macOS may ask you to reopen iMic. Setup will return to this step."
+            "value": "Optional · Polish highlight. macOS may ask you to reopen VoxChord. Setup will return to this step."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "可选 · 润色扫光。开启后系统可能要求重新打开 iMic，向导会回到这一步"
+            "value": "可选 · 润色扫光。开启后系统可能要求重新打开 VoxChord，向导会回到这一步"
           }
         }
       }
@@ -7481,19 +7481,19 @@
         }
       }
     },
-    "Quit iMic": {
+    "Quit VoxChord": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Quit iMic"
+            "value": "Quit VoxChord"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "退出 iMic"
+            "value": "退出 VoxChord"
           }
         }
       }
@@ -8195,19 +8195,19 @@
         }
       }
     },
-    "Removed the Key saved in iMic.": {
+    "Removed the Key saved in VoxChord.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Removed the Key saved in iMic."
+            "value": "Removed the Key saved in VoxChord."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已移除 iMic 中保存的 Key。"
+            "value": "已移除 VoxChord 中保存的 Key。"
           }
         }
       }
@@ -8484,36 +8484,36 @@
         }
       }
     },
-    "Searching… Keep iMic open on your Mac.": {
+    "Searching… Keep VoxChord open on your Mac.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Searching… Keep iMic open on your Mac."
+            "value": "Searching… Keep VoxChord open on your Mac."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在寻找… 请保持 Mac 上的 iMic 打开。"
+            "value": "正在寻找… 请保持 Mac 上的 VoxChord 打开。"
           }
         }
       }
     },
-    "Select iMic in System Settings and click − to remove it. Then return here and click Open Settings. This is common after reinstalling or updating.": {
+    "Select VoxChord in System Settings and click − to remove it. Then return here and click Open Settings. This is common after reinstalling or updating.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Select iMic in System Settings and click − to remove it. Then return here and click Open Settings. This is common after reinstalling or updating."
+            "value": "Select VoxChord in System Settings and click − to remove it. Then return here and click Open Settings. This is common after reinstalling or updating."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在系统设置的列表里选中 iMic，点「−」删除，再回到这里点「去开启」。重新安装或更新后常会遇到。"
+            "value": "在系统设置的列表里选中 VoxChord，点「−」删除，再回到这里点「去开启」。重新安装或更新后常会遇到。"
           }
         }
       }
@@ -8637,36 +8637,36 @@
         }
       }
     },
-    "Set up iMic": {
+    "Set up VoxChord": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Set up iMic"
+            "value": "Set up VoxChord"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "设置 iMic"
+            "value": "设置 VoxChord"
           }
         }
       }
     },
-    "Set up launch at login from the iMic app in Applications.": {
+    "Set up launch at login from the VoxChord app in Applications.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Set up launch at login from the iMic app in Applications."
+            "value": "Set up launch at login from the VoxChord app in Applications."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "请从「应用程序」里的 iMic 设置登录时启动。"
+            "value": "请从「应用程序」里的 VoxChord 设置登录时启动。"
           }
         }
       }
@@ -8841,19 +8841,19 @@
         }
       }
     },
-    "Show iMic in Finder": {
+    "Show VoxChord in Finder": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show iMic in Finder"
+            "value": "Show VoxChord in Finder"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在 Finder 中显示 iMic"
+            "value": "在 Finder 中显示 VoxChord"
           }
         }
       }
@@ -9028,13 +9028,13 @@
         }
       }
     },
-    "Some gestures are disabled in Settings. You can skip them. Re-enable them in iMic on your Mac.": {
+    "Some gestures are disabled in Settings. You can skip them. Re-enable them in VoxChord on your Mac.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Some gestures are disabled in Settings. You can skip them. Re-enable them in iMic on your Mac."
+            "value": "Some gestures are disabled in Settings. You can skip them. Re-enable them in VoxChord on your Mac."
           }
         },
         "zh-Hans": {
@@ -9045,30 +9045,30 @@
         }
       }
     },
-    "Source: %@ · iMic configuration takes priority over environment variables and shell files.": {
+    "Source: %@ · VoxChord configuration takes priority over environment variables and shell files.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Source: %@ · iMic configuration takes priority over environment variables and shell files."
+            "value": "Source: %@ · VoxChord configuration takes priority over environment variables and shell files."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "来源：%@ · iMic 配置优先于环境变量和 shell 文件。"
+            "value": "来源：%@ · VoxChord 配置优先于环境变量和 shell 文件。"
           }
         }
       }
     },
-    "Start using iMic": {
+    "Start using VoxChord": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start using iMic"
+            "value": "Start using VoxChord"
           }
         },
         "zh-Hans": {
@@ -9249,19 +9249,19 @@
         }
       }
     },
-    "Switching keeps your pairings. iMic will reconnect only to the selected Mac and will not switch to another computer automatically.": {
+    "Switching keeps your pairings. VoxChord will reconnect only to the selected Mac and will not switch to another computer automatically.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Switching keeps your pairings. iMic will reconnect only to the selected Mac and will not switch to another computer automatically."
+            "value": "Switching keeps your pairings. VoxChord will reconnect only to the selected Mac and will not switch to another computer automatically."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "切换不会删除配对。选定后，iMic 只会重连这台 Mac，不会自动转到其他电脑。"
+            "value": "切换不会删除配对。选定后，VoxChord 只会重连这台 Mac，不会自动转到其他电脑。"
           }
         }
       }
@@ -9300,13 +9300,13 @@
         }
       }
     },
-    "Tap Start using iMic to request Microphone access (required), then Speech Recognition access (optional, for live preview on your phone).": {
+    "Tap Start using VoxChord to request Microphone access (required), then Speech Recognition access (optional, for live preview on your phone).": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tap Start using iMic to request Microphone access (required), then Speech Recognition access (optional, for live preview on your phone)."
+            "value": "Tap Start using VoxChord to request Microphone access (required), then Speech Recognition access (optional, for live preview on your phone)."
           }
         },
         "zh-Hans": {
@@ -9742,19 +9742,19 @@
         }
       }
     },
-    "The pairing code changes every 10 minutes. Once paired, iMic remembers this Mac.": {
+    "The pairing code changes every 10 minutes. Once paired, VoxChord remembers this Mac.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The pairing code changes every 10 minutes. Once paired, iMic remembers this Mac."
+            "value": "The pairing code changes every 10 minutes. Once paired, VoxChord remembers this Mac."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "配对码每 10 分钟轮换。配对成功后，iMic 自动记住这台 Mac。"
+            "value": "配对码每 10 分钟轮换。配对成功后，VoxChord 自动记住这台 Mac。"
           }
         }
       }
@@ -9776,19 +9776,19 @@
         }
       }
     },
-    "This Key belongs to %@, which does not currently support iMic's speech model. Select Singapore in Model Studio and create a new Key.": {
+    "This Key belongs to %@, which does not currently support VoxChord's speech model. Select Singapore in Model Studio and create a new Key.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This Key belongs to %@, which does not currently support iMic's speech model. Select Singapore in Model Studio and create a new Key."
+            "value": "This Key belongs to %@, which does not currently support VoxChord's speech model. Select Singapore in Model Studio and create a new Key."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "这个 Key 属于%@地域，该地域暂不支持 iMic 使用的语音识别模型。请在百炼控制台右上角切换到「华北2（北京）」，重新创建一个 Key。"
+            "value": "这个 Key 属于%@地域，该地域暂不支持 VoxChord 使用的语音识别模型。请在百炼控制台右上角切换到「华北2（北京）」，重新创建一个 Key。"
           }
         }
       }
@@ -9844,13 +9844,13 @@
         }
       }
     },
-    "This Mac no longer supports changing polish preferences from your phone. Update iMic on your Mac.": {
+    "This Mac no longer supports changing polish preferences from your phone. Update VoxChord on your Mac.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This Mac no longer supports changing polish preferences from your phone. Update iMic on your Mac."
+            "value": "This Mac no longer supports changing polish preferences from your phone. Update VoxChord on your Mac."
           }
         },
         "zh-Hans": {
@@ -9929,19 +9929,19 @@
         }
       }
     },
-    "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. iMic needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page.": {
+    "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. VoxChord needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. iMic needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page."
+            "value": "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. VoxChord needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "这看起来是 Token Plan 或 Coding Plan 套餐的 Key。套餐 Key 只能用于 Claude Code 等编程工具，iMic 需要按量付费的 API Key。请在百炼控制台的「API Key」页面创建一个新的 Key。"
+            "value": "这看起来是 Token Plan 或 Coding Plan 套餐的 Key。套餐 Key 只能用于 Claude Code 等编程工具，VoxChord 需要按量付费的 API Key。请在百炼控制台的「API Key」页面创建一个新的 Key。"
           }
         }
       }
@@ -10303,13 +10303,13 @@
         }
       }
     },
-    "Update iMic on your Mac to enable string controls": {
+    "Update VoxChord on your Mac to enable string controls": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Update iMic on your Mac to enable string controls"
+            "value": "Update VoxChord on your Mac to enable string controls"
           }
         },
         "zh-Hans": {
@@ -10320,19 +10320,19 @@
         }
       }
     },
-    "Update iMic on your Mac to set mode, tone, and output language from your phone.": {
+    "Update VoxChord on your Mac to set mode, tone, and output language from your phone.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Update iMic on your Mac to set mode, tone, and output language from your phone."
+            "value": "Update VoxChord on your Mac to set mode, tone, and output language from your phone."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "请更新 Mac 端 iMic，以支持模式、语气和输出语言设置。"
+            "value": "请更新 Mac 端 VoxChord，以支持模式、语气和输出语言设置。"
           }
         }
       }
@@ -10966,223 +10966,223 @@
         }
       }
     },
-    "iMic Settings": {
+    "VoxChord Settings": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic Settings"
+            "value": "VoxChord Settings"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic 设置"
+            "value": "VoxChord 设置"
           }
         }
       }
     },
-    "iMic Update": {
+    "VoxChord Update": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic Update"
+            "value": "VoxChord Update"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic 更新"
+            "value": "VoxChord 更新"
           }
         }
       }
     },
-    "iMic awaiting pairing": {
+    "VoxChord awaiting pairing": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic awaiting pairing"
+            "value": "VoxChord awaiting pairing"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic 等待配对"
+            "value": "VoxChord 等待配对"
           }
         }
       }
     },
-    "iMic connected": {
+    "VoxChord connected": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic connected"
+            "value": "VoxChord connected"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic 已连接"
+            "value": "VoxChord 已连接"
           }
         }
       }
     },
-    "iMic disconnected": {
+    "VoxChord disconnected": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic disconnected"
+            "value": "VoxChord disconnected"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic 未连接"
+            "value": "VoxChord 未连接"
           }
         }
       }
     },
-    "iMic listening": {
+    "VoxChord listening": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic listening"
+            "value": "VoxChord listening"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic 正在听"
+            "value": "VoxChord 正在听"
           }
         }
       }
     },
-    "iMic needs its Mac companion. Your Mac handles recognition and types text into the active app.": {
+    "VoxChord needs its Mac companion. Your Mac handles recognition and types text into the active app.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic needs its Mac companion. Your Mac handles recognition and types text into the active app."
+            "value": "VoxChord needs its Mac companion. Your Mac handles recognition and types text into the active app."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic 需要电脑端配合。Mac 端负责识别和把文字输入到当前应用。"
+            "value": "VoxChord 需要电脑端配合。Mac 端负责识别和把文字输入到当前应用。"
           }
         }
       }
     },
-    "iMic phosphor waveform demo": {
+    "VoxChord phosphor waveform demo": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic phosphor waveform demo"
+            "value": "VoxChord phosphor waveform demo"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic 荧光波形演示"
+            "value": "VoxChord 荧光波形演示"
           }
         }
       }
     },
-    "iMic recognizing": {
+    "VoxChord recognizing": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic recognizing"
+            "value": "VoxChord recognizing"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic 正在识别"
+            "value": "VoxChord 正在识别"
           }
         }
       }
     },
-    "iMic typing test": {
+    "VoxChord typing test": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic typing test"
+            "value": "VoxChord typing test"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic 输入测试"
+            "value": "VoxChord 输入测试"
           }
         }
       }
     },
-    "iMic website and help…": {
+    "VoxChord website and help…": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic website and help…"
+            "value": "VoxChord website and help…"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic 官网与帮助…"
+            "value": "VoxChord 官网与帮助…"
           }
         }
       }
     },
-    "iMic website ↗": {
+    "VoxChord website ↗": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic website ↗"
+            "value": "VoxChord website ↗"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic 官网 ↗"
+            "value": "VoxChord 官网 ↗"
           }
         }
       }
     },
-    "iMic will look for your Mac on the same Wi-Fi. Choose Allow when asked for Local Network access.": {
+    "VoxChord will look for your Mac on the same Wi-Fi. Choose Allow when asked for Local Network access.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iMic will look for your Mac on the same Wi-Fi. Choose Allow when asked for Local Network access."
+            "value": "VoxChord will look for your Mac on the same Wi-Fi. Choose Allow when asked for Local Network access."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "接下来 iMic 会在同一 Wi-Fi 中寻找你的 Mac，系统会询问是否允许访问本地网络，请选择「允许」。"
+            "value": "接下来 VoxChord 会在同一 Wi-Fi 中寻找你的 Mac，系统会询问是否允许访问本地网络，请选择「允许」。"
           }
         }
       }
@@ -11204,19 +11204,19 @@
         }
       }
     },
-    "macOS could not find this app's login item. Reopen iMic from Applications.": {
+    "macOS could not find this app's login item. Reopen VoxChord from Applications.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS could not find this app's login item. Reopen iMic from Applications."
+            "value": "macOS could not find this app's login item. Reopen VoxChord from Applications."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "系统未找到此应用的登录项，请从「应用程序」重新打开 iMic。"
+            "value": "系统未找到此应用的登录项，请从「应用程序」重新打开 VoxChord。"
           }
         }
       }
@@ -11340,19 +11340,19 @@
         }
       }
     },
-    "Use the Key saved in iMic": {
+    "Use the Key saved in VoxChord": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Use the Key saved in iMic"
+            "value": "Use the Key saved in VoxChord"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "改用 iMic 保存的 Key"
+            "value": "改用 VoxChord 保存的 Key"
           }
         }
       }
@@ -11442,19 +11442,19 @@
         }
       }
     },
-    "This region does not support iMic’s speech model. Create a Key in Singapore (international) or Beijing (China).": {
+    "This region does not support VoxChord’s speech model. Create a Key in Singapore (international) or Beijing (China).": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This region does not support iMic’s speech model. Create a Key in Singapore (international) or Beijing (China)."
+            "value": "This region does not support VoxChord’s speech model. Create a Key in Singapore (international) or Beijing (China)."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "该地域不支持 iMic 的语音模型，请在国际站的新加坡或中国站的北京地域创建 Key。"
+            "value": "该地域不支持 VoxChord 的语音模型，请在国际站的新加坡或中国站的北京地域创建 Key。"
           }
         }
       }
@@ -11544,18 +11544,18 @@
       },
       "comment": "ios-only"
     },
-    "I've used iMic before": {
+    "I've used VoxChord before": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "I've used iMic before"
+            "value": "I've used VoxChord before"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "我已经用过 iMic"
+            "value": "我已经用过 VoxChord"
           }
         }
       },
@@ -11629,18 +11629,18 @@
       },
       "comment": "ios-only"
     },
-    "No iMic on your Mac yet?": {
+    "No VoxChord on your Mac yet?": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No iMic on your Mac yet?"
+            "value": "No VoxChord on your Mac yet?"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mac 上还没有 iMic？"
+            "value": "Mac 上还没有 VoxChord？"
           }
         }
       },
@@ -11663,18 +11663,18 @@
       },
       "comment": "ios-only"
     },
-    "Open iMic on your Mac##onboarding": {
+    "Open VoxChord on your Mac##onboarding": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open iMic on your Mac"
+            "value": "Open VoxChord on your Mac"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "打开 Mac 上的 iMic"
+            "value": "打开 Mac 上的 VoxChord"
           }
         }
       },
@@ -12443,14 +12443,14 @@
         }
       }
     },
-    "Used iMic": {
+    "Used VoxChord": {
       "comment": "ios-only",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Used iMic"
+            "value": "Used VoxChord"
           }
         },
         "zh-Hans": {

@@ -906,7 +906,7 @@ final class SessionModel: ObservableObject {
     }
 
     private func abortForConnection() {
-        failActiveSession(L10n.text("Cannot connect to your Mac. Make sure iMic is open on your Mac."))
+        failActiveSession(L10n.text("Cannot connect to your Mac. Make sure VoxChord is open on your Mac."))
     }
 
     /// 失败只保留可复制文字，绝不把本机临时识别自动投递到其它设备。

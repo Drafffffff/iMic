@@ -83,7 +83,7 @@ enum HoldBarLayout {
     static let labelTracking: CGFloat = 1.8
     static let separatorHeight: CGFloat = 24
     static let tickHeight: CGFloat = 20
-    static let wordmark = CGSize(width: 76, height: 22)
+    static let wordmark = CGSize(width: 110, height: 22)
 
     static func labelWidth(barWidth: CGFloat) -> CGFloat {
         max(80, barWidth - leading - accessoryWidth - labelGap)
@@ -160,7 +160,7 @@ struct InstrumentIdentity: View {
         VStack(alignment: .leading, spacing: 8) {
             Image("Wordmark").renderingMode(.original).resizable().scaledToFit()
                 .frame(width: HoldBarLayout.wordmark.width, height: HoldBarLayout.wordmark.height, alignment: .leading)
-                .blendMode(.screen).accessibilityLabel("iMic")
+                .blendMode(.screen).accessibilityLabel("VoxChord")
             HUDLabel(text: "SYS 01")
         }
     }

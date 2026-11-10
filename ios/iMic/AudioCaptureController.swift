@@ -71,7 +71,7 @@ struct CaptureDiagnostics {
     var level: CaptureLevel { CaptureLevel.classify(meter) }
 
     var report: String {
-        "iMic MIC TEST\ninput=\(input) route=\(route)\nsessionRate=\(sampleRate) sessionChannels=\(sessionChannels) nativeRate=\(nativeRate) channels=\(channels)\nvpio=\(voiceProcessing ? "on" : "off") mode=\(mode) format=\(format) ducking=\(ducking) level=\(level.rawValue)\nengineRunning=\(running) recoveries=\(attempt) recoveryResult=\(recoveryResult.rawValue) event=\(event)\n\(inputRoute.report)\nRMS=\(meter.rms) peak=\(meter.peak) callbacks=\(meter.callbacks) interval=\(meter.elapsed) allZero=\(meter.allZero)"
+        "VoxChord MIC TEST\ninput=\(input) route=\(route)\nsessionRate=\(sampleRate) sessionChannels=\(sessionChannels) nativeRate=\(nativeRate) channels=\(channels)\nvpio=\(voiceProcessing ? "on" : "off") mode=\(mode) format=\(format) ducking=\(ducking) level=\(level.rawValue)\nengineRunning=\(running) recoveries=\(attempt) recoveryResult=\(recoveryResult.rawValue) event=\(event)\n\(inputRoute.report)\nRMS=\(meter.rms) peak=\(meter.peak) callbacks=\(meter.callbacks) interval=\(meter.elapsed) allZero=\(meter.allZero)"
     }
 }
 

@@ -167,7 +167,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 420),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered, defer: false)
-        window.title = L10n.text("Set up iMic")
+        window.title = L10n.text("Set up VoxChord")
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true
@@ -333,11 +333,11 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
     // MARK: - 02 Permissions
 
     private func buildPermissions() -> NSView {
-        var items: [NSView] = [Self.title(L10n.text("Allow iMic to type"))]
+        var items: [NSView] = [Self.title(L10n.text("Allow VoxChord to type"))]
         if snapshot.location == .translocated {
-            let note = Self.text(L10n.text("Drag iMic to Applications and open it from there first. Otherwise, permission will be lost the next time you open it."))
+            let note = Self.text(L10n.text("Drag VoxChord to Applications and open it from there first. Otherwise, permission will be lost the next time you open it."))
             note.textColor = .imicIvory
-            items += [note, Self.link(L10n.text("Show iMic in Finder"), self, #selector(revealApp))]
+            items += [note, Self.link(L10n.text("Show VoxChord in Finder"), self, #selector(revealApp))]
             let view = Self.column(items, spacing: 16)
             note.widthAnchor.constraint(equalTo: view.widthAnchor).isActive = true
             return view
@@ -346,13 +346,13 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
             name: L10n.text("Accessibility"), detail: L10n.text("Type recognized text into the active app"),
             action: L10n.text("Open Settings##07c3e915"), target: self, selector: #selector(requestAccessibility))
         let screen = PermissionRow(
-            name: L10n.text("Screen Recording"), detail: L10n.text("Optional · Polish highlight. macOS may ask you to reopen iMic. Setup will return to this step."),
+            name: L10n.text("Screen Recording"), detail: L10n.text("Optional · Polish highlight. macOS may ask you to reopen VoxChord. Setup will return to this step."),
             action: L10n.text("Open Settings##07c3e915"), target: self, selector: #selector(requestScreenCapture))
         accessibilityRow = accessibility
         screenRow = screen
 
         let toggle = Self.link(L10n.text("Enabled the switch but it still doesn't work?"), self, #selector(toggleStale))
-        let help = Self.text(L10n.text("Select iMic in System Settings and click − to remove it. Then return here and click Open Settings. This is common after reinstalling or updating."), size: 11)
+        let help = Self.text(L10n.text("Select VoxChord in System Settings and click − to remove it. Then return here and click Open Settings. This is common after reinstalling or updating."), size: 11)
         help.isHidden = true
         staleHelp = help
         staleToggle = toggle
