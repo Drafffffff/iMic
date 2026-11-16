@@ -1,0 +1,94 @@
+2026-11-03 / HUD visual pass / one final base integration
+Base: f7ec9961d31db709b0d73bbf9052666ef3bbbc33
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+Dedicated iOS 27.0 devices only; parallel testing disabled.
+
+swift test => exit 0, 3.9s
+	 Executed 74 tests, with 0 failures (0 unexpected) in 0.036 (0.038) seconds
+	 Executed 74 tests, with 0 failures (0 unexpected) in 0.036 (0.040) seconds
+
+./scripts/build-ios.sh => exit 0, 15.8s
+** BUILD SUCCEEDED **
+
+python3 tools/check-l10n.py => exit 0, 0.1s
+PASS: bilingual keys, placeholders, generated resources and exact Chinese exclusions
+
+./scripts/test-ios-mac-selection.sh => exit 0, 27.6s
+PASS grace, authenticated fallback identity/recency, late discovery preserves active link
+PASS preferred wins when discovered 200ms later
+PASS failed network target advances to next candidate without recording success
+PASS discovered endpoint cannot substitute another Mac identity
+PASS exhausted candidate round uses existing backoff without rapid ping-pong
+PASS revoked automatic token skips pairing and authenticates the next Mac
+PASS auth rejection removes only the stale token and falls back without pairing
+PASS manual offline wait, foreground unlock, forget removes authenticated recency
+PASS any offline pairing prevents automatic pairing with an unpaired discovery
+PASS first-install single-Mac pairing stays explicit and records success only after ready
+PASS all automatic Mac selection integration checks
+
+./scripts/test-ios-reconnect.sh => exit 0, 23.6s
+PASS healthy resume 12ms; same encrypted connection
+PASS stale resume 828ms; loss delivered once; authenticated without re-pairing
+PASS idle stale reconnect preserves newly buffered recording
+PASS backoff bypass 21ms
+PASS all foreground reconnect checks
+
+./scripts/test-ios-audio.sh => exit 0, 1.5s
+PASS: 94 capture assertions (route validation/recovery, shared budget, notifications, warm leases, native silence, generations)
+
+First Debug SE round: 4 passed / 1 failed. Failure: restored More/LATER tap did not activate.
+XCResult hierarchy showed LATER and header HUD buttons had 10pt accessibility bounds despite a 44pt visual frame. Added rectangular content shapes and explicit >=44pt UI assertions. No further base sync or full-suite rerun. Affected onboarding UI is retested below.
+
+Test Case '-[iMicUITests.MicrophoneEntryMergeUITests testHomeAndSettingsKeepMicrophoneSelfTest]' passed (38.361 seconds).
+PRACTICE AUDIT: link=0 send=0 mic=undetermined speech=undetermined practice=true phase=result text=25 deferred=true idle=true captureStarts=0
+PRACTICE AUDIT: link=0 send=0 mic=undetermined speech=undetermined practice=true phase=idle text=0 deferred=true idle=true captureStarts=0
+PRACTICE CLEANUP: link=4 send=0 mic=undetermined speech=undetermined practice=false phase=idle text=0 deferred=true idle=true captureStarts=0
+Test Case '-[iMicUITests.OnboardingUITests testCoreAndAllOptionalGesturesAreOffline]' passed (39.255 seconds).
+PRACTICE AUDIT: link=0 send=0 mic=undetermined speech=undetermined practice=true phase=idle text=0 deferred=true idle=true captureStarts=0
+Test Case '-[iMicUITests.OnboardingUITests testOptionalSkipAndReplayFromSettings]' passed (45.393 seconds).
+Test Case '-[iMicUITests.OnboardingUITests testSkipRestoreAndConnectLater]' failed (30.205 seconds).
+Test Case '-[iMicUITests.OnboardingVisualUITests testEveryHomeLessonKeepsOrangeBarAndHUDPanelClear]' passed (94.039 seconds).
+
+Pro follow-up first attempt: only the numeric 44pt assertion failed on 43.99999999999994pt. Geometry assertions now tolerate 0.001pt floating-point round-off; target remains 44pt.
+
+Final affected-UI checks (all passed):
+
+debug-se-followup
+PRACTICE AUDIT: link=0 send=0 mic=undetermined speech=undetermined practice=true phase=result text=25 deferred=true idle=true captureStarts=0
+PRACTICE AUDIT: link=0 send=0 mic=undetermined speech=undetermined practice=true phase=idle text=0 deferred=true idle=true captureStarts=0
+PRACTICE CLEANUP: link=6 send=0 mic=undetermined speech=undetermined practice=false phase=idle text=0 deferred=true idle=true captureStarts=0
+Test Case '-[iMicUITests.OnboardingUITests testCoreAndAllOptionalGesturesAreOffline]' passed (38.896 seconds).
+PRACTICE AUDIT: link=0 send=0 mic=undetermined speech=undetermined practice=true phase=idle text=0 deferred=true idle=true captureStarts=0
+Test Case '-[iMicUITests.OnboardingUITests testOptionalSkipAndReplayFromSettings]' passed (54.098 seconds).
+Test Case '-[iMicUITests.OnboardingUITests testSkipRestoreAndConnectLater]' passed (34.064 seconds).
+Test Case '-[iMicUITests.OnboardingVisualUITests testEveryHomeLessonKeepsOrangeBarAndHUDPanelClear]' passed (90.492 seconds).
+** TEST SUCCEEDED **
+
+debug-replay
+PRACTICE AUDIT: link=0 send=0 mic=undetermined speech=undetermined practice=true phase=idle text=0 deferred=true idle=true captureStarts=0
+PRACTICE AUDIT: link=0 send=0 mic=undetermined speech=undetermined practice=true phase=result text=25 deferred=true idle=true captureStarts=0
+Test Case '-[iMicUITests.OnboardingUITests testOptionalSkipAndReplayFromSettings]' passed (50.351 seconds).
+** TEST SUCCEEDED **
+
+debug-pro-final
+Test Case '-[iMicUITests.OnboardingVisualUITests testEveryHomeLessonKeepsOrangeBarAndHUDPanelClear]' passed (94.012 seconds).
+** TEST EXECUTE SUCCEEDED **
+
+debug-se-compact
+Test Case '-[iMicUITests.OnboardingVisualUITests testEveryHomeLessonKeepsOrangeBarAndHUDPanelClear]' passed (95.598 seconds).
+** TEST SUCCEEDED **
+
+release-compact-build
+** TEST BUILD SUCCEEDED **
+
+release-se-compact
+Test Case '-[iMicUITests.ShippingPracticeUITests testShippingJourney]' passed (26.344 seconds).
+** TEST EXECUTE SUCCEEDED **
+
+Release video: 39.19 秒 / 30,998,716 bytes，完整录制、未加速。SHA-256：`53a37364018b59ce01089b876ac529e3cfe27f1d2ccc1551f37c2de1ec6f3d60`。
+
+Cleanup: {"time": "2026-11-02T18:26:16.481114+00:00", "devices": [{"udid": "2773097F-7641-4708-B67E-005610F11AA4", "name": "iMic Visual Pass Pro Codex", "deleted": true}, {"udid": "41520B60-659F-4D12-A769-705D91D29A3D", "name": "iMic Visual Pass SE Codex", "deleted": true}, {"udid": "CF6FD049-658E-435A-9570-E25B98CA9E93", "name": "iMic Visual Pass Pro Screenshot Codex", "deleted": true}], "verifiedAbsent": true}
+
+Logs and xcresults: build/onboarding-visual-report/ (all simulator builds unsigned; no device build).
+
+Final Chinese RELEASE screenshot recaptured after waveform first frame: 128983 orange waveform-region pixels; dedicated screenshot simulator deleted.

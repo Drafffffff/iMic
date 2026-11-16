@@ -1,0 +1,274 @@
+{
+  "required": [
+    {
+      "command": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test",
+      "result": "PASS",
+      "seconds": 6.6,
+      "exit": 0,
+      "log": "build/l10n/verified-00.log",
+      "previous": {
+        "command": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test",
+        "result": "PASS",
+        "seconds": 5.97,
+        "exit": 0,
+        "log": "build/l10n/final-00.log",
+        "previous": {
+          "command": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test",
+          "result": "FAIL",
+          "seconds": 1.73,
+          "exit": 1,
+          "log": "build/l10n/test-00.log"
+        }
+      },
+      "reviewLog": "logs/00.txt",
+      "keyOutput": "74 tests, 0 failures；含全部 80 种提示词组合哈希、语言策略、英文兜底、新旧显示码兼容。"
+    },
+    {
+      "command": "./scripts/build-mac.sh",
+      "result": "PASS",
+      "seconds": 33.67,
+      "exit": 0,
+      "log": "build/l10n/delivery-01.log",
+      "previous": {
+        "command": "./scripts/build-mac.sh",
+        "result": "PASS",
+        "seconds": 42.69,
+        "exit": 0,
+        "log": "build/l10n/verified-01.log",
+        "previous": {
+          "command": "./scripts/build-mac.sh",
+          "result": "PASS",
+          "seconds": 78.7,
+          "exit": 0,
+          "log": "build/l10n/final-01.log",
+          "previous": {
+            "command": "./scripts/build-mac.sh",
+            "result": "PASS",
+            "seconds": 28.5,
+            "exit": 0,
+            "log": "build/l10n/test-01.log"
+          }
+        }
+      },
+      "reviewLog": "logs/01.txt",
+      "keyOutput": "Mac App 构建、签名校验成功；只写 worktree build/。"
+    },
+    {
+      "command": "./scripts/test-mac-settings.sh",
+      "result": "PASS",
+      "seconds": 54.46,
+      "exit": 0,
+      "log": "build/l10n/final-02.log",
+      "previous": {
+        "command": "./scripts/test-mac-settings.sh",
+        "result": "FAIL",
+        "seconds": 15.87,
+        "exit": 133,
+        "log": "build/l10n/test-02.log"
+      },
+      "reviewLog": "logs/02.txt",
+      "keyOutput": "五分页、外部 Key、验证保存/拒绝草稿、关闭确认、模式/手机/菜单同步、静默启动、更新延后和预览隔离通过。"
+    },
+    {
+      "command": "./scripts/test-polish.sh",
+      "result": "PASS",
+      "seconds": 6.93,
+      "exit": 0,
+      "log": "build/l10n/test-03.log",
+      "reviewLog": "logs/03.txt",
+      "keyOutput": "28 tests, 0 failures；包括新加坡唯一成功、workspace、地域歧义与权限错误（模拟 HTTP，无付费调用）。"
+    },
+    {
+      "command": "./scripts/test-input.sh",
+      "result": "PASS",
+      "seconds": 3.66,
+      "exit": 0,
+      "log": "build/l10n/test-04.log",
+      "reviewLog": "logs/04.txt",
+      "keyOutput": "21 tests, 0 failures；输入范围、用户接管、应用切换和安全回退。"
+    },
+    {
+      "command": "./scripts/test-asr.sh",
+      "result": "PASS",
+      "seconds": 2.88,
+      "exit": 0,
+      "log": "build/l10n/verified-05.log",
+      "previous": {
+        "command": "./scripts/test-asr.sh",
+        "result": "FAIL",
+        "seconds": 13.05,
+        "exit": 1,
+        "log": "build/l10n/final-05.log",
+        "previous": {
+          "command": "./scripts/test-asr.sh",
+          "result": "PASS",
+          "seconds": 5.2,
+          "exit": 0,
+          "log": "build/l10n/test-05.log"
+        }
+      },
+      "reviewLog": "logs/05.txt",
+      "keyOutput": "11 tests, 0 failures；分帧、临时/最终识别、错误分类、上传与结束。"
+    },
+    {
+      "command": "./scripts/build-ios.sh",
+      "result": "PASS",
+      "seconds": 12.78,
+      "exit": 0,
+      "log": "build/l10n/delivery-06.log",
+      "previous": {
+        "command": "./scripts/build-ios.sh",
+        "result": "PASS",
+        "seconds": 28.77,
+        "exit": 0,
+        "log": "build/l10n/final-06.log",
+        "previous": {
+          "command": "./scripts/build-ios.sh",
+          "result": "PASS",
+          "seconds": 31.61,
+          "exit": 0,
+          "log": "build/l10n/test-06.log"
+        }
+      },
+      "reviewLog": "logs/06.txt",
+      "keyOutput": "** BUILD SUCCEEDED **；iOS Simulator Debug，本次构建未覆盖正式安装。"
+    },
+    {
+      "command": "./scripts/test-ios-mac-selection.sh",
+      "result": "PASS",
+      "seconds": 25.18,
+      "exit": 0,
+      "log": "build/l10n/verified-07.log",
+      "previous": {
+        "command": "./scripts/test-ios-mac-selection.sh",
+        "result": "PASS",
+        "seconds": 62.58,
+        "exit": 0,
+        "log": "build/l10n/test-07.log"
+      },
+      "reviewLog": "logs/07.txt",
+      "keyOutput": "全部自动 Mac 选择通过；含失效令牌、auth 拒绝、候选目标身份验证与手动选择。"
+    },
+    {
+      "command": "./scripts/test-ios-reconnect.sh",
+      "result": "PASS",
+      "seconds": 23.51,
+      "exit": 0,
+      "log": "build/l10n/verified-08.log",
+      "previous": {
+        "command": "./scripts/test-ios-reconnect.sh",
+        "result": "PASS",
+        "seconds": 60.55,
+        "exit": 0,
+        "log": "build/l10n/test-08.log"
+      },
+      "reviewLog": "logs/08.txt",
+      "keyOutput": "健康/失效前台恢复、缓冲录音、退避跳过均通过，仍使用加密链路。"
+    },
+    {
+      "command": "./scripts/test-polish-link.sh",
+      "result": "PASS",
+      "seconds": 14.52,
+      "exit": 0,
+      "log": "build/l10n/verified-09.log",
+      "previous": {
+        "command": "./scripts/test-polish-link.sh",
+        "result": "PASS",
+        "seconds": 33.14,
+        "exit": 0,
+        "log": "build/l10n/test-09.log"
+      },
+      "reviewLog": "logs/09.txt",
+      "keyOutput": "模式/语气/语言保存 ACK、终端保留选择、Mac 侧同步、旧 Mac 能力兼容通过。"
+    },
+    {
+      "command": "python3 tools/check-site.py",
+      "result": "PASS",
+      "seconds": 0.08,
+      "exit": 0,
+      "log": "build/l10n/delivery-10.log",
+      "previous": {
+        "command": "python3 tools/check-site.py",
+        "result": "PASS",
+        "seconds": 0.18,
+        "exit": 0,
+        "log": "build/l10n/final-10.log",
+        "previous": {
+          "command": "python3 tools/check-site.py",
+          "result": "PASS",
+          "seconds": 0.21,
+          "exit": 0,
+          "log": "build/l10n/test-10.log"
+        }
+      },
+      "reviewLog": "logs/10.txt",
+      "keyOutput": "PASS: 4 HTML pages；引用、锚点、无障碍属性、双语资源、元数据和体积预算通过。"
+    },
+    {
+      "command": "node tools/test-site-browser.mjs",
+      "result": "PASS",
+      "seconds": 41.08,
+      "exit": 0,
+      "log": "build/l10n/delivery-11.log",
+      "previous": {
+        "command": "node tools/test-site-browser.mjs",
+        "result": "PASS",
+        "seconds": 51.03,
+        "exit": 0,
+        "log": "build/l10n/final-11.log",
+        "previous": {
+          "command": "node tools/test-site-browser.mjs",
+          "result": "FAIL",
+          "seconds": 54.01,
+          "exit": 1,
+          "log": "build/l10n/test-11.log"
+        }
+      },
+      "reviewLog": "logs/11.txt",
+      "keyOutput": "37/37 browser checks passed；英文桌面/窄屏、动画、下载/分享/回退、from=ios、语言提示条及无存储通过。"
+    },
+    {
+      "command": "python3 tools/check-l10n.py",
+      "result": "PASS",
+      "seconds": 0.14,
+      "exit": 0,
+      "log": "build/l10n/delivery-12.log",
+      "previous": {
+        "command": "python3 tools/check-l10n.py",
+        "result": "PASS",
+        "seconds": 0.29,
+        "exit": 0,
+        "log": "build/l10n/final-12.log",
+        "previous": {
+          "command": "python3 tools/check-l10n.py",
+          "result": "PASS",
+          "seconds": 0.38,
+          "exit": 0,
+          "log": "build/l10n/test-12.log"
+        }
+      },
+      "reviewLog": "logs/12.txt",
+      "keyOutput": "675 Localizable + 9 InfoPlist keys；en = zh-Hans，格式类型一致，未审查硬编码中文 0。"
+    }
+  ],
+  "extra": [
+    {
+      "command": "xcodebuild test -destination <owned SE UDID> -parallel-testing-enabled NO -only-testing:iMicUITests/EnglishUIReviewTests CODE_SIGNING_ALLOWED=NO",
+      "result": "PASS",
+      "seconds": 84.95,
+      "log": "build/l10n/se-scroll-verified.log"
+    },
+    {
+      "command": "./scripts/test-mac-settings.sh --capture-ui=docs/reviews/english-ui/mac-en -AppleLanguages '(en)'",
+      "result": "PASS",
+      "seconds": 27.94,
+      "log": "build/l10n/mac-capture-final-en.log"
+    },
+    {
+      "command": "./scripts/test-mac-settings.sh --capture-ui=docs/reviews/english-ui/mac-zh-Hans -AppleLanguages '(zh-Hans)'",
+      "result": "PASS",
+      "seconds": 28.18,
+      "log": "build/l10n/mac-capture-final-zh-Hans.log"
+    }
+  ]
+}

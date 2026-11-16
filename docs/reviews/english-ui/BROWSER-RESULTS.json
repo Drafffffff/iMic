@@ -1,0 +1,187 @@
+[
+  {
+    "name": "Real latest API → matching DMG, version and checksum",
+    "result": "PASS",
+    "ms": 1141
+  },
+  {
+    "name": "Seven sections, three FEEL features, MODES and legacy START",
+    "result": "PASS",
+    "ms": 381
+  },
+  {
+    "name": "1440px hero fits one screen; wider layout and legible Mac text",
+    "result": "PASS",
+    "ms": 404
+  },
+  {
+    "name": "Tablet uses two columns; 390px hero uses the portrait recording",
+    "result": "PASS",
+    "ms": 1024
+  },
+  {
+    "name": "ANYWHERE reduced motion: six complete, static, accessible fields",
+    "result": "PASS",
+    "ms": 887
+  },
+  {
+    "name": "ANYWHERE types sequentially, pauses offscreen and resumes",
+    "result": "PASS",
+    "ms": 8993
+  },
+  {
+    "name": "ANYWHERE manual pause and live reduced-motion changes",
+    "result": "PASS",
+    "ms": 1086
+  },
+  {
+    "name": "390px ANYWHERE has two readable columns and no overflow",
+    "result": "PASS",
+    "ms": 492
+  },
+  {
+    "name": "SOUND retains opt-in audio and an accessible mute state",
+    "result": "PASS",
+    "ms": 621
+  },
+  {
+    "name": "One API request; dynamic release replaces every DMG link",
+    "result": "PASS",
+    "ms": 376
+  },
+  {
+    "name": "API fallback: 403",
+    "result": "PASS",
+    "ms": 456
+  },
+  {
+    "name": "API fallback: 429",
+    "result": "PASS",
+    "ms": 548
+  },
+  {
+    "name": "API fallback: missing DMG",
+    "result": "PASS",
+    "ms": 450
+  },
+  {
+    "name": "API fallback: invalid JSON",
+    "result": "PASS",
+    "ms": 409
+  },
+  {
+    "name": "API fallback: unsafe asset URL",
+    "result": "PASS",
+    "ms": 437
+  },
+  {
+    "name": "API fallback: offline",
+    "result": "PASS",
+    "ms": 379
+  },
+  {
+    "name": "API fallback: 4-second timeout",
+    "result": "PASS",
+    "ms": 4402
+  },
+  {
+    "name": "Explicit fail query",
+    "result": "PASS",
+    "ms": 926
+  },
+  {
+    "name": "No JavaScript: download remains usable; TestFlight disabled",
+    "result": "PASS",
+    "ms": 649
+  },
+  {
+    "name": "390px iPhone: share button, direct link, no horizontal overflow",
+    "result": "PASS",
+    "ms": 588
+  },
+  {
+    "name": "Native share receives production URL",
+    "result": "PASS",
+    "ms": 386
+  },
+  {
+    "name": "Share cancel preserves UI without error",
+    "result": "PASS",
+    "ms": 459
+  },
+  {
+    "name": "Clipboard fallback and manual recovery",
+    "result": "PASS",
+    "ms": 677
+  },
+  {
+    "name": "768px iPad desktop-UA detection and layout",
+    "result": "PASS",
+    "ms": 554
+  },
+  {
+    "name": "from=ios scroll, banner, 1.5s Mac highlight",
+    "result": "PASS",
+    "ms": 2064
+  },
+  {
+    "name": "390px from=ios exposes sharing, the Mac button and sticky banner",
+    "result": "PASS",
+    "ms": 676
+  },
+  {
+    "name": "Legacy #start opens the combined installation section",
+    "result": "PASS",
+    "ms": 490
+  },
+  {
+    "name": "Hash-only deep link",
+    "result": "PASS",
+    "ms": 381
+  },
+  {
+    "name": "Reduced motion: posters only until explicit play",
+    "result": "PASS",
+    "ms": 622
+  },
+  {
+    "name": "Lazy videos start in viewport and pause after leaving",
+    "result": "PASS",
+    "ms": 549
+  },
+  {
+    "name": "Bailian FAQ gives Beijing, full permissions and rejects plan keys",
+    "result": "PASS",
+    "ms": 440
+  },
+  {
+    "name": "FAQ keyboard interaction and storage-free page",
+    "result": "PASS",
+    "ms": 550
+  },
+  {
+    "name": "English 1440px: metadata, navigation, no clipping and downloads",
+    "result": "PASS",
+    "ms": 825
+  },
+  {
+    "name": "English 390px: metadata, navigation, no clipping and downloads",
+    "result": "PASS",
+    "ms": 453
+  },
+  {
+    "name": "English animation pause labels and reduced-motion fallback",
+    "result": "PASS",
+    "ms": 594
+  },
+  {
+    "name": "English API fallback, no JavaScript and from=ios",
+    "result": "PASS",
+    "ms": 1624
+  },
+  {
+    "name": "Language suggestion is dismissible, storage-free and never redirects",
+    "result": "PASS",
+    "ms": 827
+  }
+]

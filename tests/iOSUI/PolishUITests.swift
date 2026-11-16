@@ -5,7 +5,7 @@ final class PolishUITests: XCTestCase {
 
     private func openSettings(failure: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-preview=settings"] + (failure ? ["--debug-polish-save-failure"] : [])
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_Hans", "--ui-preview=settings"] + (failure ? ["--debug-polish-save-failure"] : [])
         app.launch()
         // --ui-preview=settings already presents the production settings sheet.
         XCTAssertTrue(app.buttons["关闭"].waitForExistence(timeout: 20))

@@ -1,13 +1,25 @@
 import Foundation
 
+/// All preview actions use an isolated domain. Credentials remain in the existing store.
+enum MacPreferences {
+    static let defaults: UserDefaults = {
+        guard ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-preview=") }) else { return .standard }
+        let value = UserDefaults(suiteName: "iMic.preview.\(UUID().uuidString)")!
+        value.set(true, forKey: "deepseekEnabled")
+        value.set("bailian", forKey: "polishProvider")
+        return value
+    }()
+}
+
+
 enum PolishProvider: String, CaseIterable {
-    case deepseek, bailian, custom
+    case bailian, deepseek, custom
 
     var title: String {
         switch self {
-        case .deepseek: return "DeepSeek 官方"
-        case .bailian: return "百炼 DeepSeek"
-        case .custom: return "自定义兼容服务"
+        case .deepseek: return L10n.text("DeepSeek API")
+        case .bailian: return L10n.text("Model Studio (recommended)")
+        case .custom: return L10n.text("Custom OpenAI-compatible service")
         }
     }
 
@@ -33,29 +45,38 @@ enum PolishProvider: String, CaseIterable {
 
 enum DeepSeekConfiguration {
     static let model = "deepseek-flash"
-    static var provider: PolishProvider { provider(in: .standard) }
+    static var provider: PolishProvider { provider(in: MacPreferences.defaults) }
     static func provider(in defaults: UserDefaults) -> PolishProvider {
-        defaults.string(forKey: "polishProvider").flatMap(PolishProvider.init(rawValue:)) ?? .deepseek
+        defaults.string(forKey: "polishProvider").flatMap(PolishProvider.init(rawValue:)) ?? .bailian
+    }
+    /// A missing saved choice always adopts Bailian, independent of legacy credentials.
+    static func migrateDefaultProvider(in defaults: UserDefaults = MacPreferences.defaults, hasDeepSeekKey _: () -> Bool) {
+        guard defaults.string(forKey: "polishProvider") == nil else { return }
+        defaults.set(PolishProvider.bailian.rawValue, forKey: "polishProvider")
     }
     static var enabled: Bool {
-        UserDefaults.standard.object(forKey: "deepseekEnabled") as? Bool ?? false
+        enabled(in: MacPreferences.defaults, hasBailianKey: { MicCredentials.resolve() != nil })
+    }
+    static func enabled(in defaults: UserDefaults, hasBailianKey: () -> Bool) -> Bool {
+        if let saved = defaults.object(forKey: "deepseekEnabled") as? Bool { return saved }
+        return hasBailianKey()
     }
     static var modelName: String { modelName(for: provider) }
-    static func modelName(for provider: PolishProvider, defaults: UserDefaults = .standard) -> String {
+    static func modelName(for provider: PolishProvider, defaults: UserDefaults = MacPreferences.defaults) -> String {
         let value = defaults.string(forKey: provider.modelKey) ?? provider.defaultModel
         let cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
         // Preserve the old official-model fallback, never apply it to a custom service.
         return cleaned.isEmpty && provider == .deepseek ? model : cleaned
     }
-    static func endpoint(for provider: PolishProvider, defaults: UserDefaults = .standard) -> String {
+    static func endpoint(for provider: PolishProvider, defaults: UserDefaults = MacPreferences.defaults) -> String {
         (defaults.string(forKey: provider.endpointKey) ?? provider.defaultEndpoint)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    static func save(provider: PolishProvider, model: String, endpoint: String, defaults: UserDefaults = .standard) {
+    static func save(provider: PolishProvider, model: String, endpoint: String, defaults: UserDefaults = MacPreferences.defaults) {
         defaults.set(model.trimmingCharacters(in: .whitespacesAndNewlines), forKey: provider.modelKey)
         defaults.set(endpoint.trimmingCharacters(in: .whitespacesAndNewlines), forKey: provider.endpointKey)
     }
-    static var options: PolishOptions { options(in: .standard) }
+    static var options: PolishOptions { options(in: MacPreferences.defaults) }
     static func options(in defaults: UserDefaults) -> PolishOptions {
         return PolishOptions(
             strength: defaults.string(forKey: "deepseekStrength").flatMap(PolishStrength.init(rawValue:)) ?? PolishOptions.default.strength,
@@ -67,13 +88,18 @@ enum DeepSeekConfiguration {
     }
 }
 
-enum PolishConfigurationError: String, LocalizedError {
-    case model = "请填写润色模型名称"
-    case endpoint = "请填写完整的 https:// 主机/路径/chat/completions 地址，不含账号、查询参数或占位符"
-    case plaintext = "远程服务必须使用 HTTPS；HTTP 仅允许 127.0.0.1 或 [::1] 本机联调"
-    case officialHost = "DeepSeek 官方来源只能使用 api.deepseek.com 的 HTTPS 地址"
-    case bailianHost = "百炼来源只能使用百炼 DashScope 或业务空间专属 HTTPS 地址"
-    case key = "请填写当前来源的有效 API Key"
+enum PolishConfigurationError: Error, LocalizedError {
+    case model, endpoint, plaintext, officialHost, bailianHost, key
+    var rawValue: String {
+        switch self {
+        case .model: return L10n.text("Enter a polish model name")
+        case .endpoint: return L10n.text("Enter the full https://host/path/chat/completions address without credentials, query parameters, or placeholders")
+        case .plaintext: return L10n.text("Remote services require HTTPS. HTTP is allowed only for local testing at 127.0.0.1 or [::1].")
+        case .officialHost: return L10n.text("The DeepSeek provider requires an HTTPS address on api.deepseek.com")
+        case .bailianHost: return L10n.text("The Model Studio provider requires an official DashScope or workspace-specific HTTPS address")
+        case .key: return L10n.text("Enter a valid API Key for this provider")
+        }
+    }
     var errorDescription: String? { rawValue }
 }
 
@@ -118,13 +144,7 @@ enum DeepSeekClient {
                 throw PolishConfigurationError.officialHost
             }
         case .bailian:
-            let dashscope = ["dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com",
-                             "dashscope-us.aliyuncs.com", "cn-hongkong.dashscope.aliyuncs.com"]
-            let workspace = host.range(
-                of: #"^[a-z0-9-]+\.(cn-beijing|ap-southeast-1|us-east-1|eu-central-1|ap-northeast-1|cn-hongkong)\.maas\.aliyuncs\.com$"#,
-                options: .regularExpression
-            ) != nil
-            guard (dashscope.contains(host) || workspace),
+            guard BailianAddress.allowed(host),
                   parts.port == nil || parts.port == 443,
                   parts.path == "/compatible-mode/v1/chat/completions" else {
                 throw PolishConfigurationError.bailianHost
@@ -170,12 +190,13 @@ enum DeepSeekClient {
         text: String, key: String, model: String, endpoint: String,
         provider: PolishProvider, options: PolishOptions,
         session: URLSession? = nil,
+        failure: ((CloudFailure) -> Void)? = nil,
         completion: @escaping (String?) -> Void
     ) -> URLSessionDataTask? {
         guard !text.isEmpty,
               let request = try? request(text: text, key: key, model: model, endpoint: endpoint, provider: provider, options: options) else {
             IMicLog.write("mac.polish", "skipped provider=\(provider.rawValue) reason=invalid_configuration")
-            DispatchQueue.main.async { completion(nil) }
+            DispatchQueue.main.async { failure?(.service); completion(nil) }
             return nil
         }
         let started = Date()
@@ -192,7 +213,15 @@ enum DeepSeekClient {
             // Never log endpoints, response bodies, error descriptions or credentials.
             let code = (error as NSError?)?.code ?? 0
             IMicLog.write("mac.polish", "\(result == nil ? "fallback" : "ok") provider=\(provider.rawValue) model=\(diagnosticModel) status=\(status) code=\(code) in=\(text.count) out=\(result?.count ?? 0) ms=\(milliseconds)")
-            DispatchQueue.main.async { completion(result) }
+            DispatchQueue.main.async {
+                if result == nil {
+                    let issue = provider == .bailian
+                        ? CloudFailure.from(BailianIssue.response(status: status, data: data, error: error))
+                        : status == 401 || status == 403 ? .key : CloudFailure.classify(status: status, error: error)
+                    failure?(issue)
+                }
+                completion(result)
+            }
         }
         task.resume()
         return task

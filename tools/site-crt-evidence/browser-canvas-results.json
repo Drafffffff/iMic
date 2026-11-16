@@ -1,0 +1,342 @@
+[
+  {
+    "name": "Analytics empty ID: zero provider requests, including production-like URL",
+    "result": "PASS",
+    "ms": 281
+  },
+  {
+    "name": "Analytics configured ID stays off at local address http://127.0.0.1:48764/",
+    "result": "PASS",
+    "ms": 277
+  },
+  {
+    "name": "Analytics configured ID stays off at local address http://localhost:48764",
+    "result": "PASS",
+    "ms": 422
+  },
+  {
+    "name": "Analytics configured ID stays off at local address http://[::1]:48763",
+    "result": "PASS",
+    "ms": 492
+  },
+  {
+    "name": "Analytics configured ID stays off at local address http://preview.local",
+    "result": "PASS",
+    "ms": 345
+  },
+  {
+    "name": "Analytics file URL stays off with configured ID",
+    "result": "PASS",
+    "ms": 335
+  },
+  {
+    "name": "Analytics DNT: zero provider requests on public hostname",
+    "result": "PASS",
+    "ms": 305
+  },
+  {
+    "name": "Analytics window DNT: zero provider requests on public hostname",
+    "result": "PASS",
+    "ms": 287
+  },
+  {
+    "name": "Analytics legacy DNT: zero provider requests on public hostname",
+    "result": "PASS",
+    "ms": 339
+  },
+  {
+    "name": "Analytics GPC: zero provider requests on public hostname",
+    "result": "PASS",
+    "ms": 305
+  },
+  {
+    "name": "Analytics adapter: async, explicit sanitized payload; in-page detail precedes provider",
+    "result": "PASS",
+    "ms": 334
+  },
+  {
+    "name": "Analytics zh: download/iPhone/language/from_ios properties",
+    "result": "PASS",
+    "ms": 604
+  },
+  {
+    "name": "Analytics en: download/iPhone/language/from_ios properties",
+    "result": "PASS",
+    "ms": 730
+  },
+  {
+    "name": "Analytics language banner: English destination",
+    "result": "PASS",
+    "ms": 330
+  },
+  {
+    "name": "Analytics zh share outcome shared: native",
+    "result": "PASS",
+    "ms": 423
+  },
+  {
+    "name": "Analytics zh share outcome copied: clipboard",
+    "result": "PASS",
+    "ms": 300
+  },
+  {
+    "name": "Analytics zh share outcome copied: denied API",
+    "result": "PASS",
+    "ms": 390
+  },
+  {
+    "name": "Analytics zh share outcome failed: denied API",
+    "result": "PASS",
+    "ms": 307
+  },
+  {
+    "name": "Analytics zh share outcome failed: cancel",
+    "result": "PASS",
+    "ms": 330
+  },
+  {
+    "name": "Analytics en share outcome shared: native",
+    "result": "PASS",
+    "ms": 305
+  },
+  {
+    "name": "Analytics en share outcome copied: clipboard",
+    "result": "PASS",
+    "ms": 318
+  },
+  {
+    "name": "Analytics en share outcome copied: denied API",
+    "result": "PASS",
+    "ms": 364
+  },
+  {
+    "name": "Analytics en share outcome failed: denied API",
+    "result": "PASS",
+    "ms": 331
+  },
+  {
+    "name": "Analytics en share outcome failed: cancel",
+    "result": "PASS",
+    "ms": 288
+  },
+  {
+    "name": "Analytics autoplay/decoration emits no video_play; manual video IDs and sound opt-in",
+    "result": "PASS",
+    "ms": 1162
+  },
+  {
+    "name": "Analytics FAQ numbers, closing excluded; scroll milestones once per load",
+    "result": "PASS",
+    "ms": 1838
+  },
+  {
+    "name": "Analytics script failed: controls and local events work without provider",
+    "result": "PASS",
+    "ms": 313
+  },
+  {
+    "name": "Analytics script pending: controls and local events work without provider",
+    "result": "PASS",
+    "ms": 4367
+  },
+  {
+    "name": "Analytics actual Umami script: intercepted ingestion, no storage writes or URL leakage",
+    "result": "PASS",
+    "ms": 1163
+  },
+  {
+    "name": "Real latest API → matching DMG, version and checksum",
+    "result": "PASS",
+    "ms": 843
+  },
+  {
+    "name": "Seven sections, three FEEL features, MODES and legacy START",
+    "result": "PASS",
+    "ms": 289
+  },
+  {
+    "name": "1440px hero fits one screen; wider layout and legible Mac text",
+    "result": "PASS",
+    "ms": 275
+  },
+  {
+    "name": "Tablet uses two columns; 390px hero uses the portrait recording",
+    "result": "PASS",
+    "ms": 730
+  },
+  {
+    "name": "ANYWHERE reduced motion: six complete, static, accessible fields",
+    "result": "PASS",
+    "ms": 707
+  },
+  {
+    "name": "ANYWHERE types sequentially, pauses offscreen and resumes",
+    "result": "PASS",
+    "ms": 8851
+  },
+  {
+    "name": "ANYWHERE manual pause and live reduced-motion changes",
+    "result": "PASS",
+    "ms": 933
+  },
+  {
+    "name": "390px ANYWHERE has two readable columns and no overflow",
+    "result": "PASS",
+    "ms": 414
+  },
+  {
+    "name": "SOUND retains opt-in audio and an accessible mute state",
+    "result": "PASS",
+    "ms": 422
+  },
+  {
+    "name": "One API request; dynamic release replaces every DMG link",
+    "result": "PASS",
+    "ms": 297
+  },
+  {
+    "name": "API fallback: 403",
+    "result": "PASS",
+    "ms": 277
+  },
+  {
+    "name": "API fallback: 429",
+    "result": "PASS",
+    "ms": 273
+  },
+  {
+    "name": "API fallback: missing DMG",
+    "result": "PASS",
+    "ms": 276
+  },
+  {
+    "name": "API fallback: invalid JSON",
+    "result": "PASS",
+    "ms": 271
+  },
+  {
+    "name": "API fallback: unsafe asset URL",
+    "result": "PASS",
+    "ms": 291
+  },
+  {
+    "name": "API fallback: offline",
+    "result": "PASS",
+    "ms": 297
+  },
+  {
+    "name": "API fallback: 4-second timeout",
+    "result": "PASS",
+    "ms": 4308
+  },
+  {
+    "name": "Explicit fail query",
+    "result": "PASS",
+    "ms": 497
+  },
+  {
+    "name": "No JavaScript: download remains usable; TestFlight disabled",
+    "result": "PASS",
+    "ms": 489
+  },
+  {
+    "name": "390px iPhone: share button, direct link, no horizontal overflow",
+    "result": "PASS",
+    "ms": 598
+  },
+  {
+    "name": "Native share receives production URL",
+    "result": "PASS",
+    "ms": 283
+  },
+  {
+    "name": "Share cancel preserves UI without error",
+    "result": "PASS",
+    "ms": 324
+  },
+  {
+    "name": "Clipboard fallback and manual recovery",
+    "result": "PASS",
+    "ms": 381
+  },
+  {
+    "name": "768px iPad desktop-UA detection and layout",
+    "result": "PASS",
+    "ms": 521
+  },
+  {
+    "name": "from=ios scroll, banner, 1.5s Mac highlight",
+    "result": "PASS",
+    "ms": 1877
+  },
+  {
+    "name": "390px from=ios exposes sharing, the Mac button and sticky banner",
+    "result": "PASS",
+    "ms": 286
+  },
+  {
+    "name": "Legacy #start opens the combined installation section",
+    "result": "PASS",
+    "ms": 280
+  },
+  {
+    "name": "Hash-only deep link",
+    "result": "PASS",
+    "ms": 271
+  },
+  {
+    "name": "Reduced motion: posters only until explicit play",
+    "result": "PASS",
+    "ms": 365
+  },
+  {
+    "name": "Lazy videos start in viewport and pause after leaving",
+    "result": "PASS",
+    "ms": 402
+  },
+  {
+    "name": "Bailian FAQ gives Beijing, full permissions and rejects plan keys",
+    "result": "PASS",
+    "ms": 279
+  },
+  {
+    "name": "FAQ keyboard interaction and storage-free page",
+    "result": "PASS",
+    "ms": 416
+  },
+  {
+    "name": "English 1440px: metadata, navigation, no clipping and downloads",
+    "result": "PASS",
+    "ms": 579
+  },
+  {
+    "name": "English 390px: metadata, navigation, no clipping and downloads",
+    "result": "PASS",
+    "ms": 331
+  },
+  {
+    "name": "English animation pause labels and reduced-motion fallback",
+    "result": "PASS",
+    "ms": 423
+  },
+  {
+    "name": "English API fallback, no JavaScript and from=ios",
+    "result": "PASS",
+    "ms": 871
+  },
+  {
+    "name": "Language suggestion is dismissible, storage-free and never redirects",
+    "result": "PASS",
+    "ms": 667
+  },
+  {
+    "name": "DPR 2: actual CRT draw covers the full headline (CSS path skips)",
+    "result": "PASS",
+    "ms": 271
+  },
+  {
+    "name": "Glitch: short, self-cleaning, one signal drop per visit, none for reduced motion",
+    "result": "PASS",
+    "ms": 6980
+  }
+]

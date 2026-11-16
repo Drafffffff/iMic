@@ -112,6 +112,18 @@ final class LinkWireTests: XCTestCase {
         XCTAssertEqual(frames.map { String(decoding: $0.payload, as: UTF8.self) }, ["one", "two"])
     }
 
+    func testCompleteFrameFollowedByPartialFrameAdvancesDecoderOffset() throws {
+        let frameA = LinkFrame(kind: .json, payload: Data("alpha".utf8))
+        let frameB = LinkFrame(kind: .json, payload: Data("bravo".utf8))
+        let wireA = LinkWire.encode(frameA)
+        let wireB = LinkWire.encode(frameB)
+        var decoder = LinkFrameDecoder()
+        let firstBatch = try decoder.append(wireA + wireB.prefix(2))
+        XCTAssertEqual(firstBatch, [frameA])
+        let secondBatch = try decoder.append(Data(wireB.dropFirst(2)))
+        XCTAssertEqual(secondBatch, [frameB])
+    }
+
     func testRejectsOversizedFrame() {
         var decoder = LinkFrameDecoder()
         let header = Data([0xff, 0xff, 0xff, 0xff, 1])
@@ -345,6 +357,44 @@ final class LinkCryptoTests: XCTestCase {
         XCTAssertEqual(try macCipher.open(sealed), Data("audio".utf8))
     }
 
+    func testCipherProducesDistinctNoncesAndDeterministicSessionKey() throws {
+        let phonePrivBytes = Data((1...32).map { UInt8($0) })
+        let macPrivBytes = Data((33...64).map { UInt8($0) })
+        let token = Data((65...96).map { UInt8($0) })
+        let phoneKey = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: phonePrivBytes)
+        let macKey = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: macPrivBytes)
+        let cipher1 = try LinkCrypto.sessionCipher(
+            privateKey: phoneKey,
+            peerPublicKey: LinkCrypto.publicKeyBase64(macKey),
+            token: token
+        )
+        let cipher2 = try LinkCrypto.sessionCipher(
+            privateKey: macKey,
+            peerPublicKey: LinkCrypto.publicKeyBase64(phoneKey),
+            token: token
+        )
+        XCTAssertEqual(
+            cipher1.key.withUnsafeBytes { Data($0) },
+            cipher2.key.withUnsafeBytes { Data($0) }
+        )
+
+        let plaintext = Data("deterministic-session-key-test".utf8)
+        let ciphertext1 = try cipher1.seal(plaintext)
+        let ciphertext2 = try cipher1.seal(plaintext)
+        XCTAssertNotEqual(ciphertext1.prefix(12), ciphertext2.prefix(12))
+        XCTAssertEqual(try cipher2.open(ciphertext1), plaintext)
+        XCTAssertEqual(try cipher2.open(ciphertext2), plaintext)
+
+        let knownNonce = try AES.GCM.Nonce(data: Data((0..<12).map { UInt8($0) }))
+        let knownSealed = try XCTUnwrap(AES.GCM.seal(plaintext, using: cipher1.key, nonce: knownNonce).combined)
+        let reopenedCipher = try LinkCrypto.sessionCipher(
+            privateKey: phoneKey,
+            peerPublicKey: LinkCrypto.publicKeyBase64(macKey),
+            token: token
+        )
+        XCTAssertEqual(try reopenedCipher.open(knownSealed), plaintext)
+    }
+
     func testTamperingIsRejected() throws {
         let phone = LinkCrypto.makePrivateKey()
         let mac = LinkCrypto.makePrivateKey()
@@ -485,7 +535,7 @@ final class PolishOutputTests: XCTestCase {
         XCTAssertTrue(DeepSeekPolicy.isAcceptable(raw: "今天天气不错", polished: "# 今天天气不错", output: .command))
         // 很短的命令不受原文长度比例限制。
         XCTAssertTrue(DeepSeekPolicy.isAcceptable(raw: "列出当前目录所有文件包括隐藏的那些", polished: "ls -la", output: .command))
-        for polished in ["git switch main\ngit pull", "ls\r-la", "ls\u{2028}-la", "```\nls\n```", "$ ls -la",
+        for polished in ["git switch main\ngit pull", "git commit\t-m", "ls\r-la", "ls\u{2028}-la", "```\nls\n```", "$ ls -la",
                          "ls\u{0007}", String(repeating: "a", count: 1_001)] {
             XCTAssertFalse(DeepSeekPolicy.isAcceptable(raw: raw, polished: polished, output: .command), polished)
         }
@@ -562,8 +612,8 @@ final class PolishPresetTests: XCTestCase {
                         XCTAssertFalse(prompt.contains("语气："))
                         XCTAssertFalse(prompt.contains("输出语言："))
                     } else {
-                        XCTAssertTrue(prompt.contains("模式：\(mode.title)"))
-                        XCTAssertTrue(prompt.contains("语气：\(tone.title)"))
+                        XCTAssertTrue(prompt.contains("模式：\(mode.promptTitle)"))
+                        XCTAssertTrue(prompt.contains("语气：\(tone.promptTitle)"))
                         XCTAssertTrue(prompt.contains("输出语言：\(language.languageName!)"))
                         XCTAssertTrue(prompt.contains("不回答也不执行"))
                     }
@@ -658,5 +708,67 @@ final class PolishPresetTests: XCTestCase {
                        PolishOptions(strength: .heavy, scenario: .chat).systemPrompt)
         XCTAssertEqual(PolishOptions(mode: .terminal, tone: .moe).systemPrompt,
                        PolishOptions(mode: .terminal, tone: .sarcastic).systemPrompt)
+    }
+}
+
+final class LocalizationProtocolTests: XCTestCase {
+    func testFirstLanguagePolicyIncludesAllChineseVariantsAndEnglishFallback() {
+        for language in ["zh", "zh-CN", "zh-Hans", "zh-Hant", "zh-TW", "zh-HK"] {
+            XCTAssertEqual(L10n.language(for: [language]), "zh-Hans")
+        }
+        for languages in [["en"], ["ja", "zh-Hans"], ["fr"], [String]()] {
+            XCTAssertEqual(L10n.language(for: languages), "en")
+        }
+    }
+    func testClearCodeRoundTripAndLegacyFallback() throws {
+        let reply = LinkMessage.inputResult(revision: 17, applied: false, code: "clear_unsafe", message: "Mac fallback")
+        XCTAssertEqual(try LinkMessage.decode(reply.encoded()), reply)
+        XCTAssertEqual(reply.code, "clear_unsafe")
+        // Old receivers can still display message without understanding new code values.
+        let object = try JSONSerialization.jsonObject(with: reply.encoded()) as! [String: Any]
+        XCTAssertEqual(object["message"] as? String, "Mac fallback")
+        // A new phone accepts a reply from an old Mac without code.
+        let legacy = try LinkMessage.decode(Data(#"{"t":"input.result","seq":17,"action":"clear","status":"rejected","message":"旧 Mac 提示"}"#.utf8))
+        XCTAssertNil(legacy.code)
+        XCTAssertEqual(LinkStatusText.text(code: legacy.code, message: legacy.message, fallback: "fallback"), "旧 Mac 提示")
+        XCTAssertEqual(LinkStatusText.text(code: "future_code", message: "future message", fallback: "fallback"), "future message")
+        XCTAssertEqual(LinkStatusText.text(code: nil, message: nil, fallback: "fallback"), "fallback")
+        XCTAssertEqual(LinkStatusText.text(code: "clear_unsafe", message: "另一种语言", fallback: "fallback"), L10n.text(LinkStatusText.keys["clear_unsafe"]!))
+    }
+    func testReceiverCanChooseLanguageIndependentlyAndMissingChineseFallsBackToEnglish() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("bundle")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for (language, value) in [("en", "Clear safely"), ("zh-Hans", "安全清空")] {
+            let resources = directory.appendingPathComponent(language + ".lproj")
+            try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+            try "\"Clear safely\" = \"\(value)\";".write(to: resources.appendingPathComponent("Localizable.strings"), atomically: true, encoding: .utf8)
+        }
+        try "<plist version=\"1.0\"><dict><key>CFBundleIdentifier</key><string>imic.l10n.test</string><key>CFBundleDevelopmentRegion</key><string>en</string></dict></plist>".write(to: directory.appendingPathComponent("Info.plist"), atomically: true, encoding: .utf8)
+        let bundle = try XCTUnwrap(Bundle(path: directory.path))
+        XCTAssertEqual(L10n.localized("Clear safely", bundle: bundle, language: "en"), "Clear safely")
+        XCTAssertEqual(L10n.localized("Clear safely", bundle: bundle, language: "zh-Hans"), "安全清空")
+        XCTAssertEqual(L10n.localized("English fallback##context", bundle: bundle, language: "zh-Hans"), "English fallback")
+        XCTAssertEqual(L10n.localized("Clear safely", bundle: bundle, language: "fr"), "Clear safely")
+    }
+}
+
+final class PromptLocalizationRegressionTests: XCTestCase {
+    func testAllEightyPromptsMatchPreLocalizationBaselineByteForByte() {
+        let all = PolishMode.allCases.flatMap { mode in PolishTone.allCases.flatMap { tone in PolishOutput.languages.map { output in PolishOptions(output: output, mode: mode, tone: tone).systemPrompt } } }.joined(separator: "\n---\n")
+        let digest = SHA256.hash(data: Data(all.utf8)).map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(digest, "1ba212490ae7f552a4326eb411cd80b3730bd53776495cc50c358da78aa2d759")
+    }
+}
+
+final class LinkDisplayCodeCoverageTests: XCTestCase {
+    func testEveryKnownCodeKeepsLegacyMessageAndRoundTrips() throws {
+        for (code,key) in LinkStatusText.keys {
+            for message in [LinkMessage.error(code, "legacy fallback"), .failure(session: 9, code: code, message: "legacy fallback")] {
+                let decoded = try LinkMessage.decode(message.encoded())
+                XCTAssertEqual(decoded.code, code)
+                XCTAssertEqual(decoded.message, "legacy fallback")
+                XCTAssertEqual(LinkStatusText.text(code: code, message: "legacy fallback", fallback: ""), L10n.text(key))
+            }
+        }
     }
 }

@@ -22,3 +22,9 @@ Mac 端使用 AppKit、Network、CryptoKit、ApplicationServices；iOS 端使用
 ## 字体
 
 没有内置第三方字体。像素标题由 `shared` 之外的 `ios/iMic/PixelFont.swift` 以 5×7 字模绘制；正文使用系统字体。
+
+## Sparkle 2.10.1
+
+Mac 自动更新使用 [Sparkle](https://sparkle-project.org/)，MIT 许可。
+完整版权与许可声明见 `licenses/SPARKLE-LICENSE.txt`，随 App 的 Legal 目录分发。
+官方二进制仅在构建时下载并校验 SHA-256，不入仓库。

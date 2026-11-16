@@ -1,0 +1,25 @@
+Test Suite 'ASRStreamingTests' started at 2026-11-01 00:07:41.701.
+Test Case '-[main.ASRStreamingTests testCancellationRejectsQueuedCompletion]' started.
+Test Case '-[main.ASRStreamingTests testCancellationRejectsQueuedCompletion]' passed (0.016 seconds).
+Test Case '-[main.ASRStreamingTests testCompletedCorrectionRebuildsPrefixWithoutReplayingOldInterim]' started.
+Test Case '-[main.ASRStreamingTests testCompletedCorrectionRebuildsPrefixWithoutReplayingOldInterim]' passed (0.003 seconds).
+Test Case '-[main.ASRStreamingTests testInterimCorrectionsStayDisplayOnlyUntilSentenceEnds]' started.
+Test Case '-[main.ASRStreamingTests testInterimCorrectionsStayDisplayOnlyUntilSentenceEnds]' passed (0.000 seconds).
+Test Case '-[main.ASRStreamingTests testMissingSentenceHoldsLaterCompletionAndFlushesInOrder]' started.
+Test Case '-[main.ASRStreamingTests testMissingSentenceHoldsLaterCompletionAndFlushesInOrder]' passed (0.000 seconds).
+Test Case '-[main.ASRStreamingTests testNetworkFailureIsRetryableWithoutRetainingAudio]' started.
+Test Case '-[main.ASRStreamingTests testNetworkFailureIsRetryableWithoutRetainingAudio]' passed (0.001 seconds).
+Test Case '-[main.ASRStreamingTests testOtherTasksAndHeartbeatsNeverReachCurrentTranscript]' started.
+Test Case '-[main.ASRStreamingTests testOtherTasksAndHeartbeatsNeverReachCurrentTranscript]' passed (0.000 seconds).
+Test Case '-[main.ASRStreamingTests testOversizedCompletionFailsBeforeAnyTextCanBeCommitted]' started.
+Test Case '-[main.ASRStreamingTests testOversizedCompletionFailsBeforeAnyTextCanBeCommitted]' passed (0.004 seconds).
+Test Case '-[main.ASRStreamingTests testRegionOrModelFailureOffersAddressCheckAndRedactsBody]' started.
+Test Case '-[main.ASRStreamingTests testRegionOrModelFailureOffersAddressCheckAndRedactsBody]' passed (0.000 seconds).
+Test Case '-[main.ASRStreamingTests testRuntimeCodesShareOnboardingMessages]' started.
+Test Case '-[main.ASRStreamingTests testRuntimeCodesShareOnboardingMessages]' passed (0.001 seconds).
+Test Case '-[main.ASRStreamingTests testTransportFailuresCarryActionableReasonsWithoutServiceBody]' started.
+Test Case '-[main.ASRStreamingTests testTransportFailuresCarryActionableReasonsWithoutServiceBody]' passed (0.000 seconds).
+Test Case '-[main.ASRStreamingTests testUnsafeRecognitionEndpointsNeverCreateTransport]' started.
+Test Case '-[main.ASRStreamingTests testUnsafeRecognitionEndpointsNeverCreateTransport]' passed (0.000 seconds).
+Test Suite 'ASRStreamingTests' passed at 2026-11-01 00:07:41.729.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.025 (0.027) seconds

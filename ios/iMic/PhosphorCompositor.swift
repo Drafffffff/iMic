@@ -11,13 +11,23 @@ final class PhosphorCompositor {
     private let downPipeline: MTLRenderPipelineState
     private let blurPipeline: MTLRenderPipelineState
     private let compositePipeline: MTLRenderPipelineState
+    private let directPipeline: MTLRenderPipelineState
+    private let lensPipeline: MTLRenderPipelineState
     private let depthState: MTLDepthStencilState
     private var core: MTLTexture?
     private var emission: MTLTexture?
     private var depth: MTLTexture?
     private var history: [MTLTexture] = []
     private var bloom: [[MTLTexture]] = []
+    private struct ArtworkPatch {
+        let bytes: MTLBuffer
+        let bytesPerRow: Int
+        let sourceBytesPerImage: Int
+        let origin: MTLOrigin
+        let size: MTLSize
+    }
     private var artwork: MTLTexture
+    private var artworkPatches: [ArtworkPatch] = []
     private var clearArtwork: MTLTexture?
     private var strokeBuffers: [MTLBuffer] = []
     private var strokeCapacity=0
@@ -25,6 +35,7 @@ final class PhosphorCompositor {
     private var historyIndex=0
     private var historyValid=false
     private var lastTime:Double?
+    private var lastLensDiagnostic = -Double.infinity
     private var width=0,height=0
     private var lastEffect:PhosphorEffect?
     private var uniforms=PhosphorUniforms(viewport:.zero,timing:.zero,regions:.zero)
@@ -56,7 +67,9 @@ final class PhosphorCompositor {
         seedPipeline=try pipeline("phosphorFullscreenVertex","phosphorSeedFragment")
         downPipeline=try pipeline("phosphorFullscreenVertex","phosphorDownsampleFragment")
         blurPipeline=try pipeline("phosphorFullscreenVertex","phosphorBlurFragment")
-        compositePipeline=try pipeline("phosphorFullscreenVertex","phosphorCompositeFragment",.bgra8Unorm_srgb)
+        compositePipeline=try pipeline("phosphorFullscreenVertex","phosphorCompositeFragment")
+        directPipeline=try pipeline("phosphorFullscreenVertex","phosphorDirectFragment",.bgra8Unorm_srgb)
+        lensPipeline=try pipeline("phosphorFullscreenVertex","phosphorLensFragment",.bgra8Unorm_srgb)
         let ds=MTLDepthStencilDescriptor();ds.depthCompareFunction = .lessEqual;ds.isDepthWriteEnabled=true
         guard let state=device.makeDepthStencilState(descriptor:ds) else{throw WaveTextRenderer.RenderError.allocation};depthState=state
         let empty=MTLTextureDescriptor.texture2DDescriptor(pixelFormat:.rgba8Unorm_srgb,width:1,height:1,mipmapped:false)
@@ -67,16 +80,21 @@ final class PhosphorCompositor {
     }
 
     func setArtwork(_ image:CGImage,status:CGRect,action:CGRect)throws{
+        artworkPatches.removeAll(keepingCapacity:true)
         artwork=try uploadArtwork(image)
         uniforms.regions=SIMD4(Float(status.minY),Float(status.maxY),Float(action.minY),Float(action.maxY))
     }
     func setClearArtwork(_ image:CGImage)throws{clearArtwork=try uploadArtwork(image)}
-    /// Patch part of the current artwork in place (pixel origin), instead of a full re-upload.
+    /// Patch part of the current artwork via command-buffer blit, avoiding CPU/GPU races on in-flight frames.
     func replaceArtwork(_ image:CGImage,at origin:(x:Int,y:Int))throws{
         let w=min(image.width,artwork.width-origin.x),h=min(image.height,artwork.height-origin.y)
         guard origin.x>=0,origin.y>=0,w>0,h>0 else{return}
         let bytes=try rgba(image)
-        artwork.replace(region:MTLRegionMake2D(origin.x,origin.y,w,h),mipmapLevel:0,withBytes:bytes.contents(),bytesPerRow:image.width*4)
+        let row=image.width*4
+        artworkPatches.append(ArtworkPatch(
+            bytes:bytes,bytesPerRow:row,sourceBytesPerImage:row*image.height,
+            origin:MTLOrigin(x:origin.x,y:origin.y,z:0),size:MTLSize(width:w,height:h,depth:1)
+        ))
     }
     /// Premultiplied sRGB RGBA bytes, top row first.
     private func rgba(_ image:CGImage)throws->MTLBuffer{
@@ -121,6 +139,18 @@ final class PhosphorCompositor {
 
     func begin(command:MTLCommandBuffer,drawable:MTLTexture,scene:PhosphorScene,size:CGSize,now:Double)throws{
         try resize(drawable)
+        if !artworkPatches.isEmpty{
+            guard let blit=command.makeBlitCommandEncoder()else{throw WaveTextRenderer.RenderError.allocation}
+            blit.label="Artwork patch blit"
+            for patch in artworkPatches where patch.origin.x+patch.size.width<=artwork.width
+                && patch.origin.y+patch.size.height<=artwork.height{
+                blit.copy(from:patch.bytes,sourceOffset:0,sourceBytesPerRow:patch.bytesPerRow,
+                          sourceBytesPerImage:patch.sourceBytesPerImage,sourceSize:patch.size,
+                          to:artwork,destinationSlice:0,destinationLevel:0,destinationOrigin:patch.origin)
+            }
+            blit.endEncoding()
+            artworkPatches.removeAll(keepingCapacity:true)
+        }
         let effect=scene.effect
         let strength=scene.reduceTransparency ? 0:effect.crtStrength
         let glow=scene.reduceTransparency ? 0:effect.bloomStrength
@@ -128,7 +158,15 @@ final class PhosphorCompositor {
         let reset = !historyValid || dt>0.2 || lastEffect != effect
         uniforms.viewport=SIMD4(Float(size.width),Float(size.height),Float(drawable.width)/max(1,Float(size.width)),strength)
         uniforms.timing=SIMD4(PhosphorMath.decay(dt:dt),reset ? 1:0,glow,1)
-        uniforms.interaction=SIMD4(scene.clearProgress,scene.pressScale(at:now),0,0)
+        uniforms.interaction=SIMD4(scene.clearProgress,scene.pressScale(at:now),scene.collapseVignette,0)
+        uniforms.collapse=scene.collapseUniform
+        if scene.needsCollapseFrames(at:now) {
+            if now-lastLensDiagnostic>=2 {
+                IMicLog.write("iphone.visual",String(format:"collapse GPU amount=%.5f optics=%.3f vignette=%.3f material=%@",
+                    uniforms.collapse.x,uniforms.collapse.w,uniforms.interaction.z,effect.rawValue))
+                lastLensDiagnostic=now
+            }
+        } else { lastLensDiagnostic = -Double.infinity }
         lastTime=now;lastEffect=effect
         if strokeBuffers.isEmpty || strokeCapacity<scene.strokes.count{
             strokeCapacity=max(8192,scene.strokes.count*2)
@@ -180,8 +218,16 @@ final class PhosphorCompositor {
             // These targets were newly allocated without initial contents on a clean-mode launch.
             for level in bloom{clear(command,texture:level[0])}
         }
-        fullscreen(command:command,pipeline:compositePipeline,destination:drawable,
-                   textures:[core,artwork,bloom[0][0],bloom[1][0],bloom[2][0],clearArtwork ?? artwork])
+        let sources=[core,artwork,bloom[0][0],bloom[1][0],bloom[2][0],clearArtwork ?? artwork]
+        if uniforms.collapse.w>0.0001 {
+            // Bloom and history have already consumed emission. Reuse its full-size
+            // HDR target for the lit page; no new texture or history feedback.
+            fullscreen(command:command,pipeline:compositePipeline,destination:emission,textures:sources)
+            fullscreen(command:command,pipeline:lensPipeline,destination:drawable,textures:[emission])
+        } else {
+            // Idle and Reduce Motion retain the original single final pass.
+            fullscreen(command:command,pipeline:directPipeline,destination:drawable,textures:sources)
+        }
     }
 
     private func blur(_ command:MTLCommandBuffer,source:MTLTexture,destination:MTLTexture,horizontal:Bool){

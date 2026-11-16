@@ -100,6 +100,10 @@ static NSError *IMicBridgeError(NSString *message) {
     void (^_onBuffer)(AVAudioPCMBuffer *);
     void (^_onFailure)(NSString *);
     void (^_onLog)(NSString *);
+    void (^_onMeter)(double, double, uint64_t, BOOL, BOOL, double);
+    double _sumSquares, _peak;
+    uint64_t _meterSamples;
+    AVAudioCommonFormat _commonFormat;
     BOOL _finished;
     BOOL _failureReported;
     double _ticksToMilliseconds;
@@ -115,6 +119,7 @@ static NSError *IMicBridgeError(NSString *message) {
                       onChunk:(void (^)(NSData *))onChunk
                      onBuffer:(void (^)(AVAudioPCMBuffer *))onBuffer
                     onFailure:(void (^)(NSString *))onFailure
+                      onMeter:(void (^)(double, double, uint64_t, BOOL, BOOL, double))onMeter
                         onLog:(void (^)(NSString *))onLog
                         error:(NSError **)error {
     self = [super init];
@@ -168,6 +173,8 @@ static NSError *IMicBridgeError(NSString *message) {
     _onBuffer = [onBuffer copy];
     _onFailure = [onFailure copy];
     _onLog = [onLog copy];
+    _onMeter = [onMeter copy];
+    _commonFormat = format.commonFormat;
     _sampleRate = format.sampleRate;
     mach_timebase_info_data_t timebase;
     mach_timebase_info(&timebase);
@@ -184,7 +191,7 @@ static NSError *IMicBridgeError(NSString *message) {
         [bridge drain];
     });
     _timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _worker);
-    dispatch_source_set_timer(_timer, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), NSEC_PER_SEC, 100 * NSEC_PER_MSEC);
+    dispatch_source_set_timer(_timer, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 2), NSEC_PER_SEC / 2, 20 * NSEC_PER_MSEC);
     dispatch_source_set_event_handler(_timer, ^{
         IMicAudioInputBridge *bridge = weakSelf;
         [bridge reportCadence];
@@ -261,6 +268,26 @@ static NSError *IMicBridgeError(NSString *message) {
             buffer.frameLength = slot->frames;
             _workerCallbacks++;
             _workerFrames += slot->frames;
+            // Native samples, before PCM16 quantization: quiet environmental noise is
+            // never classified as digital silence. This runs only on the worker.
+            const AudioBufferList *list = buffer.audioBufferList;
+            for (uint32_t b = 0; b < list->mNumberBuffers; b++) {
+                const void *bytes = list->mBuffers[b].mData;
+                uint32_t count = slot->frames * list->mBuffers[b].mNumberChannels;
+                for (uint32_t i = 0; i < count; i++) {
+                    double value = 0;
+                    switch (_commonFormat) {
+                        case AVAudioPCMFormatFloat32: value = ((const float *)bytes)[i]; break;
+                        case AVAudioPCMFormatFloat64: value = ((const double *)bytes)[i]; break;
+                        case AVAudioPCMFormatInt16: value = ((const int16_t *)bytes)[i] / 32768.0; break;
+                        case AVAudioPCMFormatInt32: value = ((const int32_t *)bytes)[i] / 2147483648.0; break;
+                        default: break;
+                    }
+                    _sumSquares += value * value;
+                    _peak = MAX(_peak, fabs(value));
+                    _meterSamples++;
+                }
+            }
             if (_onBuffer) _onBuffer(buffer);
             if (atomic_load_explicit(&_state->failure, memory_order_acquire) != IMicInputFailureConversion)
                 [self convertBuffer:buffer endOfStream:NO];
@@ -285,6 +312,10 @@ static NSError *IMicBridgeError(NSString *message) {
             (unsigned long long)_workerCallbacks, (unsigned long long)_workerFrames,
             _maxWorkerGapTicks * _ticksToMilliseconds, (unsigned long long)pending,
             _sampleRate, AVAudioSession.sharedInstance.IOBufferDuration]);
+    double rms = _meterSamples ? sqrt(_sumSquares / _meterSamples) : 0;
+    _onMeter(rms, _peak, callbacks, _meterSamples > 0, _meterSamples > 0 && _peak == 0, elapsed);
+    _sumSquares = _peak = 0;
+    _meterSamples = 0;
     _lastReportTicks = now;
     _workerCallbacks = 0;
     _workerFrames = 0;

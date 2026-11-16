@@ -17,3 +17,69 @@ struct TextRevision {
         insertion = String(next[newIndex...])
     }
 }
+
+/// Text iMic types is data, never keystrokes with side effects.
+enum TypedTextSafety {
+    /// Control characters other than line breaks and tabs (ESC, DEL, C1, …) are
+    /// dropped everywhere: typed into a terminal they act as key sequences.
+    /// In a terminal every line break and tab also becomes a space, one for one,
+    /// so a multi-line result never presses Return to run a line and revision
+    /// arithmetic over characters stays aligned with what was typed.
+    static func sanitize(_ text: String, terminal: Bool) -> String {
+        var result = ""
+        result.reserveCapacity(text.count)
+        for character in text {
+            let breaks = character.isNewline || character == "\t"
+            if breaks {
+                result.append(terminal ? " " : character)
+                continue
+            }
+            let scalars = character.unicodeScalars
+            if scalars.contains(where: { $0.properties.generalCategory == .control }) { continue }
+            result.append(character)
+        }
+        return result
+    }
+
+    /// Terminal emulators, plus terminal panes inside editors (VS Code, Cursor,
+    /// JetBrains), recognised from the bundle or the focused control's labels.
+    static let terminalBundles: Set<String> = [
+        "com.apple.Terminal", "com.googlecode.iterm2", "io.appmakes.otty", "dev.warp.Warp-Stable", "dev.warp.Warp",
+        "net.kovidgoyal.kitty", "com.mitchellh.ghostty", "org.alacritty", "io.alacritty", "co.zeit.hyper",
+        "com.github.wez.wezterm", "org.tabby"
+    ]
+
+    static let embeddedTerminalHostBundles: Set<String> = [
+        "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.todesktop.230313mzl4w4u92",
+        "com.exafunction.windsurf", "com.vscodium", "dev.zed.Zed", "dev.zed.Zed-Preview", "com.sublimetext.4"
+    ]
+
+    static func isEmbeddedTerminalHost(_ bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier else { return false }
+        return embeddedTerminalHostBundles.contains(bundleIdentifier) || bundleIdentifier.hasPrefix("com.jetbrains.")
+    }
+
+    /// East Asian wide characters (CJK, kana, Hangul, full-width forms, emoji).
+    /// Terminals draw each in two cells, but Terminal.app and Otty report one
+    /// cell per character through AX, so their boxes cover half the text.
+    static func containsWideCharacters(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x1100...0x115F, 0x2E80...0x303E, 0x3041...0x33FF, 0x3400...0x4DBF, 0x4E00...0x9FFF,
+                 0xA960...0xA97F, 0xAC00...0xD7A3, 0xF900...0xFAFF, 0xFE30...0xFE4F, 0xFF00...0xFF60,
+                 0xFFE0...0xFFE6, 0x1F300...0x1FAFF, 0x20000...0x3FFFD: return true
+            default: return false
+            }
+        }
+    }
+
+    static func isTerminal(bundleIdentifier: String?, labels: [String?]) -> Bool {
+        if let bundleIdentifier, terminalBundles.contains(bundleIdentifier) { return true }
+        let nonEmptyLabels = labels.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        if nonEmptyLabels.isEmpty, isEmbeddedTerminalHost(bundleIdentifier) { return true }
+        return nonEmptyLabels.contains { label in
+            let lower = label.lowercased()
+            return lower.contains("terminal") || lower.contains("终端") || lower.contains("xterm")
+        }
+    }
+}

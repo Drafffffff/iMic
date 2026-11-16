@@ -108,6 +108,29 @@ enum StandbyDiagnostics {
             // The full forty-second policy was tested above; isolate finite feedback below.
             spectrum.configureAmbientMotion(enabled: false, reducedMotion: false)
 
+            // Drive the actual renderer while content is unchanged. A finished return
+            // must relinquish the clock and must not re-rasterize SwiftUI artwork.
+            for reduced in [false,true] {
+                for ending in [PhosphorCollapse.Ending.sent,.cancelled] {
+                    let rasters=receiver.debugArtworkRasterCount
+                    receiver.debugCollapse(elapsed:10,ending:ending,reduced:reduced)
+                    try await Task.sleep(for: .milliseconds(150))
+                    try check(spectrum.isClockRunning,"collapse holds display clock")
+                    try check(receiver.debugCollapseSample?.needsFrames == true,"collapse renderer is active")
+                    if reduced {
+                        try check(receiver.debugCollapseSample?.amount == 0,"reduced collapse has no geometry")
+                    }
+                    receiver.debugCollapse(elapsed:nil,ending:ending,reduced:reduced)
+                    let collapsedSettled=try await settle(spectrum)
+                    try check(collapsedSettled,"collapse returns to standby")
+                    try check(receiver.debugCollapseSample?.amount == 0,"collapse settles exactly to zero")
+                    try check(receiver.debugArtworkRasterCount == rasters,"collapse does not rasterize artwork")
+                    let collapseTicks=spectrum.renderedTicks
+                    try await Task.sleep(for: .milliseconds(150))
+                    try check(spectrum.renderedTicks == collapseTicks,"zero callbacks after collapse")
+                }
+            }
+
             let motion = spectrum.stringMotion
             let gestureTicks = spectrum.renderedTicks
             motion.begin(anchor: 0.5, height: 200)

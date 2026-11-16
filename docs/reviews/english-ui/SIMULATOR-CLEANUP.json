@@ -1,0 +1,16 @@
+{
+  "time": "2026-11-01T00:18:25.311808",
+  "ownedDevices": [
+    {
+      "device": "pro",
+      "udid": "8A903770-7A1B-46F2-8261-9FA3BC848C2E",
+      "result": "shutdown + delete PASS"
+    },
+    {
+      "device": "se",
+      "udid": "743AA534-7810-4BFA-AF58-001279C674E7",
+      "result": "shutdown + delete PASS"
+    }
+  ],
+  "verifiedAbsent": true
+}

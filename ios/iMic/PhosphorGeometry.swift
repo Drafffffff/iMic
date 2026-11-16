@@ -42,7 +42,114 @@ struct PhosphorUniforms {
     var viewport: SIMD4<Float> // points.xy, physical scale, CRT strength
     var timing: SIMD4<Float> // decay, clear history, bloom strength, surface enabled
     var regions: SIMD4<Float> // UI status top/bottom, main action top/bottom
-    var interaction: SIMD4<Float> = SIMD4(0,1,0,0) // clear zone, recording press scale
+    var interaction: SIMD4<Float> = SIMD4(0,1,0,0) // clear zone, press scale, reduced-motion vignette, reserved
+    var collapse: SIMD4<Float> = .zero // amount, center in points.xy, peripheral optics gain
+}
+
+/// Recording feedback only: no audio, view or display-link ownership. All clocks use
+/// monotonic seconds. Return curves are analytic, so a skipped frame cannot explode.
+struct PhosphorCollapse {
+    enum Ending { case sent, cancelled }
+    struct Sample {
+        var amount: Double
+        var vignette: Double
+        var streak: Double
+        var needsFrames: Bool
+    }
+    static let maximum = 0.08
+    static let timeConstant = 45.0
+    static let onsetTimeConstant = 1.5
+    static let opticsTimeConstant = 28.0
+    private var recordingBegan: Double?
+    private var returnBegan: Double?
+    private var returnOrigin = 0.0
+    private var returnOpticsOrigin = 0.0
+    private var ending: Ending = .cancelled
+    private var reduced = false
+    private var level = 0.5
+    private var levelTime: Double?
+
+    mutating func configure(elapsed: Double?, ending: Ending, reduced: Bool, now: Double) {
+        let current = value(at: now).0
+        let currentOptics = opticalValue(at: now)
+        let motionChanged = self.reduced != reduced
+        self.reduced = reduced
+        if let elapsed, elapsed.isFinite {
+            if recordingBegan == nil {
+                recordingBegan = now - max(0, elapsed)
+                level = 0.5
+                levelTime = now
+            }
+            returnBegan = nil
+        } else if recordingBegan != nil || (returnBegan != nil && (motionChanged || self.ending != ending)) {
+            recordingBegan = nil
+            returnOrigin = ending == .cancelled ? max(0, current) : current
+            returnOpticsOrigin = currentOptics
+            returnBegan = now
+            self.ending = ending
+        }
+    }
+
+    mutating func advance(level target: Double, now: Double) -> Sample {
+        let dt = max(0, now - (levelTime ?? now))
+        let safeTarget = target.isFinite ? min(1, max(0, target)) : 0.5
+        level += (safeTarget - level) * (1 - exp(-dt / 0.12))
+        levelTime = now
+        let frame = sample(at: now)
+        if !frame.needsFrames { returnBegan = nil; returnOrigin = 0; returnOpticsOrigin = 0 }
+        return frame
+    }
+
+    func sample(at now: Double) -> Sample {
+        let (amount, velocity) = value(at: now)
+        let active = recordingBegan != nil || (returnBegan != nil && (abs(amount) >= 0.0005 || abs(velocity) >= 0.003))
+        let a = active ? amount : 0
+        return Sample(amount: reduced ? 0 : a,
+                      vignette: reduced ? min(0.25, max(0, a / Self.maximum) * 0.25) : 0,
+                      streak: reduced || !active ? 0 : opticalValue(at: now), needsFrames: active)
+    }
+
+    private func opticalValue(at now: Double) -> Double {
+        if let began = recordingBegan {
+            let t = max(0, now - began), q = min(32, t / 1.2)
+            return 0.25 * (1 - exp(-q * q)) + 0.75 * (1 - exp(-t / Self.opticsTimeConstant))
+        }
+        guard returnBegan != nil, returnOrigin > 0.000001 else { return 0 }
+        return returnOpticsOrigin * min(1, max(0, value(at: now).0 / returnOrigin))
+    }
+
+    private func value(at now: Double) -> (Double, Double) {
+        if let began = recordingBegan {
+            let t = max(0, now - began)
+            let q = min(32, t / Self.onsetTimeConstant)
+            let onset = exp(-q * q), accumulation = exp(-t / Self.timeConstant)
+            // Show a small cue within a few seconds; reserve most of the gentle
+            // range for prolonged speech. A slow curve alone hid short recordings.
+            let progress = 0.20 * (1 - onset) + 0.80 * (1 - accumulation)
+            let speed = 0.20 * onset * 2 * q / Self.onsetTimeConstant + 0.80 * accumulation / Self.timeConstant
+            let pulse = 1 + 0.12 * (level - 0.5)
+            return (min(Self.maximum, Self.maximum * progress * pulse), Self.maximum * speed * pulse)
+        }
+        guard let began = returnBegan else { return (0, 0) }
+        let t = max(0, now - began)
+        if reduced {
+            return t >= 0.2 ? (0, 0) : (returnOrigin * (1 - t / 0.2), -returnOrigin / 0.2)
+        }
+        func critical(_ origin: Double, _ age: Double, _ omega: Double) -> (Double, Double) {
+            let e = exp(-omega * age)
+            return (origin * (1 + omega * age) * e, -origin * omega * omega * age * e)
+        }
+        guard ending == .sent else { return critical(returnOrigin, t, 40) }
+        let omega = 2 * Double.pi / 0.32, decay = 0.55 * omega
+        let frequency = omega * sqrt(1 - 0.55 * 0.55), minimumTime = Double.pi / frequency
+        if t <= minimumTime {
+            let e = exp(-decay * t), c = cos(frequency * t), s = sin(frequency * t)
+            return (returnOrigin * e * (c + decay / frequency * s),
+                    -returnOrigin * e * omega * omega / frequency * s)
+        }
+        // Join at the first minimum (zero velocity); recover without a second crossing.
+        return critical(-returnOrigin * exp(-decay * minimumTime), t - minimumTime, 32)
+    }
 }
 
 struct PhosphorPressSpring {

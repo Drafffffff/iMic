@@ -23,6 +23,11 @@ struct PhosphorArtworkState: Equatable {
     var hasResult: Bool
     var notice: String?
     var noticeColor: Color
+    var teaching = false
+    var guideHeader: String? = nil
+    var statusDetail: String? = nil
+    var celebrating = false
+    var dynamicType: DynamicTypeSize = .large
 
     var statusBounds: CGRect {
         CGRect(x:24,y:content.minY+content.height*0.145+43,width:max(1,size.width-48),height:34)
@@ -34,13 +39,15 @@ struct PhosphorArtworkState: Equatable {
     /// A full-screen raster costs tens of ms on the main thread (213ms cold in the simulator);
     /// most state changes only touch the status block or the hold bar.
     func dirtyRegions(from old:Self)->[CGRect]?{
-        guard size==old.size,content==old.content,torus==old.torus,channel==old.channel else{return nil}
+        guard size==old.size,content==old.content,torus==old.torus,channel==old.channel,dynamicType==old.dynamicType else{return nil}
+        // Large status descriptions can extend beyond the normal raster patch.
+        guard !dynamicType.isAccessibilitySize else { return nil }
         var regions:[CGRect]=[]
-        if connection != old.connection || connectionColor != old.connectionColor{
+        if connection != old.connection || connectionColor != old.connectionColor || guideHeader != old.guideHeader{
             regions.append(CGRect(x:0,y:content.minY,width:size.width,height:100))
         }
         if status != old.status || statusLine != old.statusLine || statusCell != old.statusCell
-            || statusColor != old.statusColor{
+            || statusColor != old.statusColor || statusDetail != old.statusDetail || teaching != old.teaching || celebrating != old.celebrating{
             let top=content.minY+content.height*0.145+20
             regions.append(CGRect(x:0,y:top-8,width:size.width,height:132))
         }
@@ -64,7 +71,7 @@ struct PhosphorClearArtwork:View{
             Image(systemName:"trash").font(.system(size:15,weight:.semibold))
             PixelText(text:"CLEAR",cell:1.5,color:Theme.orange,tracking:1)
             Spacer()
-            Text("拉入清空输入框").font(.system(size:11,weight:.medium))
+            Text(L10n.text("Drag here to clear the text field")).font(.system(size:11,weight:.medium))
         }.foregroundStyle(Theme.orange).padding(.horizontal,24)
             .padding(.top,46).padding(.bottom,12).frame(width:width,height:84)
     }
@@ -77,8 +84,8 @@ struct PhosphorArtwork: View {
 
     var body: some View {
         ZStack(alignment:.topLeading){
-            Theme.ink
-            grid
+            // Foreground only. Metal draws the grid underneath and applies the
+            // same continuous page warp to artwork, coil, glyphs and background.
             header.frame(width:width,height:62,alignment:.top)
                 .position(x:state.size.width/2,y:state.content.minY+45)
             divider.frame(width:width,height:10)
@@ -92,32 +99,23 @@ struct PhosphorArtwork: View {
                 HStack{
                     Spacer()
                     if state.hasResult{
-                        Text("查看结果  ›").modifier(InstrumentHint()).frame(width:98,height:14,alignment:.trailing)
+                        Text(L10n.text("View result  ›")).modifier(InstrumentHint()).frame(width:98,height:14,alignment:.trailing)
                     }else{HUDLabel(text:"PCM / 16K").frame(width:98,height:14,alignment:.trailing)}
                 }.frame(height:14).padding(.top,12)
             }.frame(width:width,height:116,alignment:.top)
                 .position(x:state.size.width/2,y:state.content.maxY-64)
         }.frame(width:state.size.width,height:state.size.height)
             .environment(\.colorScheme,.dark)
+            .environment(\.dynamicTypeSize,state.dynamicType)
     }
 
-    private var grid:some View{
-        Canvas{context,size in
-            var path=Path()
-            for x in stride(from:0.0,through:size.width,by:26){path.move(to:CGPoint(x:x,y:0));path.addLine(to:CGPoint(x:x,y:size.height))}
-            for y in stride(from:0.0,through:size.height,by:26){path.move(to:CGPoint(x:0,y:y));path.addLine(to:CGPoint(x:size.width,y:y))}
-            context.stroke(path,with:.color(.white.opacity(0.065)),lineWidth:1/max(1,displayScale))
-        }.frame(width:state.size.width,height:state.size.height)
-    }
     private var header:some View{
         HStack(alignment:.top,spacing:0){
-            VStack(alignment:.leading,spacing:8){
-                Image("Wordmark").renderingMode(.original).resizable().scaledToFit()
-                    .frame(width:HoldBarLayout.wordmark.width,height:HoldBarLayout.wordmark.height,alignment:.leading)
-                    .blendMode(.screen)
-                HUDLabel(text:"SYS 01")
-            }
+            InstrumentIdentity()
             Spacer(minLength:12)
+            if let guideHeader = state.guideHeader {
+                HUDLabel(text:guideHeader,color:Theme.ivory).frame(minWidth:44,minHeight:44).offset(y:-9)
+            } else {
             HStack(spacing:5){
                 HStack(spacing:6){
                     Rectangle().fill(state.connectionColor).frame(width:3.5,height:3.5)
@@ -127,6 +125,7 @@ struct PhosphorArtwork: View {
                 }.frame(maxWidth:150,minHeight:44,alignment:.trailing)
                 PixelSymbol(kind:.settings,color:Theme.ivory.opacity(0.72)).frame(width:19.5,height:19.5).frame(width:44,height:44)
             }.padding(.trailing,-12).offset(y:-9)
+            }
         }
     }
     private var divider:some View{
@@ -137,13 +136,9 @@ struct PhosphorArtwork: View {
         }
     }
     private var status:some View{
-        VStack(spacing:0){
-            HUDLabel(text:"VOICE / INPUT").padding(.bottom,13)
-            PixelText(text:state.status,cell:state.statusCell,color:state.statusColor,tracking:2.8)
-                .frame(height:30,alignment:.center)
-            Text(state.statusLine).modifier(InstrumentHint()).lineLimit(2).multilineTextAlignment(.center)
-                .lineSpacing(3).frame(minHeight:34,alignment:.top).fixedSize(horizontal:false,vertical:true).padding(.top,13)
-        }
+        InstrumentStatus(word:state.status, description:state.statusLine, detail:state.statusDetail,
+                         cell:state.statusCell, color:state.statusColor, teaching:state.teaching,
+                         celebrating:state.celebrating)
     }
     private var bar:some View{
         ZStack{

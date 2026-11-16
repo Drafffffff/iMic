@@ -1,0 +1,10 @@
+2026-11-10T18:34:09.383Z [iphone.visual] collapse begin amount=0.00000 optics=0.000
+2026-11-10T18:34:09.398Z [iphone.visual] collapse GPU amount=0.00000 optics=0.000 vignette=0.000 material=crt
+2026-11-10T18:34:11.417Z [iphone.visual] collapse GPU amount=0.01683 optics=0.287 vignette=0.000 material=crt
+2026-11-10T18:34:13.176Z [iphone.visual] collapse GPU amount=0.02218 optics=0.350 vignette=0.000 material=crt
+2026-11-10T18:34:15.192Z [iphone.visual] collapse GPU amount=0.02503 optics=0.395 vignette=0.000 material=crt
+2026-11-10T18:34:17.190Z [iphone.visual] collapse GPU amount=0.02708 optics=0.437 vignette=0.000 material=crt
+2026-11-10T18:34:19.209Z [iphone.visual] collapse GPU amount=0.02988 optics=0.476 vignette=0.000 material=crt
+2026-11-10T18:34:21.207Z [iphone.visual] collapse GPU amount=0.03200 optics=0.512 vignette=0.000 material=crt
+2026-11-10T18:34:22.861Z [iphone.visual] collapse cancel amount=0.03237 optics=0.540
+2026-11-10T18:34:23.071Z [iphone.visual] collapse settled

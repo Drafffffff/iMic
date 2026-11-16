@@ -18,6 +18,16 @@ final class InkView: NSView {
     }
 }
 
+/// Scroll document that starts at the top.
+final class FlippedInkView: NSView {
+    override var isFlipped: Bool { true }
+    override var isOpaque: Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.imicInk.setFill()
+        dirtyRect.fill()
+    }
+}
+
 /// A fixed 1.92-second history of received 20 ms RMS frames, not a frequency spectrum.
 final class AudioActivityView: NSControl {
     private static let frameCount = 96
@@ -105,14 +115,16 @@ extension AppDelegate {
     func button(_ title: String, _ action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
         button.bezelStyle = .rounded
+        button.setAccessibilityLabel(title)
         return button
     }
 
     func linkButton(_ title: String, _ action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
         button.isBordered = false
-        button.contentTintColor = .imicOrange
+        button.contentTintColor = nil
         button.font = .systemFont(ofSize: 12, weight: .medium)
+        button.setAccessibilityLabel(title)
         return button
     }
 
@@ -151,8 +163,9 @@ extension AppDelegate {
     func checkbox(_ title: String, _ action: Selector, key: String, defaultValue: Bool) -> NSButton {
         let button = NSButton(checkboxWithTitle: title, target: self, action: action)
         button.font = .systemFont(ofSize: 12)
-        button.contentTintColor = .imicOrange
-        button.state = (UserDefaults.standard.object(forKey: key) as? Bool ?? defaultValue) ? .on : .off
+        button.setAccessibilityLabel(title)
+        button.contentTintColor = nil
+        button.state = (MacPreferences.defaults.object(forKey: key) as? Bool ?? defaultValue) ? .on : .off
         return button
     }
 
@@ -186,12 +199,6 @@ extension AppDelegate {
         return field
     }
 
-    private func menuItem(_ title: String, _ action: Selector, _ key: String = "") -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
-        item.target = self
-        return item
-    }
-
     // MARK: - Main window
 
     func buildUI() {
@@ -202,22 +209,9 @@ extension AppDelegate {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        statusItem.button?.setAccessibilityLabel("iMic")
+        statusItem.button?.setAccessibilityLabel("VoxChord")
 
-        let menu = NSMenu()
-        menu.addItem(menuItem("打开 iMic", #selector(show)))
-        menu.addItem(menuItem("复制配对码", #selector(copyPairCode)))
-        menu.addItem(menuItem("重新生成配对码", #selector(rotatePairCode)))
-        menu.addItem(.separator())
-        menu.addItem(menuItem("设置…", #selector(showSettings), ","))
-        menu.addItem(.separator())
-        menu.addItem(menuItem("退出 iMic", #selector(quit), "q"))
-        statusMenu = menu
-        let appMenu = NSMenu()
-        let root = NSMenuItem()
-        root.submenu = menu
-        appMenu.addItem(root)
-        NSApp.mainMenu = appMenu
+        buildStatusMenu()
 
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 580),
@@ -225,7 +219,7 @@ extension AppDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "iMic"
+        window.title = "VoxChord"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
@@ -244,9 +238,9 @@ extension AppDelegate {
             logo.widthAnchor.constraint(equalToConstant: 26),
             logo.heightAnchor.constraint(equalToConstant: 26)
         ])
-        let wordmark = label("iMic", size: 18, color: .imicIvory, mono: true, weight: .semibold)
+        let wordmark = label("VoxChord", size: 18, color: .imicIvory, mono: true, weight: .semibold)
         wordmark.attributedStringValue = NSAttributedString(
-            string: "iMic",
+            string: "VoxChord",
             attributes: [
                 .font: NSFont.monospacedSystemFont(ofSize: 18, weight: .semibold),
                 .foregroundColor: NSColor.imicIvory,
@@ -262,8 +256,8 @@ extension AppDelegate {
         headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         let header = row([
             logo, wordmark, stateLabel, headerSpacer,
-            symbolButton("gearshape", "设置", #selector(showSettings)),
-            symbolButton("ellipsis", "更多操作", #selector(statusMenuButton))
+            symbolButton("gearshape", L10n.text("Settings"), #selector(showSettings)),
+            symbolButton("ellipsis", L10n.text("More actions"), #selector(statusMenuButton))
         ], spacing: 9)
         stateLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 90).isActive = true
 
@@ -291,39 +285,31 @@ extension AppDelegate {
         pairHint.textColor = .imicMuted
         pairHint.maximumNumberOfLines = 2
         pairHint.lineBreakMode = .byWordWrapping
-        let pairButtons = row([
-            linkButton("复制配对码", #selector(copyPairCode)),
-            linkButton("重新生成", #selector(rotatePairCode))
-        ], spacing: 16)
-        let pairFootnote = label("同一 Wi-Fi · 端到端加密 · 仅此 Mac", size: 9, color: .imicMuted, mono: true)
-        pairHint.preferredMaxLayoutWidth = 340
-        for view in [eyebrow, pairCodeLabel, pairHint, pairButtons, pairFootnote] as [NSView] {
+        pairHint.preferredMaxLayoutWidth = 380
+        for view in [eyebrow, pairCodeLabel, pairHint] as [NSView] {
             pairPanel.addArrangedSubview(view)
         }
-        pairPanel.heightAnchor.constraint(equalToConstant: 204).isActive = true
 
-        pairSteps = column([], spacing: 0)
-        let steps: [(String, String)] = [
-            ("01", "在 iPhone 上打开 iMic"),
-            ("02", "输入配对码，建立加密链路"),
-            ("03", "按住底部横条说话，松开即输入")
-        ]
-        for (index, step) in steps.enumerated() {
-            let number = label(step.0, size: 10, color: .imicOrange, mono: true, weight: .bold)
-            number.widthAnchor.constraint(equalToConstant: 26).isActive = true
-            let text = label(step.1, size: 12, color: .imicIvory)
-            let spacer = NSView()
-            spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-            let line = row([number, text, spacer], spacing: 12)
-            line.edgeInsets = NSEdgeInsets(top: 9, left: 0, bottom: 9, right: 0)
-            pairSteps.addArrangedSubview(line)
-            fullWidth(line, in: pairSteps)
-            if index < steps.count - 1 {
-                let hairline = divider()
-                pairSteps.addArrangedSubview(hairline)
-                fullWidth(hairline, in: pairSteps)
-            }
+        let pairActions = row([linkButton(L10n.text("Copy pairing code"), #selector(copyPairCode)),
+            linkButton(L10n.text("Regenerate"), #selector(rotatePairCode))], spacing: 16)
+        pairCollapseButton = linkButton(L10n.text("Collapse"), #selector(hidePairCode))
+        pairActions.addArrangedSubview(pairCollapseButton)
+        pairPanel.addArrangedSubview(pairActions)
+        firstPairSteps.stringValue = L10n.text("01   Install and open VoxChord on your iPhone\n\n02   Connect your iPhone and Mac to the same Wi-Fi\n\n03   Tap the computer name at the top of your iPhone and enter the pairing code")
+        firstPairSteps.font = .systemFont(ofSize: 13)
+        firstPairSteps.textColor = .imicMuted
+        firstPairSteps.preferredMaxLayoutWidth = 388
+        waitingPanel.orientation = .vertical; waitingPanel.alignment = .leading; waitingPanel.spacing = 18
+        let waitingTitle = label(L10n.text("Waiting for your iPhone"), size: 22, color: .imicIvory, weight: .semibold)
+        pairedNames.font = .systemFont(ofSize: 14, weight: .medium)
+        pairedNames.textColor = .imicIvory; pairedNames.preferredMaxLayoutWidth = 388
+        pairedNames.maximumNumberOfLines = 3; pairedNames.lineBreakMode = .byTruncatingTail
+        let waitingHint = label(L10n.text("Open VoxChord on your iPhone to connect automatically.\nKeep both devices on the same network."), size: 12)
+        for view in [waitingTitle, pairedNames, waitingHint,
+                     linkButton(L10n.text("Pair a new iPhone…"), #selector(pairNewPhone))] {
+            waitingPanel.addArrangedSubview(view)
         }
+        waitingPanel.edgeInsets = NSEdgeInsets(top: 24, left: 0, bottom: 18, right: 0)
 
         // Stage
         emptyMark.image = MicBrand.logo(size: 42)
@@ -352,7 +338,7 @@ extension AppDelegate {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = 7
         transcript.defaultParagraphStyle = paragraph
-        transcript.setAccessibilityLabel("识别文字")
+        transcript.setAccessibilityLabel(L10n.text("Recognized text"))
         resultScroll.documentView = transcript
         resultScroll.hasVerticalScroller = true
         resultScroll.autohidesScrollers = true
@@ -364,9 +350,9 @@ extension AppDelegate {
         meter.translatesAutoresizingMaskIntoConstraints = false
         meter.setContentHuggingPriority(.init(1), for: .horizontal)
         meter.heightAnchor.constraint(equalToConstant: 36).isActive = true
-        meter.setAccessibilityLabel("接收音量")
-        meter.setAccessibilityHelp("从左到右显示最近 1.92 秒的真实音量；不是频率分布。")
-        meter.toolTip = "接收音量 · 最近 1.92 秒"
+        meter.setAccessibilityLabel(L10n.text("Received volume"))
+        meter.setAccessibilityHelp(L10n.text("Shows actual volume over the last 1.92 seconds from left to right, rather than a frequency distribution."))
+        meter.toolTip = L10n.text("Received volume · Last 1.92 seconds")
         elapsedLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         elapsedLabel.textColor = .imicMuted
         spinner.style = .spinning
@@ -382,51 +368,56 @@ extension AppDelegate {
         activityRow.detachesHiddenViews = true
         fullWidth(meter, in: activityRow)
         fullWidth(activityDetails, in: activityRow)
-        resultMeta.font = .monospacedSystemFont(ofSize: 9, weight: .regular)
-        resultMeta.textColor = .imicMuted
 
-        stageStack = column([emptyMark, stageTitle, stageHint, resultScroll, resultMeta, activityRow], spacing: 12)
+        stageStack = column([emptyMark, stageTitle, stageHint, resultScroll, activityRow], spacing: 12)
         stageStack.heightAnchor.constraint(greaterThanOrEqualToConstant: 320).isActive = true
-        for view in [stageTitle, stageHint, resultScroll, resultMeta, activityRow!] as [NSView] {
+        for view in [stageTitle, stageHint, resultScroll, activityRow!] as [NSView] {
             fullWidth(view, in: stageStack)
         }
+
+        issueLabel.font = .systemFont(ofSize: 11); issueLabel.textColor = .imicMuted
+        issueLabel.preferredMaxLayoutWidth = 275
+        issueLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        issueButton = linkButton(L10n.text("Open Settings"), #selector(performIssueAction))
+        issueButton.setContentHuggingPriority(.required, for: .horizontal)
+        issueRow = row([issueLabel, issueButton], spacing: 12)
+        issueRow.isHidden = true
 
         // Controls
         automatic.target = self
         automatic.action = #selector(toggleAutoInput)
         automatic.font = .systemFont(ofSize: 12)
         automatic.contentTintColor = .imicOrange
-        copyButton = button("复制文字", #selector(copyText))
+        automatic.title = L10n.text("Type into the active app after recognition")
+        copyButton = button(L10n.text("Copy text"), #selector(copyText))
         copyButton.isEnabled = false
         let controlsSpacer = NSView()
         controlsSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        controlsRow = row([automatic, controlsSpacer, copyButton], spacing: 12)
+        controlsRow = row([controlsSpacer, copyButton], spacing: 12)
 
         permissionState.font = .systemFont(ofSize: 11)
         permissionState.textColor = .imicMuted
         permissionState.maximumNumberOfLines = 2
-        permissionButton = linkButton("设置输入权限…", #selector(permissions))
+        permissionButton = linkButton(L10n.text("Continue setup…"), #selector(showSetupAction))
         let permissionSpacer = NSView()
         permissionSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         permissionRow = row([permissionState, permissionSpacer, permissionButton], spacing: 10)
 
-        let line = divider()
         let flexible = NSView()
         flexible.setContentHuggingPriority(.init(1), for: .vertical)
         flexible.heightAnchor.constraint(greaterThanOrEqualToConstant: 0).isActive = true
         let stack = column([
-            header, cueView!, pairPanel, pairSteps, stageStack, flexible, line, controlsRow!, permissionRow!
+            header, cueView!, waitingPanel, pairPanel, firstPairSteps, stageStack, flexible, issueRow!, controlsRow!, permissionRow!
         ], spacing: 16)
         stack.detachesHiddenViews = true
         attach(stack, to: content, inset: 26, top: 46)
-        for view in [header, cueView!, pairPanel, pairSteps!, stageStack, line, controlsRow!, permissionRow!] as [NSView] {
+        for view in [header, cueView!, waitingPanel, pairPanel, firstPairSteps, stageStack, issueRow!, controlsRow!, permissionRow!] as [NSView] {
             fullWidth(view, in: stack)
         }
         flexible.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         buildSettings()
         refreshUI()
-        if preview == nil { window.orderFront(nil) }
     }
 
     @objc func statusMenuButton(_ sender: NSButton) {
@@ -438,9 +429,15 @@ extension AppDelegate {
     func refreshUI() {
         guard window != nil else { return }
         let connected = connectedName != nil
-        let showStage = connected || !transcriptText.isEmpty || currentSession != nil
-        pairPanel.isHidden = showStage
-        pairSteps?.isHidden = showStage
+        let revealingPairCode = pairPanelVisible && currentSession == nil
+        let showStage = (connected || !transcriptText.isEmpty || currentSession != nil) && !revealingPairCode
+        let pairedWaiting = store.isPaired && !connected && transcriptText.isEmpty && currentSession == nil
+        waitingPanel.isHidden = !pairedWaiting
+        pairedNames.stringValue = store.devices.prefix(3).map(\.name).joined(separator: " · ")
+            + (store.devices.count > 3 ? L10n.text(" · %@ more (see iPhone settings)", L10n.argument(store.devices.count - 3)) : "")
+        pairCollapseButton.isHidden = !store.isPaired && !connected && transcriptText.isEmpty
+        pairPanel.isHidden = showStage || (pairedWaiting && !pairPanelVisible && !pairingRequested)
+        firstPairSteps.isHidden = showStage || store.isPaired || connected
         stageStack.isHidden = !showStage
 
         let code = PairingCode.formatted(store.currentCode())
@@ -453,13 +450,14 @@ extension AppDelegate {
             ]
         )
         pairHint.stringValue = pairingRequested
-            ? "在 iPhone 输入这个配对码，即可建立加密连接。"
+            ? L10n.text("Enter this pairing code on your iPhone to establish an encrypted connection.")
             : store.isPaired
-                ? "打开 iPhone 上的 iMic 会自动连接。新设备可输入上方配对码。"
-                : "在 iPhone 上打开 iMic，输入配对码连接这台 Mac。"
+                ? L10n.text("Open VoxChord on your iPhone to connect automatically. New devices use the pairing code above.")
+                : L10n.text("Open VoxChord on your iPhone, tap the computer name at the top, and enter this pairing code.")
 
-        copyButton.title = "复制文字"
+        copyButton.title = L10n.text("Copy text")
         copyButton.isEnabled = !transcriptText.isEmpty
+        controlsRow?.isHidden = transcriptText.isEmpty
         transcript.string = transcriptText
 
         let listening = currentSession != nil && stopAt == nil
@@ -469,11 +467,6 @@ extension AppDelegate {
 
         emptyMark.isHidden = hasText || listening || processing
         resultScroll.isHidden = !hasText
-        resultMeta.isHidden = !hasText
-        if hasText {
-            let target = (targetAppName ?? "—").uppercased()
-            resultMeta.stringValue = "TARGET · \(target)     \(Int(lastLatencyMS)) ms     \(transcriptText.count) CHARS"
-        }
         stageTitle.isHidden = false
         stageHint.isHidden = false
         activityRow.isHidden = !(listening || processing)
@@ -482,57 +475,56 @@ extension AppDelegate {
         elapsedLabel.isHidden = !listening
 
         if listening {
-            stageTitle.stringValue = "正在听…"
-            stageHint.stringValue = "在 iPhone 上松开会自动识别。上滑即可取消。"
-            activityHint.stringValue = "接收音量 · 16 kHz"
+            stageTitle.stringValue = L10n.text("Listening…")
+            stageHint.stringValue = L10n.text("Release on your iPhone to recognize. Slide up to cancel.")
+            activityHint.stringValue = L10n.text("Received volume · 16 kHz")
         } else if processing {
-            stageTitle.stringValue = "正在整理文字…"
-            stageHint.stringValue = "语音正在识别与整理，请稍候；已有文字会保留。"
-            activityHint.stringValue = "识别中"
+            stageTitle.stringValue = L10n.text("Preparing text…")
+            stageHint.stringValue = L10n.text("Recognizing and polishing your voice. Please wait. Existing text will be kept.")
+            activityHint.stringValue = L10n.text("Recognizing")
             spinner.startAnimation(nil)
         } else if hasText {
             stageTitle.font = .systemFont(ofSize: 17, weight: .semibold)
-            stageTitle.stringValue = lastInsertSucceeded ? "已输入" : "识别完成"
+            stageTitle.stringValue = lastInsertSucceeded ? L10n.text("Typed") : L10n.text("Recognition complete")
             if lastInsertSucceeded {
-                stageHint.stringValue = "文字已填入 \(targetAppName ?? "当前应用")。也可以复制到剪贴板。"
+                stageHint.stringValue = L10n.text("Text typed into %@. You can also copy it to the clipboard.", L10n.argument(targetAppName ?? L10n.text("the active app")))
             } else {
-                stageHint.stringValue = "文字保留在这里，点击复制即可使用。"
+                stageHint.stringValue = L10n.text("Your text is kept here. Click Copy to use it.")
             }
             stageTitle.font = .systemFont(ofSize: 17, weight: .semibold)
         } else {
             stageTitle.font = .systemFont(ofSize: 20, weight: .semibold)
             if key.stringValue.isEmpty {
-                stageTitle.stringValue = "先配置百炼 API Key"
-                stageHint.stringValue = "点击右上角设置，填入 Key 后就能开始。"
+                stageTitle.stringValue = L10n.text("Configure your Model Studio API Key first##b5e24567")
+                stageHint.stringValue = L10n.text("Open setup and paste your Model Studio Key to get started.")
             } else {
-                stageTitle.stringValue = "按住 iPhone 说话"
-                stageHint.stringValue = "松开后，文字会自动填入当前应用。"
+                stageTitle.stringValue = L10n.text("Hold to speak on your iPhone")
+                stageHint.stringValue = L10n.text("Release to type into the active app automatically.")
             }
         }
         if !processing { spinner.stopAnimation(nil) }
 
-        if automatic.state == .on {
-            automatic.title = "自动输入"
-        } else {
-            automatic.title = "仅显示文字"
-        }
         refreshInputPermission()
         updateStatusBar()
+        refreshStatusMenu()
+        refreshCloudFailure()
         if settingsWindow != nil { rebuildPairedList() }
     }
 
     func refreshInputPermission() {
         let state = inputPermissionState()
-        permissionState.stringValue = state.allowed ? "" : (state.accessibility ? "输入授权尚未生效" : "需要辅助功能权限")
-        permissionState.textColor = state.allowed ? .imicMuted : .imicOrange
-        let showRow = automatic.state == .on && !state.allowed
+        let keyMissing = key.stringValue.isEmpty
+        permissionState.stringValue = keyMissing ? L10n.text("No Model Studio API Key yet")
+            : state.allowed ? "" : (state.accessibility ? L10n.text("Typing permission has not taken effect") : L10n.text("Accessibility permission required"))
+        permissionState.textColor = .imicOrange
+        let showRow = keyMissing || (automatic.state == .on && !state.allowed)
         permissionRow?.isHidden = !showRow
-        permissionButton?.isHidden = state.allowed
+        permissionButton?.isHidden = !showRow
         settingsPermissionLabel.stringValue = state.message
         settingsPermissionLabel.textColor = state.allowed ? .imicMuted : .imicOrange
         settingsPermissionButton?.isHidden = state.allowed
         testInputButton?.isEnabled = state.allowed
-        permissionGuide?.refreshState()
+        setupWizard?.refresh()
     }
 
     func updateStatusBar() {
@@ -558,290 +550,4 @@ extension AppDelegate {
 
     // MARK: - Settings
 
-    func buildSettings() {
-        settingsWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 640),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        settingsWindow.title = "iMic 设置"
-        settingsWindow.isReleasedWhenClosed = false
-        settingsWindow.titlebarAppearsTransparent = true
-        settingsWindow.backgroundColor = .imicInk
-        settingsWindow.appearance = NSAppearance(named: .darkAqua)
-        settingsWindow.center()
-        let content = InkView()
-        settingsWindow.contentView = content
-
-        let connectionTitle = overline("CONNECTION")
-        pairedList = column([], spacing: 10)
-        pairedList.translatesAutoresizingMaskIntoConstraints = false
-        rebuildPairedList()
-        let pairActions = row([
-            linkButton("重新生成配对码", #selector(rotatePairCode)),
-            linkButton("解除全部配对", #selector(forgetAllDevices))
-        ], spacing: 16)
-
-        let apiTitle = overline("BAILIAN API KEY")
-        key.placeholderString = "sk-…"
-        key.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-        key.bezelStyle = .roundedBezel
-        key.setAccessibilityLabel("百炼 API Key")
-        key.heightAnchor.constraint(equalToConstant: 30).isActive = true
-        keyHint = label("保存到 ~/.zshrc，启动时自动读取；不会写入钥匙串。", size: 10, color: .imicMuted)
-        keyHint.maximumNumberOfLines = 2
-        model.placeholderString = ASRConfiguration.model
-        endpoint.placeholderString = "wss:// 服务域名/api-ws/v1/inference"
-        model.setAccessibilityLabel("语音识别模型")
-        endpoint.setAccessibilityLabel("百炼服务地址")
-        for field in [model, endpoint] {
-            field.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-            field.bezelStyle = .roundedBezel
-            field.heightAnchor.constraint(equalToConstant: 26).isActive = true
-        }
-        advanced = column([
-            label("识别模型", size: 10, color: .imicMuted, mono: true),
-            model,
-            label("服务地址", size: 10, color: .imicMuted, mono: true),
-            endpoint
-        ], spacing: 6)
-        advanced.isHidden = true
-        advancedButton = NSButton(title: "高级设置", target: self, action: #selector(toggleAdvanced))
-        advancedButton.isBordered = false
-        advancedButton.image = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil)
-        advancedButton.imagePosition = .imageLeading
-        advancedButton.contentTintColor = .imicMuted
-        advancedButton.font = .systemFont(ofSize: 11, weight: .medium)
-        advancedButton.setButtonType(.pushOnPushOff)
-        advancedButton.alignment = .left
-        advancedButton.setAccessibilityLabel("展开高级设置")
-
-        let connectionFallbackTitle = overline("BLUETOOTH FALLBACK")
-        bleFallbackCheck = checkbox("局域网不可用时启用蓝牙 GATT 兜底", #selector(toggleBLEFallback), key: "bleFallback", defaultValue: true)
-        let connectionFallbackHint = label("蓝牙不降低音质，但带宽较低，长录音可能需要补传。若没有弹出授权，请在系统设置 → 隐私与安全性 → 蓝牙中允许 iMic。", size: 10, color: .imicMuted)
-        connectionFallbackHint.maximumNumberOfLines = 3
-        let bluetoothSettings = linkButton("打开蓝牙设置…", #selector(openBluetoothSettings))
-
-        let gestureTitle = overline("STRING GESTURES")
-        let gestureHint = label("下拉松手，弦弹射首次向上穿过中线时回车并播放短音效；持续上拉连续删除；左右滑动移动光标。", size: 10, color: .imicMuted)
-        gestureHint.maximumNumberOfLines = 0
-        snapReturnCheck = checkbox("下拉回弹发送回车", #selector(toggleSnapReturn), key: "snapReturn", defaultValue: true)
-        pullDeleteCheck = checkbox("上拉删除", #selector(togglePullDelete), key: "pullDelete", defaultValue: true)
-        swipeCursorCheck = checkbox("左右滑动移动光标", #selector(toggleSwipeCursor), key: "swipeCursor", defaultValue: true)
-        let gestureChecks = column([snapReturnCheck, pullDeleteCheck, swipeCursorCheck], spacing: 8)
-
-        let deepseekTitle = overline("TEXT POLISH")
-        deepseekCheck = checkbox("启用 AI 润色与转换", #selector(toggleDeepSeek), key: "deepseekEnabled", defaultValue: false)
-        polishProviderPicker.addItems(withTitles: PolishProvider.allCases.map(\.title))
-        polishProviderPicker.selectItem(at: PolishProvider.allCases.firstIndex(of: editingPolishProvider)!)
-        polishProviderPicker.target = self
-        polishProviderPicker.action = #selector(changePolishProvider)
-        polishProviderPicker.setAccessibilityLabel("润色来源")
-        deepseekKey.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-        deepseekKey.bezelStyle = .roundedBezel
-        deepseekKey.heightAnchor.constraint(equalToConstant: 30).isActive = true
-        for field in [deepseekModel, polishEndpoint] {
-            field.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-            field.bezelStyle = .roundedBezel
-            field.heightAnchor.constraint(equalToConstant: 26).isActive = true
-            field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            field.cell?.isScrollable = true
-        }
-        deepseekModel.setAccessibilityLabel("当前来源润色模型")
-        polishEndpoint.setAccessibilityLabel("当前来源完整 Chat Completions 地址")
-        deepseekHint = label("", size: 10, color: .imicMuted)
-        deepseekHint.maximumNumberOfLines = 0
-        polishAddressHint = label("", size: 10, color: .imicMuted)
-        polishAddressHint.maximumNumberOfLines = 0
-        for hint in [deepseekHint!, polishAddressHint!] {
-            hint.usesSingleLineMode = false
-            hint.cell?.wraps = true
-            hint.cell?.isScrollable = false
-            hint.preferredMaxLayoutWidth = 448
-            hint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        }
-        polishAdvanced = column([
-            label("当前来源模型", size: 10, color: .imicMuted, mono: true), deepseekModel,
-            label("完整 Chat Completions 地址", size: 10, color: .imicMuted, mono: true), polishEndpoint,
-            polishAddressHint!
-        ], spacing: 6)
-        for view in polishAdvanced.arrangedSubviews { fullWidth(view, in: polishAdvanced) }
-        polishAdvancedButton = NSButton(title: "模型与地址", target: self, action: #selector(togglePolishAdvanced))
-        polishAdvancedButton.isBordered = false
-        polishAdvancedButton.imagePosition = .imageLeading
-        polishAdvancedButton.contentTintColor = .imicMuted
-        polishAdvancedButton.font = .systemFont(ofSize: 11, weight: .medium)
-        polishAdvancedButton.setButtonType(.pushOnPushOff)
-        polishAdvancedButton.alignment = .left
-        loadPolishProviderFields()
-        let polishOptions = DeepSeekConfiguration.options
-        polishModeButtons = NSSegmentedControl(
-            labels: PolishMode.allCases.map(\.title), trackingMode: .selectOne,
-            target: self, action: #selector(changePolishOptions(_:)))
-        polishModeButtons.setAccessibilityLabel("转换模式")
-        polishModeButtons.selectedSegment = PolishMode.allCases.firstIndex(of: polishOptions.mode) ?? 0
-        polishToneButtons = NSSegmentedControl(
-            labels: PolishTone.allCases.map(\.title), trackingMode: .selectOne,
-            target: self, action: #selector(changePolishOptions(_:)))
-        polishToneButtons.setAccessibilityLabel("表达语气")
-        polishToneButtons.selectedSegment = PolishTone.allCases.firstIndex(of: polishOptions.tone) ?? 0
-        for control in [polishModeButtons!, polishToneButtons!] {
-            control.segmentStyle = .rounded
-            control.segmentDistribution = .fillEqually
-            control.selectedSegmentBezelColor = .imicOrange
-            control.font = .systemFont(ofSize: 11, weight: .medium)
-            control.heightAnchor.constraint(equalToConstant: 32).isActive = true
-        }
-        for (index, mode) in PolishMode.allCases.enumerated() {
-            polishModeButtons.setToolTip(mode.detail, forSegment: index)
-        }
-        for (index, tone) in PolishTone.allCases.enumerated() {
-            polishToneButtons.setToolTip("\(tone.detail)\n例如：\(tone.example)", forSegment: index)
-        }
-        polishOutputPicker = NSPopUpButton(frame: .zero, pullsDown: false)
-        polishOutputPicker.addItems(withTitles: PolishOutput.languages.map(\.title))
-        polishOutputPicker.selectItem(at: PolishOutput.languages.firstIndex(of: polishOptions.output) ?? 0)
-        polishOutputPicker.target = self
-        polishOutputPicker.action = #selector(changePolishOutput(_:))
-        polishOutputPicker.font = .systemFont(ofSize: 11, weight: .medium)
-        polishOutputPicker.setAccessibilityLabel("输出语言")
-        polishOptionsHint = label("", size: 10, color: .imicMuted)
-        polishOptionsHint.maximumNumberOfLines = 0
-        polishOptionsHint.setAccessibilityLabel("当前转换组合")
-        polishModeHint = label("", size: 10, color: .imicMuted)
-        polishToneHint = label("", size: 10, color: .imicMuted)
-        for hint in [polishModeHint!, polishToneHint!] { hint.maximumNumberOfLines = 0 }
-        updatePolishOptionControls(polishOptions)
-        let modeFields = column([
-            label("MODE · 转换模式", size: 10, color: .imicMuted, mono: true), polishModeButtons!, polishModeHint!
-        ], spacing: 8)
-        let toneFields = column([
-            label("TONE · 表达语气", size: 10, color: .imicMuted, mono: true), polishToneButtons!, polishToneHint!
-        ], spacing: 8)
-        let languageFields = column([
-            label("LANGUAGE · 输出语言", size: 10, color: .imicMuted, mono: true), polishOutputPicker!, polishOptionsHint!
-        ], spacing: 8)
-        let providerFields = column([
-            label("SERVICE · 润色服务", size: 10, color: .imicMuted, mono: true), polishProviderPicker,
-            deepseekKey, deepseekHint, polishAdvancedButton!, polishAdvanced!
-        ], spacing: 6)
-        let deepseekFields = column([modeFields, toneFields, languageFields, providerFields], spacing: 18)
-        for group in [modeFields, toneFields, languageFields, providerFields, deepseekFields] {
-            for view in group.arrangedSubviews { fullWidth(view, in: group) }
-        }
-
-        let previewTitle = overline("LIVE PREVIEW")
-        livePreviewCheck = checkbox("实时预览与逐字输入", #selector(toggleLivePreview), key: "livePreview", defaultValue: true)
-        let previewHint = label("边说边输入。范围可靠时精确修订；其他编辑器使用键盘兼容模式，按本轮投递记录修订尾部。按键、点击或切换应用即停止。目标自行改稿或丢弃按键时，兼容模式仍有重复或误删风险。", size: 10, color: .imicMuted)
-        previewHint.maximumNumberOfLines = 0
-
-        let sweepTitle = overline("POLISH SWEEP · TEST")
-        polishSweepCheck = checkbox("润色完成时扫光", #selector(togglePolishSweep), key: "polishSweep", defaultValue: true)
-        polishSweepHint = label("先逐行扫光，等待时保持蓄能，结果写入后释放。仅本机 OCR，不保存截图；定位失败直接输入。需要 macOS 14+ 和屏幕录制权限。", size: 10, color: .imicMuted)
-        polishSweepHint.maximumNumberOfLines = 0
-        let sweepPermission = linkButton("允许屏幕录制…", #selector(requestSweepPermission))
-
-        let permissionTitle = overline("INPUT PERMISSION")
-        settingsPermissionLabel.font = .systemFont(ofSize: 11)
-        settingsPermissionLabel.maximumNumberOfLines = 2
-        settingsPermissionButton = linkButton("设置输入权限…", #selector(permissions))
-        testInputButton = linkButton("测试输入", #selector(testInput))
-        let permissionActions = row([settingsPermissionButton, testInputButton], spacing: 16)
-
-        saveFeedback.font = .systemFont(ofSize: 11)
-        saveFeedback.maximumNumberOfLines = 2
-        let footerSpacer = NSView()
-        footerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let save = button("保存", #selector(saveSettings))
-        save.keyEquivalent = "\r"
-        let footer = row([saveFeedback, footerSpacer, save], spacing: 12)
-
-        let scrollContent = column([
-            connectionTitle, pairedList, pairActions,
-            divider(),
-            apiTitle, key, keyHint, advancedButton, advanced,
-            divider(),
-            connectionFallbackTitle, bleFallbackCheck, connectionFallbackHint, bluetoothSettings,
-            divider(),
-            gestureTitle, gestureHint, gestureChecks,
-            divider(),
-            deepseekTitle, deepseekCheck, deepseekFields,
-            divider(),
-            previewTitle, livePreviewCheck, previewHint,
-            divider(),
-            sweepTitle, polishSweepCheck, polishSweepHint, sweepPermission,
-            divider(),
-            permissionTitle, settingsPermissionLabel, permissionActions,
-            footer
-        ], spacing: 14)
-        for view in [connectionTitle, pairedList!, pairActions, apiTitle, key, keyHint,
-                     advancedButton, advanced!, connectionFallbackTitle, bleFallbackCheck, connectionFallbackHint, bluetoothSettings,
-                     gestureTitle, gestureHint, gestureChecks,
-                     deepseekTitle, deepseekCheck, deepseekFields,
-                     previewTitle, livePreviewCheck, previewHint,
-                     sweepTitle, polishSweepCheck, polishSweepHint, sweepPermission,
-                     permissionTitle, settingsPermissionLabel, permissionActions, footer] as [NSView] {
-            fullWidth(view, in: scrollContent)
-        }
-
-        let scroll = NSScrollView()
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
-        scroll.drawsBackground = false
-        scroll.borderType = .noBorder
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        let document = InkView()
-        document.translatesAutoresizingMaskIntoConstraints = false
-        document.addSubview(scrollContent)
-        scrollContent.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            scrollContent.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 26),
-            scrollContent.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -26),
-            scrollContent.topAnchor.constraint(equalTo: document.topAnchor, constant: 26),
-            scrollContent.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -24)
-        ])
-        scroll.documentView = document
-        NSLayoutConstraint.activate([
-            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
-            document.heightAnchor.constraint(greaterThanOrEqualTo: scroll.contentView.heightAnchor)
-        ])
-        content.addSubview(scroll)
-        NSLayoutConstraint.activate([
-            scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
-            scroll.bottomAnchor.constraint(equalTo: content.bottomAnchor)
-        ])
-        refreshInputPermission()
-    }
-
-    func rebuildPairedList() {
-        guard pairedList != nil else { return }
-        for view in pairedList.arrangedSubviews {
-            pairedList.removeArrangedSubview(view)
-            view.removeFromSuperview()
-        }
-        let devices = store.devices
-        if devices.isEmpty {
-            let empty = label("尚未配对 iPhone", size: 12, color: .imicMuted)
-            pairedList.addArrangedSubview(empty)
-            fullWidth(empty, in: pairedList)
-            return
-        }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "M 月 d 日"
-        for device in devices {
-            let name = label(device.name, size: 13, color: .imicIvory)
-            let date = label("配对于 \(formatter.string(from: device.pairedAt))", size: 10, color: .imicMuted, mono: true)
-            let text = column([name, date], spacing: 2)
-            let spacer = NSView()
-            spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-            let remove = linkButton("解除", #selector(forgetDevice(_:)))
-            remove.identifier = NSUserInterfaceItemIdentifier(device.id)
-            let row = row([text, spacer, remove], spacing: 10)
-            pairedList.addArrangedSubview(row)
-            fullWidth(row, in: pairedList)
-        }
-    }
 }

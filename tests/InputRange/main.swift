@@ -15,6 +15,18 @@ final class InputRangeTests: XCTestCase {
         XCTAssertFalse(InputTarget.clearRoleAllowed("AXTextArea", valueSettable: true, selectedTextSettable: false))
     }
 
+    func testElectronEditorsStayInKeyboardCompatibilityWhenRangesAppear() {
+        // The polish sweep turns on AXManualAccessibility; the next capture must not
+        // switch Qoder/Cursor/VS Code inputs to AX tail selection.
+        XCTAssertEqual(InputTarget.initialMode(bundleIdentifier: "com.qoder.ide", electron: true, canObserveRange: true), .keyboard)
+        XCTAssertEqual(InputTarget.initialMode(bundleIdentifier: "com.apple.TextEdit", canObserveRange: true), .verifiedRange)
+        XCTAssertEqual(InputTarget.initialMode(bundleIdentifier: "com.openai.codex", canObserveRange: true), .keyboard)
+        XCTAssertTrue(InputTarget.isElectron(URL(fileURLWithPath: "/Applications/Cursor.app"))
+                      || !FileManager.default.fileExists(atPath: "/Applications/Cursor.app"))
+        XCTAssertFalse(InputTarget.isElectron(URL(fileURLWithPath: "/System/Applications/TextEdit.app")))
+        XCTAssertFalse(InputTarget.isElectron(nil))
+    }
+
     func testUnknownKeyboardSelectionDoesNotAcceptGhostCompletion() {
         XCTAssertEqual(InputTarget.keyboardInitialPreparation(selection: nil), .ready,
                        "An unreadable editor must receive text without a speculative Right or Tab key")
@@ -169,6 +181,22 @@ final class InputRangeTests: XCTestCase {
     func testEmptyTextCannotClaimAnArbitraryRange() {
         XCTAssertNil(InputRangeMatcher.range(in: "existing draft", location: 0,
                                               text: "", context: "draft"))
+    }
+
+    func testEmbeddedTerminalHostsDefaultToTerminalWhenAXLabelsMissing() {
+        XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: "com.todesktop.230313mzl4w4u92", labels: []))
+        XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: "com.microsoft.VSCode", labels: [nil, ""]))
+        XCTAssertFalse(TypedTextSafety.isTerminal(bundleIdentifier: "com.microsoft.VSCode", labels: ["editor", "main.swift"]))
+        XCTAssertTrue(TypedTextSafety.isTerminal(bundleIdentifier: "com.microsoft.VSCode", labels: ["Integrated Terminal"]))
+    }
+
+    func testSecureInputAndSecureFieldsAreDetected() {
+        XCTAssertTrue(InputTarget.isSecureInputActive(element: nil, secureEventInput: true))
+        XCTAssertFalse(InputTarget.isSecureInputActive(element: nil, secureEventInput: false))
+        XCTAssertTrue(InputTarget.isSecureInputActive(element: nil, secureEventInput: false, role: "AXSecureTextField"))
+        XCTAssertTrue(InputTarget.isSecureInputActive(element: nil, secureEventInput: false, subrole: "AXSecureTextField"))
+        XCTAssertTrue(InputTarget.isSecureInputActive(element: nil, secureEventInput: false, protectedContent: true))
+        XCTAssertFalse(InputTarget.isSecureInputActive(element: nil, secureEventInput: false, role: "AXTextField", subrole: "AXStandardWindow", protectedContent: false))
     }
 }
 

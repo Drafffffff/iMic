@@ -1,0 +1,452 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project ios/iMic.xcodeproj -scheme iMic -configuration Debug -destination "platform=iOS Simulator,id=743AA534-7810-4BFA-AF58-001279C674E7" -derivedDataPath build/ios.noindex -resultBundlePath build/l10n/SEScrollVerified.xcresult -parallel-testing-enabled NO "-only-testing:iMicUITests/EnglishUIReviewTests" CODE_SIGNING_ALLOWED=NO test
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Writing result bundle at path:
+	/Users/drafff/.codex/worktrees/english-ui/iMic/build/l10n/SEScrollVerified.xcresult
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (2 targets)
+    Target 'iMicUITests' in project 'iMic'
+        ➜ Explicit dependency on target 'iMic' in project 'iMic'
+    Target 'iMic' in project 'iMic' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/xcstringstool compile --dry-run --output-directory /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/InfoPlist.xcstrings
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -x objective-c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/xcstringstool compile --dry-run --output-directory /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/Localizable.xcstrings
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/Assets.xcassets
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+Build description signature: 79a20f551ab5b21eecfb762df29a1c24
+Build description path: /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/XCBuildData/79a20f551ab5b21eecfb762df29a1c24.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-e829b21a6f8c9b70876ba0858053c04435d3147121984ba087c28d913653d626.sdkstatcache
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -o /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-e829b21a6f8c9b70876ba0858053c04435d3147121984ba087c28d913653d626.sdkstatcache
+
+SwiftDriver iMic normal arm64 com.apple.xcode.tools.swift.compiler (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name iMic -Onone @/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.SwiftFileList -DDEBUG -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator -F /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-e829b21a6f8c9b70876ba0858053c04435d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/ModuleCache.noindex -sdk-module-cache-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic_const_extract_protocols.json -Xcc -iquote -Xcc /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-generated-files.hmap -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-own-target-headers.hmap -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-all-target-headers.hmap -Xcc -iquote -Xcc /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-project-headers.hmap -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/DerivedSources-normal/arm64 -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/DerivedSources/arm64 -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic-Swift.h -import-objc-header /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/iMic-Bridging-Header.h -working-directory /Users/drafff/.codex/worktrees/english-ui/iMic/ios -experimental-emit-module-separately -disable-cmo
+
+SwiftGeneratePch normal arm64 Compiling\ bridging\ header (in target 'iMic' from project 'iMic')
+
+SwiftDriverJobDiscovery normal arm64 Compiling bridging header (in target 'iMic' from project 'iMic')
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ iMic (in target 'iMic' from project 'iMic')
+
+SwiftCompile normal arm64 (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for iMic (in target 'iMic' from project 'iMic')
+
+SwiftDriver\ Compilation\ Requirements iMic normal arm64 com.apple.xcode.tools.swift.compiler (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name iMic -Onone @/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.SwiftFileList -DDEBUG -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator -F /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-e829b21a6f8c9b70876ba0858053c04435d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/ModuleCache.noindex -sdk-module-cache-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic_const_extract_protocols.json -Xcc -iquote -Xcc /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-generated-files.hmap -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-own-target-headers.hmap -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-all-target-headers.hmap -Xcc -iquote -Xcc /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-project-headers.hmap -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/DerivedSources-normal/arm64 -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/DerivedSources/arm64 -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic-Swift.h -import-objc-header /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/iMic-Bridging-Header.h -working-directory /Users/drafff/.codex/worktrees/english-ui/iMic/ios -experimental-emit-module-separately -disable-cmo
+
+Copy /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.swiftmodule/arm64-apple-ios-simulator.abi.json /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.abi.json (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.abi.json /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.swiftmodule/arm64-apple-ios-simulator.abi.json
+
+Copy /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.swiftsourceinfo (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.swiftsourceinfo /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo
+
+SwiftCompile normal arm64 Compiling\ WaveformReplayView.swift /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/WaveformReplayView.swift (in target 'iMic' from project 'iMic')
+
+SwiftCompile normal arm64 /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/WaveformReplayView.swift (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-SwiftPerFileCompile WaveformReplayView.swift
+
+SwiftCompile normal arm64 Compiling\ LinkClient.swift /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/LinkClient.swift (in target 'iMic' from project 'iMic')
+
+SwiftCompile normal arm64 /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/LinkClient.swift (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-SwiftPerFileCompile LinkClient.swift
+
+/Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/LinkClient.swift:1472:137: warning: 'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+1459 |         }
+1460 |         #endif
+1461 |         queue.async {
+     |                     |- note: 'self' implicitly strongly captured here
+     |                     `- note: add 'self' as a capture list item to silence
+1462 |             guard epoch == self.currentEpoch(), self.ready, self.supportsPolishPreferences else {
+1463 |                 self.publish {
+     :
+1470 |             let generation = self.polishSaveGeneration
+1471 |             self.pendingPolishPreferences = preferences
+1472 |             self.sendSealed(.polishSettings(preferences, features: IMicLink.polishOutputFeature | IMicLink.polishModesFeature)) { [weak self] success in
+     |                                                                                                                                         |- warning: 'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+     |                                                                                                                                         `- note: explicitly assign the capture list item to silence
+1473 |                 guard let self, !success, epoch == self.currentEpoch(),
+1474 |                       generation == self.polishSaveGeneration, self.pendingPolishPreferences != nil else { return }
+
+/Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/LinkClient.swift:1462:28: warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+  41 | /// iPhone 侧链路：Bonjour 发现 → Curve25519 握手 → 六位配对码 → 令牌会话。
+  42 | /// 所有网络状态在私有串行队列，`@Published` 只在主线程更新。
+  43 | final class LinkClient: ObservableObject {
+     |             `- note: class 'LinkClient' does not conform to the 'Sendable' protocol
+  44 |     enum Phase: Equatable {
+  45 |         case idle
+     :
+1460 |         #endif
+1461 |         queue.async {
+1462 |             guard epoch == self.currentEpoch(), self.ready, self.supportsPolishPreferences else {
+     |                            `- warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+1463 |                 self.publish {
+1464 |                     self.polishPreferencesSaving = false
+
+[#ImplicitStrongCapture]: <https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture>
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+SwiftCompile normal arm64 Compiling\ OnboardingView.swift /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/Onboarding/OnboardingView.swift (in target 'iMic' from project 'iMic')
+
+SwiftCompile normal arm64 /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/Onboarding/OnboardingView.swift (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-SwiftPerFileCompile OnboardingView.swift
+
+SwiftCompile normal arm64 Compiling\ PairingSheet.swift /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/PairingSheet.swift (in target 'iMic' from project 'iMic')
+
+SwiftCompile normal arm64 /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/PairingSheet.swift (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-SwiftPerFileCompile PairingSheet.swift
+
+SwiftDriverJobDiscovery normal arm64 Compiling WaveformReplayView.swift (in target 'iMic' from project 'iMic')
+
+SwiftDriverJobDiscovery normal arm64 Compiling LinkClient.swift (in target 'iMic' from project 'iMic')
+
+SwiftDriverJobDiscovery normal arm64 Compiling OnboardingView.swift (in target 'iMic' from project 'iMic')
+
+SwiftDriverJobDiscovery normal arm64 Compiling PairingSheet.swift (in target 'iMic' from project 'iMic')
+
+SwiftDriver\ Compilation iMic normal arm64 com.apple.xcode.tools.swift.compiler (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name iMic -Onone @/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.SwiftFileList -DDEBUG -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator -F /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-e829b21a6f8c9b70876ba0858053c04435d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/ModuleCache.noindex -sdk-module-cache-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic_const_extract_protocols.json -Xcc -iquote -Xcc /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-generated-files.hmap -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-own-target-headers.hmap -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-all-target-headers.hmap -Xcc -iquote -Xcc /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-project-headers.hmap -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/DerivedSources-normal/arm64 -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/DerivedSources/arm64 -Xcc -I/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic-Swift.h -import-objc-header /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/iMic-Bridging-Header.h -working-directory /Users/drafff/.codex/worktrees/english-ui/iMic/ios -experimental-emit-module-separately -disable-cmo
+
+Ld /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/iMic.debug.dylib normal (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -O0 -Xlinker -no_warn_duplicate_libraries -L/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator -F/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator -filelist /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.LinkFileList -install_name @rpath/iMic.debug.dylib -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic_dependency_info.dat -fobjc-arc -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.swiftmodule -Xlinker -alias -Xlinker _main -Xlinker ___debug_main_executable_dylib_entry_point -o /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/iMic.debug.dylib
+
+CompileXCStrings /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/ /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/Localizable.xcstrings (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcstringstool compile --output-directory /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build /Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/Localizable.xcstrings
+
+ProcessInfoPlistFile /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/Info.plist /Users/drafff/.codex/worktrees/english-ui/iMic/ios/Info.plist (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-infoPlistUtility /Users/drafff/.codex/worktrees/english-ui/iMic/ios/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/assetcatalog_generated_info.plist -o /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/Info.plist
+
+CopyStringsFile /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/zh-Hans.lproj/Localizable.strings /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/zh-Hans.lproj/Localizable.strings (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename Localizable.strings --outdir /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/zh-Hans.lproj -- /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/zh-Hans.lproj/Localizable.strings
+/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/zh-Hans.lproj/Localizable.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'iMic' from project 'iMic')
+
+CopyStringsFile /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/en.lproj/Localizable.strings /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/en.lproj/Localizable.strings (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename Localizable.strings --outdir /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/en.lproj -- /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/en.lproj/Localizable.strings
+/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/en.lproj/Localizable.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'iMic' from project 'iMic')
+
+ConstructStubExecutorLinkFileList /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-ExecutorLinkFileList-normal-arm64.txt (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    construct-stub-executor-link-file-list /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/iMic.debug.dylib /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libPreviewsJITStubExecutor_no_swift_entry_point.a /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libPreviewsJITStubExecutor.a --output /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-ExecutorLinkFileList-normal-arm64.txt
+note: Using stub executor library with Swift entry point. (in target 'iMic' from project 'iMic')
+
+Ld /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/iMic normal (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -O0 -Xlinker -no_warn_duplicate_libraries -L/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator -F/Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator -Xlinker -rpath -Xlinker @executable_path -Xlinker -rpath -Xlinker @executable_path/Frameworks -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -e ___debug_blank_executor_main -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_dylib -Xlinker /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-DebugDylibPath-normal-arm64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_instlnm -Xlinker /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-DebugDylibInstallName-normal-arm64.txt -Xlinker -filelist -Xlinker /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic-ExecutorLinkFileList-normal-arm64.txt /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/iMic.debug.dylib -o /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/iMic
+
+CopySwiftLibs /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/iMic.debug.dylib --scan-folder /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/Frameworks --scan-folder /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/PlugIns --scan-folder /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/SystemExtensions --scan-folder /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v27.1.266.1.hpmgWI/Metal.xctoolchain --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+ExtractAppIntentsMetadata (in target 'iMic' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v27.1.266.1.hpmgWI/Metal.xctoolchain --module-name iMic --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk --xcode-version 27A9275 --platform-family iOS --deployment-target 17.0 --bundle-identifier art.malette.imic --output /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app --target-triple arm64-apple-ios17.0-simulator --binary-file /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMic.app/iMic --dependency-file /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic_dependency_info.dat --stringsdata-file /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.SwiftFileList --metadata-file-list /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic.DependencyMetadataFileList --static-metadata-file-list /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/iMic.DependencyStaticMetadataFileList --swift-const-vals-list /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMic.build/Objects-normal/arm64/iMic.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --no-app-shortcuts-localization
+2026-11-01 00:11:42.465 appintentsmetadataprocessor[80486:65205689] Starting appintentsmetadataprocessor export
+2026-11-01 00:11:42.472 appintentsmetadataprocessor[80486:65205689] warning: Metadata extraction skipped, no AppIntents.framework dependency found
+
+ProcessInfoPlistFile /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMicUITests-Runner.app/PlugIns/iMicUITests.xctest/Info.plist /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMicUITests.build/empty-iMicUITests.plist (in target 'iMicUITests' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-infoPlistUtility /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMicUITests.build/empty-iMicUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMicUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMicUITests-Runner.app/PlugIns/iMicUITests.xctest/Info.plist
+
+CopySwiftLibs /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMicUITests-Runner.app/PlugIns/iMicUITests.xctest (in target 'iMicUITests' from project 'iMic')
+    cd /Users/drafff/.codex/worktrees/english-ui/iMic/ios
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMicUITests-Runner.app/PlugIns/iMicUITests.xctest/iMicUITests --scan-folder /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMicUITests-Runner.app/PlugIns/iMicUITests.xctest/Frameworks --scan-folder /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMicUITests-Runner.app/PlugIns/iMicUITests.xctest/PlugIns --scan-folder /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMicUITests-Runner.app/PlugIns/iMicUITests.xctest/SystemExtensions --scan-folder /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMicUITests-Runner.app/PlugIns/iMicUITests.xctest/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v27.1.266.1.hpmgWI/Metal.xctoolchain --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Products/Debug-iphonesimulator/iMicUITests-Runner.app/PlugIns/iMicUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/iMic.build/Debug-iphonesimulator/iMicUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+PruneExplicitPrecompiledModules /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/SDKExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /Users/drafff/.codex/worktrees/english-ui/iMic/build/ios.noindex/Build/Intermediates.noindex/ExplicitPrecompiledModules
+
+2026-11-01 00:11:42.787 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:11:47.029439+0800 iMicUITests-Runner[80489:65205932] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-11-01 00:11:50.796.
+Test Suite 'iMicUITests.xctest' started at 2026-11-01 00:11:50.799.
+Test Suite 'EnglishUIReviewTests' started at 2026-11-01 00:11:50.799.
+Test Case '-[iMicUITests.EnglishUIReviewTests testScrollableEnglishAndChineseGuidance]' started.
+    t =     0.02s Start Test at 2026-11-01 00:11:50.816
+    t =     0.08s Set Up
+    t =     0.08s Open art.malette.imic
+    t =     0.09s     Launch art.malette.imic
+2026-11-01 00:11:51.159 xcodebuild[80427:65205259] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-01 00:11:51.159 xcodebuild[80427:65205259] [MT] IDELaunchParametersSnapshot: no debugger version
+2026-11-01 00:11:51.219 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =     1.31s         Setting up automation session
+objc[80489]: Class UIAccessibilityLoaderWebShared is implemented in both /private/var/run/com.apple.security.cryptexd/mnt/com.apple.iPhoneOS.SimulatorRuntime-v24.1.434.0.AfAtWF/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x106788398) and /private/var/run/com.apple.security.cryptexd/mnt/com.apple.iPhoneOS.SimulatorRuntime-v24.1.434.0.AfAtWF/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x107770310). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =     4.06s         Wait for art.malette.imic to idle
+    t =     6.43s Waiting 20.0s for "onboarding.title" StaticText to exist
+    t =     7.46s     Checking `Expect predicate `existsNoRetry == 1` for object "onboarding.title" StaticText`
+    t =     7.47s         Checking existence of `"onboarding.title" StaticText`
+    t =     7.61s Find the Target Application 'art.malette.imic'
+    t =     7.68s Added attachment named 'scroll-onboarding-welcome-en-top'
+    t =     7.68s Swipe up ScrollView (First Match)
+    t =     7.69s     Wait for art.malette.imic to idle
+    t =     7.69s     Find the ScrollView (First Match)
+    t =     7.71s     Check for interrupting elements affecting ScrollView
+    t =     7.77s     Synthesize event
+    t =     8.24s     Wait for art.malette.imic to idle
+    t =     8.71s Find the Target Application 'art.malette.imic'
+    t =     8.74s Added attachment named 'scroll-onboarding-welcome-en-1'
+    t =     8.75s Find the "Get started" Button
+    t =     8.80s Terminate art.malette.imic:80511
+2026-11-01 00:11:59.613 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:11:59.614 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:11:59.616 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =     9.85s Open art.malette.imic
+    t =     9.85s     Launch art.malette.imic
+2026-11-01 00:12:00.657 xcodebuild[80427:65205259] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-01 00:12:00.657 xcodebuild[80427:65205259] [MT] IDELaunchParametersSnapshot: no debugger version
+2026-11-01 00:12:00.663 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =    10.07s         Setting up automation session
+    t =    12.54s         Wait for art.malette.imic to idle
+    t =    14.18s Waiting 20.0s for "onboarding.title" StaticText to exist
+    t =    15.23s     Checking `Expect predicate `existsNoRetry == 1` for object "onboarding.title" StaticText`
+    t =    15.23s         Checking existence of `"onboarding.title" StaticText`
+    t =    15.26s Find the Target Application 'art.malette.imic'
+    t =    15.31s Added attachment named 'scroll-onboarding-mac-download-en-top'
+    t =    15.31s Swipe up ScrollView (First Match)
+    t =    15.31s     Wait for art.malette.imic to idle
+    t =    15.32s     Find the ScrollView (First Match)
+    t =    15.33s     Check for interrupting elements affecting ScrollView
+    t =    15.34s     Synthesize event
+    t =    15.78s     Wait for art.malette.imic to idle
+    t =    16.33s Find the Target Application 'art.malette.imic'
+    t =    16.37s Added attachment named 'scroll-onboarding-mac-download-en-1'
+    t =    16.37s Find the "It's installed on my Mac. Continue" Button
+    t =    16.43s Terminate art.malette.imic:80543
+2026-11-01 00:12:07.238 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:12:07.239 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:12:07.240 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =    17.53s Open art.malette.imic
+    t =    17.53s     Launch art.malette.imic
+2026-11-01 00:12:08.331 xcodebuild[80427:65205259] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-01 00:12:08.331 xcodebuild[80427:65205259] [MT] IDELaunchParametersSnapshot: no debugger version
+2026-11-01 00:12:08.339 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =    17.75s         Setting up automation session
+    t =    20.34s         Wait for art.malette.imic to idle
+    t =    22.77s Waiting 20.0s for "Close" Button to exist
+    t =    23.84s     Checking `Expect predicate `existsNoRetry == 1` for object "Close" Button`
+    t =    23.84s         Checking existence of `"Close" Button`
+    t =    23.91s Find the Target Application 'art.malette.imic'
+    t =    24.00s Added attachment named 'scroll-settings-en-top'
+    t =    24.01s Swipe up ScrollView (First Match)
+    t =    24.01s     Wait for art.malette.imic to idle
+    t =    24.01s     Find the ScrollView (First Match)
+    t =    24.02s     Check for interrupting elements affecting ScrollView
+    t =    24.07s     Synthesize event
+    t =    24.50s     Wait for art.malette.imic to idle
+    t =    26.61s Find the Target Application 'art.malette.imic'
+    t =    26.68s Added attachment named 'scroll-settings-en-1'
+    t =    26.68s Swipe up ScrollView (First Match)
+    t =    26.68s     Wait for art.malette.imic to idle
+    t =    26.68s     Find the ScrollView (First Match)
+    t =    26.69s     Check for interrupting elements affecting ScrollView
+    t =    26.73s     Synthesize event
+    t =    27.17s     Wait for art.malette.imic to idle
+    t =    29.28s Find the Target Application 'art.malette.imic'
+    t =    29.34s Added attachment named 'scroll-settings-en-2'
+    t =    29.34s Swipe up ScrollView (First Match)
+    t =    29.34s     Wait for art.malette.imic to idle
+    t =    29.35s     Find the ScrollView (First Match)
+    t =    29.36s     Check for interrupting elements affecting ScrollView
+    t =    29.40s     Synthesize event
+    t =    29.83s     Wait for art.malette.imic to idle
+    t =    31.93s Find the Target Application 'art.malette.imic'
+    t =    31.99s Added attachment named 'scroll-settings-en-3'
+    t =    31.99s Swipe up ScrollView (First Match)
+    t =    31.99s     Wait for art.malette.imic to idle
+    t =    31.99s     Find the ScrollView (First Match)
+    t =    32.01s     Check for interrupting elements affecting ScrollView
+    t =    32.04s     Synthesize event
+    t =    32.47s     Wait for art.malette.imic to idle
+    t =    33.06s Find the Target Application 'art.malette.imic'
+    t =    33.12s Added attachment named 'scroll-settings-en-4'
+    t =    33.13s Swipe up ScrollView (First Match)
+    t =    33.13s     Wait for art.malette.imic to idle
+    t =    33.13s     Find the ScrollView (First Match)
+    t =    33.14s     Check for interrupting elements affecting ScrollView
+    t =    33.18s     Synthesize event
+    t =    33.60s     Wait for art.malette.imic to idle
+    t =    34.09s Find the Target Application 'art.malette.imic'
+    t =    34.16s Added attachment named 'scroll-settings-en-5'
+    t =    34.16s Terminate art.malette.imic:80561
+2026-11-01 00:12:24.970 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:12:24.971 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:12:24.972 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =    35.24s Open art.malette.imic
+    t =    35.25s     Launch art.malette.imic
+2026-11-01 00:12:26.049 xcodebuild[80427:65205259] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-01 00:12:26.049 xcodebuild[80427:65205259] [MT] IDELaunchParametersSnapshot: no debugger version
+2026-11-01 00:12:26.059 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =    35.46s         Setting up automation session
+    t =    37.93s         Wait for art.malette.imic to idle
+    t =    39.71s Waiting 20.0s for "onboarding.title" StaticText to exist
+    t =    40.77s     Checking `Expect predicate `existsNoRetry == 1` for object "onboarding.title" StaticText`
+    t =    40.77s         Checking existence of `"onboarding.title" StaticText`
+    t =    40.85s Find the Target Application 'art.malette.imic'
+    t =    40.90s Added attachment named 'scroll-onboarding-welcome-zh-Hans-top'
+    t =    40.90s Swipe up ScrollView (First Match)
+    t =    40.90s     Wait for art.malette.imic to idle
+    t =    40.91s     Find the ScrollView (First Match)
+    t =    40.92s     Check for interrupting elements affecting ScrollView
+    t =    40.94s     Synthesize event
+    t =    41.40s     Wait for art.malette.imic to idle
+    t =    41.88s Find the Target Application 'art.malette.imic'
+    t =    41.98s Added attachment named 'scroll-onboarding-welcome-zh-Hans-1'
+    t =    41.98s Find the "开始" Button
+    t =    42.03s Terminate art.malette.imic:80623
+2026-11-01 00:12:32.839 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:12:32.840 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:12:32.842 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =    43.11s Open art.malette.imic
+    t =    43.11s     Launch art.malette.imic
+2026-11-01 00:12:33.913 xcodebuild[80427:65205259] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-01 00:12:33.913 xcodebuild[80427:65205259] [MT] IDELaunchParametersSnapshot: no debugger version
+2026-11-01 00:12:33.922 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =    43.33s         Setting up automation session
+    t =    45.80s         Wait for art.malette.imic to idle
+    t =    47.76s Waiting 20.0s for "onboarding.title" StaticText to exist
+    t =    48.83s     Checking `Expect predicate `existsNoRetry == 1` for object "onboarding.title" StaticText`
+    t =    48.83s         Checking existence of `"onboarding.title" StaticText`
+    t =    48.89s Find the Target Application 'art.malette.imic'
+    t =    48.93s Added attachment named 'scroll-onboarding-mac-download-zh-Hans-top'
+    t =    48.93s Swipe up ScrollView (First Match)
+    t =    48.93s     Wait for art.malette.imic to idle
+    t =    48.94s     Find the ScrollView (First Match)
+    t =    48.94s     Check for interrupting elements affecting ScrollView
+    t =    48.96s     Synthesize event
+    t =    49.39s     Wait for art.malette.imic to idle
+    t =    49.86s Find the Target Application 'art.malette.imic'
+    t =    49.90s Added attachment named 'scroll-onboarding-mac-download-zh-Hans-1'
+    t =    49.90s Find the "Mac 上装好了，继续" Button
+    t =    49.95s Terminate art.malette.imic:80663
+2026-11-01 00:12:40.764 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:12:40.765 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:12:40.766 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =    51.04s Open art.malette.imic
+    t =    51.05s     Launch art.malette.imic
+2026-11-01 00:12:41.848 xcodebuild[80427:65205259] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-01 00:12:41.848 xcodebuild[80427:65205259] [MT] IDELaunchParametersSnapshot: no debugger version
+2026-11-01 00:12:41.856 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =    51.26s         Setting up automation session
+    t =    54.02s         Wait for art.malette.imic to idle
+    t =    56.75s Waiting 20.0s for "关闭" Button to exist
+    t =    57.79s     Checking `Expect predicate `existsNoRetry == 1` for object "关闭" Button`
+    t =    57.79s         Checking existence of `"关闭" Button`
+    t =    57.83s Find the Target Application 'art.malette.imic'
+    t =    57.92s Added attachment named 'scroll-settings-zh-Hans-top'
+    t =    57.92s Swipe up ScrollView (First Match)
+    t =    57.92s     Wait for art.malette.imic to idle
+    t =    57.93s     Find the ScrollView (First Match)
+    t =    57.94s     Check for interrupting elements affecting ScrollView
+    t =    57.98s     Synthesize event
+    t =    58.42s     Wait for art.malette.imic to idle
+    t =    60.54s Find the Target Application 'art.malette.imic'
+    t =    60.61s Added attachment named 'scroll-settings-zh-Hans-1'
+    t =    60.61s Swipe up ScrollView (First Match)
+    t =    60.61s     Wait for art.malette.imic to idle
+    t =    60.62s     Find the ScrollView (First Match)
+    t =    60.63s     Check for interrupting elements affecting ScrollView
+    t =    60.67s     Synthesize event
+    t =    61.10s     Wait for art.malette.imic to idle
+    t =    63.21s Find the Target Application 'art.malette.imic'
+    t =    63.29s Added attachment named 'scroll-settings-zh-Hans-2'
+    t =    63.30s Swipe up ScrollView (First Match)
+    t =    63.30s     Wait for art.malette.imic to idle
+    t =    63.30s     Find the ScrollView (First Match)
+    t =    63.31s     Check for interrupting elements affecting ScrollView
+    t =    63.35s     Synthesize event
+    t =    63.79s     Wait for art.malette.imic to idle
+    t =    65.89s Find the Target Application 'art.malette.imic'
+    t =    65.96s Added attachment named 'scroll-settings-zh-Hans-3'
+    t =    65.96s Swipe up ScrollView (First Match)
+    t =    65.96s     Wait for art.malette.imic to idle
+    t =    65.96s     Find the ScrollView (First Match)
+    t =    65.98s     Check for interrupting elements affecting ScrollView
+    t =    66.03s     Synthesize event
+    t =    66.46s     Wait for art.malette.imic to idle
+    t =    66.96s Find the Target Application 'art.malette.imic'
+    t =    67.02s Added attachment named 'scroll-settings-zh-Hans-4'
+    t =    67.03s Swipe up ScrollView (First Match)
+    t =    67.03s     Wait for art.malette.imic to idle
+    t =    67.03s     Find the ScrollView (First Match)
+    t =    67.04s     Check for interrupting elements affecting ScrollView
+    t =    67.08s     Synthesize event
+    t =    67.51s     Wait for art.malette.imic to idle
+    t =    67.99s Find the Target Application 'art.malette.imic'
+    t =    68.06s Added attachment named 'scroll-settings-zh-Hans-5'
+    t =    68.06s Terminate art.malette.imic:80691
+2026-11-01 00:12:58.873 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:12:58.873 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:12:58.874 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =    69.15s Tear Down
+Test Case '-[iMicUITests.EnglishUIReviewTests testScrollableEnglishAndChineseGuidance]' passed (69.359 seconds).
+Test Suite 'EnglishUIReviewTests' passed at 2026-11-01 00:13:00.175.
+	 Executed 1 test, with 0 failures (0 unexpected) in 69.359 (69.376) seconds
+Test Suite 'iMicUITests.xctest' passed at 2026-11-01 00:13:00.177.
+	 Executed 1 test, with 0 failures (0 unexpected) in 69.359 (69.378) seconds
+Test Suite 'Selected tests' passed at 2026-11-01 00:13:00.177.
+	 Executed 1 test, with 0 failures (0 unexpected) in 69.359 (69.381) seconds
+2026-11-01 00:13:00.230 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:13:00.231 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:13:00.232 xcodebuild[80427:65205259] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-01 00:13:00.515 xcodebuild[80427:65205259] [MT] IDETestOperationsObserverDebug: 78.003 elapsed -- Testing started completed.
+2026-11-01 00:13:00.515 xcodebuild[80427:65205259] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-01 00:13:00.515 xcodebuild[80427:65205259] [MT] IDETestOperationsObserverDebug: 78.003 sec, +78.003 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/drafff/.codex/worktrees/english-ui/iMic/build/l10n/SEScrollVerified.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

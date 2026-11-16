@@ -33,6 +33,14 @@ enum SweepLineLayout {
                 let x = index != paragraph.lowerBound && row.minX-left < height*0.6 ? left : row.minX
                 result[index] = CGRect(x: x, y: row.maxY-height, width: row.maxX-x, height: height)
             }
+            // OCR boxes reach below the glyphs; with tight line spacing the rail
+            // under one line would touch the next. Keep a 6pt gap by lifting the
+            // upper line's bottom, by at most a quarter of its height.
+            for index in paragraph.dropLast() {
+                let row = result[index], next = result[index+1]
+                let lift = min(row.height*0.25, max(0, 6-(next.minY-row.maxY)))
+                if lift > 0 { result[index] = CGRect(x: row.minX, y: row.minY, width: row.width, height: row.height-lift) }
+            }
         }
         return result
     }
@@ -131,6 +139,62 @@ enum TextViewport {
     static func visible(content: CGRect, window: CGRect, clips: [CGRect]) -> CGRect? {
         let rect = clips.reduce(content.intersection(window)) { $0.intersection($1) }
         return !rect.isNull && !rect.isInfinite && rect.width > 10 && rect.height > 8 ? rect : nil
+    }
+}
+
+/// Both the initial sweep and later layout must use the overlay's actual
+/// screen-space origin, including on a secondary display with a nonzero origin.
+enum SweepPanelCoordinates {
+    static func row(_ rect: CGRect, panel: CGRect, screenTop: CGFloat) -> CGRect {
+        CGRect(x: rect.minX-panel.minX, y: screenTop-rect.maxY-panel.minY, width: rect.width, height: rect.height)
+    }
+    static func point(_ point: CGPoint, panel: CGRect, screenTop: CGFloat) -> CGPoint {
+        CGPoint(x: point.x-panel.minX, y: screenTop-point.y-panel.minY)
+    }
+}
+
+/// AX screen coordinates grow downward. The top-left of the visible field is
+/// the text origin for both top-anchored and bottom-anchored auto-growing fields.
+/// These values are visual hints only and cannot authorize input.
+enum FieldFollow {
+    static let sampleInterval: TimeInterval = 0.03
+    static let stableGrace: TimeInterval = 0.3
+    static let maximumSettlement: TimeInterval = 0.9
+    struct Geometry: Equatable {
+        var windowID: UInt32
+        var window: CGRect
+        var element: CGRect
+        var visible: CGRect
+    }
+    enum Change { case fatal, followable, none }
+    static func same(_ a: CGRect, _ b: CGRect) -> Bool {
+        abs(a.minX-b.minX) < 0.5 && abs(a.minY-b.minY) < 0.5
+            && abs(a.width-b.width) < 0.5 && abs(a.height-b.height) < 0.5
+    }
+    static func classify(old: Geometry, new: Geometry?) -> Change {
+        guard let new, new.windowID == old.windowID, same(old.window, new.window),
+              !new.visible.isEmpty, !new.visible.isInfinite, !new.visible.isNull,
+              !new.element.isEmpty else { return .fatal }
+        return same(old.element, new.element) && same(old.visible, new.visible) ? .none : .followable
+    }
+    static func delta(from old: CGRect, to new: CGRect) -> CGVector {
+        CGVector(dx: new.minX-old.minX, dy: new.minY-old.minY)
+    }
+    struct Stability {
+        private var last: Geometry?
+        private var unchanged = 0
+        private var unchangedSince: TimeInterval?
+        private(set) var stableSince: TimeInterval?
+        mutating func observe(_ geometry: Geometry, at time: TimeInterval) {
+            if let last, FieldFollow.classify(old: last, new: geometry) == .none {
+                unchanged += 1
+                if unchanged >= 2 && time-(unchangedSince ?? time) >= sampleInterval*2-0.0001 && stableSince == nil { stableSince = time }
+            } else { unchanged = 0; stableSince = nil; unchangedSince = time }
+            last = geometry
+        }
+        func deadline(start: TimeInterval) -> TimeInterval {
+            min(start + maximumSettlement, (stableSince ?? (start + maximumSettlement)) + stableGrace)
+        }
     }
 }
 
@@ -292,9 +356,20 @@ enum TextRegionMatcher {
                        fieldScoped: Bool = false, cancelled: () -> Bool = { false }) -> Match? {
         // Bound CPU/memory independently of the maximum ten-minute recording.
         let pattern = Array(tokens([expected]).suffix(1_200))
+        // Window-wide OCR also reads gutters: code editors and terminals put a
+        // line number beside every line, which would interleave with the
+        // transcript. Bare numbers are dropped (indices stay aligned).
+        let fragments = fieldScoped ? fragments : fragments.map { fragment in
+            let bare = fragment.trimmingCharacters(in: .whitespaces)
+            return bare.count <= 5 && !bare.isEmpty && bare.allSatisfy(\.isNumber) ? "" : fragment
+        }
         let source = Array(tokens(fragments).suffix(4_000))
         let m = pattern.count, n = source.count
-        guard m >= 6, n >= 6, !cancelled() else { return nil }
+        if m < 6 {
+            // Window-wide OCR sees much more text; two-character words are too common there.
+            return fieldScoped || m >= 3 ? exactShort(pattern, in: source, fragments: fragments) : nil
+        }
+        guard n >= 6, !cancelled() else { return nil }
         let width = n + 1
         var trace = [UInt8](repeating: 0, count: (m + 1) * width)
         var previous = [Int](repeating: 0, count: width)
@@ -326,6 +401,7 @@ enum TextRegionMatcher {
         }
         let consumed = max(bestI - i, bestJ - j)
         guard consumed >= 6, Double(matches) / Double(consumed) >= 0.9 else { return nil }
+        let alignedStart = j, alignedEnd = bestJ
         let full = Double(bestI - i) / Double(m) >= 0.85
         let visibleSuffix = bestI == m && (bestJ >= n - 2 || fieldScoped) && matches >= 24
         // Narrow single-line fields may show fewer than 24 characters, or a
@@ -336,16 +412,125 @@ enum TextRegionMatcher {
             && coverage >= (bestI == m ? 0.65 : 0.85)
         guard full || visibleSuffix || clipped else { return nil }
         // Two equally plausible occurrences: skip rather than highlight old draft.
-        let competing = (1...n).filter { $0 <= j || $0 > bestJ + 3 }.map { columnBest[$0] }.max() ?? 0
+        let competing = (1...n).filter { $0 <= alignedStart || $0 > alignedEnd + 3 }.map { columnBest[$0] }.max() ?? 0
         guard Double(competing) < Double(best) * 0.94 else { return nil }
+        // Acceptance above uses the aligned core only. Local alignment drops
+        // misread characters at its ends and would shrink the rail into the
+        // middle of a line, so the drawn span re-extends over unmatched
+        // transcript characters: same OCR line, at most six per side.
+        var back = 0
+        while back < min(i, 6), j > 0, source[j-1].fragment == source[alignedStart].fragment { j -= 1; back += 1 }
+        var forward = 0
+        while forward < min(m-bestI, 6), bestJ < n, source[bestJ].fragment == source[alignedEnd-1].fragment { bestJ += 1; forward += 1 }
+        bestI += forward
+        let spans = spans(source, j..<bestJ, fragments: fragments)
+        return spans.isEmpty ? nil : Match(spans: spans, includesEnd: bestI == m)
+    }
+
+    /// Short transcripts (two to five characters) cannot be aligned reliably.
+    /// Inside a known field accept only a single exact occurrence.
+    private static func exactShort(_ pattern: [Token], in source: [Token], fragments: [String]) -> Match? {
+        let m = pattern.count
+        guard m >= 2, source.count >= m else { return nil }
+        let hits = (0...(source.count-m)).filter { start in
+            (0..<m).allSatisfy { source[start+$0].character == pattern[$0].character }
+                && source[start+m-1].fragment == source[start].fragment
+        }
+        guard hits.count == 1, let start = hits.first else { return nil }
+        let spans = spans(source, start..<(start+m), fragments: fragments)
+        return spans.isEmpty ? nil : Match(spans: spans, includesEnd: true)
+    }
+
+    /// One span per OCR line. A side with no remaining letters or digits on that
+    /// line snaps to the line edge, so trailing punctuation is covered and the
+    /// whole observation box can be used instead of an interpolated sub-box.
+    private static func spans(_ source: [Token], _ range: Range<Int>, fragments: [String]) -> [Span] {
         var spans: [Span] = []
-        for token in source[j..<bestJ] {
+        for token in source[range] {
             if let last = spans.last, last.fragment == token.fragment {
                 spans[spans.count - 1] = Span(fragment: last.fragment, range: NSUnionRange(last.range, token.range))
             } else {
                 spans.append(Span(fragment: token.fragment, range: token.range))
             }
         }
-        return spans.isEmpty ? nil : Match(spans: spans, includesEnd: bestI == m)
+        return spans.map { span in
+            let fragmentTokens = source.filter { $0.fragment == span.fragment }
+            let length = (fragments[span.fragment] as NSString).length
+            let before = fragmentTokens.contains { $0.range.location < span.range.location }
+            let after = fragmentTokens.contains { $0.range.location >= NSMaxRange(span.range) }
+            let start = before ? span.range.location : 0
+            let end = after ? NSMaxRange(span.range) : length
+            return Span(fragment: span.fragment, range: NSRange(location: start, length: end-start))
+        }
+    }
+}
+
+/// 8-bit luminance pixels, row-major, top row first.
+struct InkImage {
+    let pixels: [UInt8]
+    let width: Int
+    let height: Int
+    func value(_ x: Int, _ y: Int) -> Int { Int(pixels[y*width+x]) }
+}
+
+/// Pixel-level correction of OCR line boxes. Vision's boxes float with the
+/// glyphs on each line (punctuation stretches them), so rails drawn from them
+/// sit at uneven distances below the text. The captured image shows the real
+/// ink: pixels that stand out from the band's dominant background luminance.
+enum InkBounds {
+    /// `box` and the result are in image pixels, y down. `window` bounds the
+    /// vertical search (midpoints to neighbouring rows). Horizontally the box only
+    /// shrinks to its ink, except outward on a side that ends the OCR line, where
+    /// a clipped trailing glyph (often 。) may be recovered.
+    static func refine(_ box: CGRect, in image: InkImage, window: ClosedRange<Int>,
+                       extendLeft: Bool = false, extendRight: Bool = false) -> CGRect? {
+        let x0 = max(0, Int(box.minX.rounded(.down))), x1 = min(image.width-1, Int(box.maxX.rounded(.up))-1)
+        let y0 = max(0, window.lowerBound), y1 = min(image.height-1, window.upperBound)
+        guard x1 > x0+2, y1 > y0+2, box.height >= 4 else { return nil }
+        // Background: the dominant luminance in the margins above and below the
+        // OCR box (dense glyphs can outnumber background inside it), else the band.
+        func dominant(_ rows: [Int]) -> (value: Int, samples: Int) {
+            var histogram = [Int](repeating: 0, count: 256), samples = 0
+            for y in rows { for x in stride(from: x0, through: x1, by: 2) { histogram[image.value(x, y)] += 1; samples += 1 } }
+            return (histogram.indices.max { histogram[$0] < histogram[$1] } ?? 255, samples)
+        }
+        let margins = (y0...y1).filter { CGFloat($0) < box.minY || CGFloat($0) >= box.maxY }
+        let sampled = dominant(margins)
+        let background = sampled.samples >= 40 ? sampled.value : dominant(Array(y0...y1)).value
+        func ink(_ x: Int, _ y: Int) -> Bool { abs(image.value(x, y)-background) > 48 }
+
+        // Rows carrying ink inside the box's columns, grouped with small gaps.
+        let minimum = max(1, (x1-x0)/300)
+        var clusters: [ClosedRange<Int>] = []
+        var open: (start: Int, last: Int)?
+        let gap = max(1, Int(box.height*0.15))
+        for y in y0...y1 {
+            var count = 0
+            for x in x0...x1 where ink(x, y) { count += 1; if count >= minimum { break } }
+            guard count >= minimum else { continue }
+            if let current = open, y-current.last <= gap+1 { open = (current.start, y) }
+            else { if let current = open { clusters.append(current.start...current.last) }; open = (y, y) }
+        }
+        if let current = open { clusters.append(current.start...current.last) }
+        func overlap(_ band: ClosedRange<Int>) -> CGFloat {
+            max(0, min(CGFloat(band.upperBound+1), box.maxY)-max(CGFloat(band.lowerBound), box.minY))
+        }
+        guard let band = clusters.max(by: { overlap($0) < overlap($1) }), overlap(band) > 0 else { return nil }
+        let height = CGFloat(band.count)
+        guard height >= box.height*0.35, height <= box.height*1.5 else { return nil }
+
+        func columnHasInk(_ x: Int) -> Bool { band.contains { ink(x, $0) } }
+        let inner = (x0...x1).filter(columnHasInk)
+        guard var left = inner.first, var right = inner.last else { return nil }
+        let reach = Int(height*0.9), tolerance = max(2, Int(height*0.6))
+        if extendRight {
+            var x = right+1
+            while x < image.width, x <= x1+reach, x-right <= tolerance { if columnHasInk(x) { right = x }; x += 1 }
+        }
+        if extendLeft {
+            var x = left-1
+            while x >= 0, x >= x0-reach, left-x <= tolerance { if columnHasInk(x) { left = x }; x -= 1 }
+        }
+        return CGRect(x: CGFloat(left), y: CGFloat(band.lowerBound), width: CGFloat(right-left+1), height: height)
     }
 }

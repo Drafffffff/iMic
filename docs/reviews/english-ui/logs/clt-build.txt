@@ -1,0 +1,9 @@
+更新公钥是占位值或格式无效，请先配置发布者的 Ed25519 公钥。
+提示：更新公钥尚未配置；开发构建关闭自动更新检查。
+/Users/drafff/.codex/worktrees/english-ui/iMic/build/vendor/Sparkle-2.10.1.tar.xz: OK
+Sparkle 2.10.1：SHA-256 校验通过。
+build/mac-clt.noindex/iMic.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate: replacing existing signature
+build/mac-clt.noindex/iMic.app/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app: replacing existing signature
+build/mac-clt.noindex/iMic.app/Contents/Frameworks/Sparkle.framework: replacing existing signature
+build/mac-clt.noindex/iMic.app: replacing existing signature
+已构建：build/mac-clt.noindex/iMic.app（签名：DA759E93B3DD69E2E729053F4E3C41858EFE5216）

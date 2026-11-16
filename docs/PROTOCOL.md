@@ -31,6 +31,8 @@ payload[length]
 
 握手完成后拒绝明文 JSON。单帧上限 128 KiB。
 
+TCP 与 BLE 均复用 `LinkFrameDecoder`：每次追加可以返回多帧，完整帧只交付一次；尾部不足一帧时仅保留尚未消费的字节，等待下次追加，不重放已经返回的帧。
+
 ## 握手与密钥
 
 1. iPhone 连接后发送明文 `hello`，携带 `device_id`、`device_name`、临时 Curve25519 公钥、`has_token`。
@@ -58,7 +60,9 @@ payload[length]
 - 会话密钥每次连接重新派生，旧连接的帧在新连接上无法通过校验。但**同一连接内**的加密帧没有序号、两个方向共用同一把密钥，能截获流量的攻击者可以重放、丢弃、重排或把帧反射回发送方；音频帧靠自身 `seq` 去重，控制消息没有此保护。修复需要协议升级（帧序号 + 按方向派生密钥）。
 - 配对阶段的 ECDH 本身未经认证：被动监听者无法枚举配对码，但配对时在线的主动中间人截获一帧 `pair` 后可以离线试出六位码。全局限速只限制直接在线猜码，不能防御这种攻击；彻底解决需要改用 PAKE（如 CPace / SPAKE2）。
 - 新连接先完成握手；只有认证或配对成功后才替换当前 iPhone，未认证连接不能挤掉已就绪链路。同时握手的候选连接最多 4 条，超出时淘汰最早的候选。
+- Mac 删除单台设备或全部配对后，会关闭对应的待认证和已就绪连接；认证完成前及处理已就绪帧时再次检查存储令牌是否仍与本连接派生密钥时的令牌一致。配对存储的修改、编码与原子写盘在同一锁内完成，撤销通知在解锁后交付。
 - 令牌保存在 iPhone 钥匙串（`AfterFirstUnlockThisDeviceOnly`）与 Mac 的 0600 文件中，不进日志。
+- 握手中的明文 `auth` 错误或 `pair_required` 不能证明服务端身份，不删除 iPhone 已保存的长期令牌。自动连接将本轮被拒绝的目标排除；用户明确重试时重新尝试令牌认证，确需重新配对则在正确六位码验证成功后替换令牌。用户明确删除设备仍会删除本机令牌。
 
 ## 消息
 
@@ -169,9 +173,20 @@ iPhone                         Mac
 ## 断线与恢复
 
 - 任意一端断开都会取消进行中的 ASR，避免半段文字落进输入框。
-- iPhone 普通失败重连间隔 1.6^n 秒、封顶 8 秒；回到前台清除旧退避与重试任务。已就绪的旧连接先用既有加密 `ping/pong(ts)` 检查，只有本次 `ts` 的 `pong` 才确认存活；TCP 800ms、BLE 1500ms 未确认则立即重建，不再额外等一次重试间隔。没有可用旧连接时直接重连已选 Mac，并刷新 Bonjour，仍保留定向 BLE 兜底。
+- iPhone 普通失败重连间隔 1.6^n 秒、封顶 8 秒；TCP 建连或握手失败后允许优先尝试已配对目标的 BLE，避免 TCP 重试反复取消 BLE 兜底。回到前台清除旧退避与重试任务。已就绪的旧连接先用既有加密 `ping/pong(ts)` 检查，本次 `ts` 的 `pong` 或其它有效加密下行消息可以确认存活。TCP 等待 800ms；BLE 先等待 ping 排空，队列连续 10 秒没有已确认写入进展才判失败，ping 真正发送完毕后再等待 1500ms。超时立即重建，不再额外等一次重试间隔。没有可用旧连接时直接重连已选 Mac，并刷新 Bonjour，仍保留定向 BLE 兜底。
+- iPhone 前台已就绪时每 15 秒检查一次接收活动；超过 40 秒未收到帧就启动同一存活探测。后台不触发此看门狗，关闭连接时取消计时器。普通断线及前台恢复均先交付旧会话丢失通知，再允许发现回调建立新连接。
 - 探测期间 UI 显示连接中并停用弦；已配对时仍允许先录后连。存活检查成功复用原会话，不重发 `audio.start`；真正断线先通知旧语音会话停止并保留本机文字，再开始新代际握手，不重发旧输入、清空或设置命令。新连接、再次后台与用户切换 Mac 均作废旧探测，避免迟到超时关闭新连接。
 - 新连接会替换旧连接，保证重连不被僵尸链路阻塞。
 - Mac 结束识别后不等待 WebSocket 关闭握手；最终文字仍需完成可选润色、扫光及输入确认后再回传并发布手势就绪。
 
 上传与识别分别计时：iPhone 在 `audio.end` 的传输完成后才开始等结果；Mac 先等待百炼上传排空，再从 `finish-task` 发出后计算 60 秒最终识别期限，不从松手一刻固定等待 45 秒。百炼开启 `heartbeat` 防持续静音超时，WebSocket 总资源期限覆盖有界录音与排空。失败或断线保留本机已识别文字供复制，不把它自动发送给另一台 Mac。
+
+### 显示语言与错误码（2026-10-31）
+
+接收方用自己的语言翻译已知 `code`，未知或缺失 code 显示 `message`，再缺失才使用本地通用提示。Mac 继续按自己的语言发送完整 message，旧 iPhone 无需更新即可显示。`input.result` 的拒绝回复现在可使用已有的可选 `code` 字段；不增加字段，不改变消息验证、帧格式、HKDF、配对规则或 AES-GCM combined + 逐帧随机 nonce。
+
+新增显示码：`clear_busy`、`clear_unsafe`、`recording_limit`、`audio_incomplete`、`audio_resend_timeout`、`audio_transfer_timeout`、`recognition_timeout`、`asr_model`、`asr_encoding`、`asr_audio`、`asr_upload_timeout`、`asr_upload`、`asr_end`、`asr_final_timeout`、`asr_event`、`asr_long`、`asr_early`，以及 `cloud_` 分类：`invalidKey`、`plan`、`permission`、`ip`、`billing`、`activation`、`quota`、`inspection`、`workspace`、`network`、`ambiguous`、`address`、`service`、`unsupported`。参数化 HTTP/地域详情保留在 Mac message，本地显示对应分类的操作建议。原有 `asr`、`busy`、`key`、握手错误码继续支持。完整映射见 `shared/LinkStatusText.swift`。
+
+兼容测试覆盖新增 clear code 编解码、旧 Mac 无 code 回复、未来未知 code、旧 iPhone 读取 message 与两种语言的独立选择。识别文本、用户设备名称保持用户数据，不翻译。
+
+握手/链路显示码进一步区分：`handshake_timeout`、`protocol_data`、`protocol_plaintext`、`protocol_key_missing`、`audio_end_invalid`、`protocol_settings_direction`、`handshake_frame`、`pair_invalid`、`pair_save_failed`、`handshake_required`、`handshake_invalid`、`connection_timeout`、`protocol_send`；占用状态区分 `clear_in_progress` 与 `input_in_progress`。影响旧客户端行为的 `auth`、`pair_code`、`pair_locked` 保持原值，确保旧 iPhone 能继续清除失效令牌并重新配对。

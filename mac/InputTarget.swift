@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox
 
 /// A read-only AX presentation may insert line breaks when the editor wraps.
 /// Match the complete emitted suffix and its anchor, never just a character count.
@@ -140,6 +141,44 @@ final class InputTarget {
         } else { acquire() }
     }
 
+    /// Terminal emulators by bundle, or a terminal pane inside an editor by the
+    /// focused control's role description, title, description or identifier.
+    static func looksLikeTerminal(pid: pid_t, element: AXUIElement?) -> Bool {
+        let bundle = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+        var resolvedElement = element
+        if resolvedElement == nil {
+            let application = AXUIElementCreateApplication(pid)
+            _ = AXUIElementSetAttributeValue(application, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+            resolvedElement = focusedElement(pid: pid)
+        }
+        guard let resolvedElement else {
+            return TypedTextSafety.isTerminal(bundleIdentifier: bundle, labels: [])
+        }
+        let labels = [kAXRoleDescriptionAttribute, kAXTitleAttribute, kAXDescriptionAttribute, kAXIdentifierAttribute, kAXHelpAttribute]
+            .map { name -> String? in
+                var value: CFTypeRef?
+                return AXUIElementCopyAttributeValue(resolvedElement, name as CFString, &value) == .success ? value as? String : nil
+            }
+        return TypedTextSafety.isTerminal(bundleIdentifier: bundle, labels: labels)
+    }
+
+    static func isSecureInputActive(
+        element: AXUIElement?,
+        secureEventInput: Bool = IsSecureEventInputEnabled(),
+        role: String? = nil,
+        subrole: String? = nil,
+        protectedContent: Bool? = nil
+    ) -> Bool {
+        if secureEventInput { return true }
+        let resolvedRole = role ?? element.flatMap { stringAttribute(kAXRoleAttribute, on: $0) }
+        let resolvedSubrole = subrole ?? element.flatMap { stringAttribute(kAXSubroleAttribute, on: $0) }
+        if resolvedRole == "AXSecureTextField" || resolvedSubrole == kAXSecureTextFieldSubrole {
+            return true
+        }
+        let resolvedProtected = protectedContent ?? element.flatMap { boolAttribute("AXProtectedContent", on: $0) }
+        return resolvedProtected == true
+    }
+
     static func clearRoleAllowed(_ role: String?, valueSettable: Bool,
                                  selectedTextSettable: Bool? = nil, subrole: String? = nil,
                                  editable: Bool? = nil) -> Bool {
@@ -178,15 +217,26 @@ final class InputTarget {
     }
     private var pendingReplacement: PendingReplacement?
 
-    static func initialMode(bundleIdentifier: String?, canObserveRange: Bool) -> Mode {
+    static func initialMode(bundleIdentifier: String?, electron: Bool = false, canObserveRange: Bool) -> Mode {
         // Otty exposes a rendered screen, not the TUI editor cursor. Codex's
         // rich-text composer advertises range support but AX tail selection can
         // leave a visible selection/formatting popover when replacement fails.
+        // Electron editors (Qoder, Cursor, VS Code, Claude) expose ranges only once
+        // AXManualAccessibility is on, which the polish sweep requests; their
+        // Monaco/rich-text inputs move the real caret asynchronously, so AX tail
+        // edits land in the wrong place and leave stray text after the result.
         // Choose compatibility before any range mutation, not after a timeout.
+        if electron { return .keyboard }
         switch bundleIdentifier {
         case "io.appmakes.otty", "com.openai.codex": return .keyboard
         default: return canObserveRange ? .verifiedRange : .keyboard
         }
+    }
+
+    static func isElectron(_ bundleURL: URL?) -> Bool {
+        guard let bundleURL else { return false }
+        let framework = bundleURL.appendingPathComponent("Contents/Frameworks/Electron Framework.framework")
+        return FileManager.default.fileExists(atPath: framework.path)
     }
 
     private let pid: pid_t
@@ -218,9 +268,10 @@ final class InputTarget {
             canReplace = canObserve && isSettable(kAXSelectedTextRangeAttribute, on: element)
                 && isSettable(kAXSelectedTextAttribute, on: element)
         }
-        let bundleIdentifier = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+        let application = NSRunningApplication(processIdentifier: pid)
         return InputTarget(pid: pid, element: element, initialSelection: selection,
-                           mode: initialMode(bundleIdentifier: bundleIdentifier, canObserveRange: canObserve),
+                           mode: initialMode(bundleIdentifier: application?.bundleIdentifier,
+                                             electron: isElectron(application?.bundleURL), canObserveRange: canObserve),
                            replacesSelectionDirectly: canReplace)
     }
 
@@ -254,7 +305,9 @@ final class InputTarget {
                   app.processIdentifier != self?.pid else { return }
             self?.userIntervened = true
         }
-        if inputMonitor == nil, mode == .keyboard || !replacesSelectionDirectly {
+        if Self.isSecureInputActive(element: element) {
+            self.mode = .finalOnly
+        } else if inputMonitor == nil, mode == .keyboard || !replacesSelectionDirectly {
             self.mode = .finalOnly
         }
     }
@@ -283,6 +336,10 @@ final class InputTarget {
     func validate(_ committed: String) -> Validation {
         guard !userIntervened else { return .interrupted("user_input") }
         if mode == .keyboard {
+            if Self.isSecureInputActive(element: element) {
+                userIntervened = true
+                return .interrupted("secure_input")
+            }
             return compatibilityFocusMatches() ? .ready : .interrupted("focus_changed")
         }
         guard let element, isFocused(element) else { return .interrupted("focus_changed") }
@@ -401,7 +458,8 @@ final class InputTarget {
     }
 
     func enableKeyboardCompatibility() -> Bool {
-        guard pendingReplacement == nil, inputMonitor != nil, !userIntervened, compatibilityFocusMatches() else { return false }
+        guard pendingReplacement == nil, inputMonitor != nil, !userIntervened,
+              !Self.isSecureInputActive(element: element), compatibilityFocusMatches() else { return false }
         mode = .keyboard
         return true
     }
@@ -456,6 +514,18 @@ final class InputTarget {
     private static func isSettable(_ attribute: String, on element: AXUIElement) -> Bool {
         var settable: DarwinBoolean = false
         return AXUIElementIsAttributeSettable(element, attribute as CFString, &settable) == .success && settable.boolValue
+    }
+
+    private static func stringAttribute(_ attribute: String, on element: AXUIElement) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
+        return value as? String
+    }
+
+    private static func boolAttribute(_ attribute: String, on element: AXUIElement) -> Bool? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
+        return value as? Bool
     }
 
     private static func equal(_ lhs: CFRange, _ rhs: CFRange) -> Bool {

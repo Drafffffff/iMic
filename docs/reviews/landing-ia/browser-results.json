@@ -1,0 +1,137 @@
+[
+  {
+    "name": "Real latest API → matching DMG, version and checksum",
+    "result": "PASS",
+    "ms": 1093
+  },
+  {
+    "name": "Seven sections, three FEEL features, MODES and legacy START",
+    "result": "PASS",
+    "ms": 316
+  },
+  {
+    "name": "1440px hero fits one screen; wider layout and legible Mac text",
+    "result": "PASS",
+    "ms": 303
+  },
+  {
+    "name": "Tablet uses two columns; 390px hero uses the portrait recording",
+    "result": "PASS",
+    "ms": 798
+  },
+  {
+    "name": "SOUND retains opt-in audio and an accessible mute state",
+    "result": "PASS",
+    "ms": 433
+  },
+  {
+    "name": "One API request; dynamic release replaces every DMG link",
+    "result": "PASS",
+    "ms": 329
+  },
+  {
+    "name": "API fallback: 403",
+    "result": "PASS",
+    "ms": 304
+  },
+  {
+    "name": "API fallback: 429",
+    "result": "PASS",
+    "ms": 290
+  },
+  {
+    "name": "API fallback: missing DMG",
+    "result": "PASS",
+    "ms": 337
+  },
+  {
+    "name": "API fallback: invalid JSON",
+    "result": "PASS",
+    "ms": 311
+  },
+  {
+    "name": "API fallback: unsafe asset URL",
+    "result": "PASS",
+    "ms": 311
+  },
+  {
+    "name": "API fallback: offline",
+    "result": "PASS",
+    "ms": 305
+  },
+  {
+    "name": "API fallback: 4-second timeout",
+    "result": "PASS",
+    "ms": 4270
+  },
+  {
+    "name": "Explicit fail query",
+    "result": "PASS",
+    "ms": 484
+  },
+  {
+    "name": "No JavaScript: download remains usable; TestFlight disabled",
+    "result": "PASS",
+    "ms": 463
+  },
+  {
+    "name": "390px iPhone: share button, direct link, no horizontal overflow",
+    "result": "PASS",
+    "ms": 489
+  },
+  {
+    "name": "Native share receives production URL",
+    "result": "PASS",
+    "ms": 290
+  },
+  {
+    "name": "Share cancel preserves UI without error",
+    "result": "PASS",
+    "ms": 339
+  },
+  {
+    "name": "Clipboard fallback and manual recovery",
+    "result": "PASS",
+    "ms": 388
+  },
+  {
+    "name": "768px iPad desktop-UA detection and layout",
+    "result": "PASS",
+    "ms": 475
+  },
+  {
+    "name": "from=ios scroll, banner, 1.5s Mac highlight",
+    "result": "PASS",
+    "ms": 1935
+  },
+  {
+    "name": "390px from=ios exposes sharing, the Mac button and sticky banner",
+    "result": "PASS",
+    "ms": 318
+  },
+  {
+    "name": "Legacy #start opens the combined installation section",
+    "result": "PASS",
+    "ms": 317
+  },
+  {
+    "name": "Hash-only deep link",
+    "result": "PASS",
+    "ms": 280
+  },
+  {
+    "name": "Reduced motion: posters only until explicit play",
+    "result": "PASS",
+    "ms": 354
+  },
+  {
+    "name": "Lazy videos start in viewport and pause after leaving",
+    "result": "PASS",
+    "ms": 421
+  },
+  {
+    "name": "FAQ keyboard interaction and storage-free page",
+    "result": "PASS",
+    "ms": 425
+  }
+]

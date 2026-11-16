@@ -10,7 +10,7 @@ let microphoneSVG = """
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 3 else {
-    FileHandle.standardError.write(Data("usage: icon <mac|ios> <output-dir>\n".utf8))
+    FileHandle.standardError.write(Data("usage: icon <mac|ios|site> <output-dir>\n".utf8))
     exit(2)
 }
 let mode = arguments[1]
@@ -72,6 +72,17 @@ func png(pixels: CGFloat) -> Data? {
     drawIcon(size: pixels, rounded: mode == "mac")
         .draw(in: NSRect(x: 0, y: 0, width: pixels, height: pixels))
     NSGraphicsContext.restoreGraphicsState()
+    if mode == "ios" {
+        // App Store icons must have no alpha channel, even when every pixel is opaque.
+        guard let source = rep.cgImage,
+              let context = CGContext(data: nil, width: Int(pixels), height: Int(pixels),
+                  bitsPerComponent: 8, bytesPerRow: Int(pixels) * 4,
+                  space: CGColorSpaceCreateDeviceRGB(),
+                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        context.draw(source, in: CGRect(x: 0, y: 0, width: pixels, height: pixels))
+        guard let opaque = context.makeImage() else { return nil }
+        return NSBitmapImageRep(cgImage: opaque).representation(using: .png, properties: [:])
+    }
     return rep.representation(using: .png, properties: [:])
 }
 
@@ -86,6 +97,11 @@ if mode == "mac" {
     ]
     for (name, size) in specs {
         guard let data = png(pixels: size) else { continue }
+        try data.write(to: output.appendingPathComponent(name))
+    }
+} else if mode == "site" {
+    for (name, size): (String, CGFloat) in [("favicon.png", 32), ("apple-touch-icon.png", 180), ("icon-512.png", 512)] {
+        guard let data = png(pixels: size) else { fatalError("Cannot render site icon") }
         try data.write(to: output.appendingPathComponent(name))
     }
 } else {

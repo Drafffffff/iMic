@@ -11,19 +11,19 @@ struct WaveformLibraryView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     MetaLabel(text: "LOCAL VISUALIZATION · NO AUDIO", color: Theme.orange)
-                    Text("只保留波形，不保存录音或识别文字。最近 3 次，每次最多 60 秒，24 小时后自动清理。")
+                    Text(L10n.text("Only waveforms are kept, without audio or recognized text. The last 3 sessions, up to 60 seconds each, are automatically cleared after 24 hours."))
                         .font(.system(size: 13))
                         .foregroundStyle(Theme.muted)
                     if let error = store.errorMessage {
                         Text(error).font(.system(size: 12)).foregroundStyle(Theme.orange)
-                        Button("重新读取") { store.reload() }.tint(Theme.orange)
+                        Button(L10n.text("Reload")) { store.reload() }.tint(Theme.orange)
                     }
                     if store.isLoading && store.traces.isEmpty {
                         ProgressView().tint(Theme.orange).frame(maxWidth: .infinity).padding(.vertical, 32)
                     } else if store.traces.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             MetaLabel(text: "NO WAVEFORMS")
-                            Text("还没有可复看的波形。按住主页面横条说话，正常松手后会自动保留；取消的录音不会保存。")
+                            Text(L10n.text("No waveforms yet. Hold the bar on the home screen to speak and release normally to keep a waveform. Canceled recordings are not saved."))
                                 .font(.system(size: 14))
                                 .foregroundStyle(Theme.ivory)
                         }
@@ -45,9 +45,9 @@ struct WaveformLibraryView: View {
                                             .font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ivory)
                                         Text(trace.createdAt.formatted(date: .abbreviated, time: .standard))
                                             .font(.system(size: 12)).foregroundStyle(Theme.muted)
-                                        MetaLabel(text: String(format: "%.2f S · %d FRAMES", trace.duration, trace.frames.count))
-                                        MetaLabel(text: String(format: "RMS AVG %.1f dBFS", trace.meanDB))
-                                        MetaLabel(text: String(format: "MIN %.1f · MAX %.1f dBFS", trace.minimumDB, trace.maximumDB))
+                                        MetaLabel(text: String(format: "%.2f S · %d FRAMES", locale: L10n.locale, trace.duration, trace.frames.count))
+                                        MetaLabel(text: String(format: "RMS AVG %.1f dBFS", locale: L10n.locale, trace.meanDB))
+                                        MetaLabel(text: String(format: "MIN %.1f · MAX %.1f dBFS", locale: L10n.locale, trace.minimumDB, trace.maximumDB))
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .contentShape(Rectangle())
@@ -55,10 +55,10 @@ struct WaveformLibraryView: View {
                                 .buttonStyle(.plain)
                                 HStack {
                                     ShareLink(item: store.fileURL(for: trace)) {
-                                        Label("导出 JSON", systemImage: "square.and.arrow.up")
+                                        Label(L10n.text("Export JSON"), systemImage: "square.and.arrow.up")
                                     }
                                     Spacer()
-                                    Button("删除", role: .destructive) { store.delete(trace) }
+                                    Button(L10n.text("Delete"), role: .destructive) { store.delete(trace) }
                                 }
                                 .font(.system(size: 12)).tint(Theme.muted)
                             }
@@ -69,22 +69,22 @@ struct WaveformLibraryView: View {
                 .padding(22)
             }
             .background(Theme.ink)
-            .navigationTitle("波形复看")
+            .navigationTitle(L10n.text("Waveform replay"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("关闭") { dismiss() }.tint(Theme.muted)
+                    Button(L10n.text("Close")) { dismiss() }.tint(Theme.muted)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("清除", role: .destructive) { showClear = true }
+                    Button(L10n.text("Clear##bce23772"), role: .destructive) { showClear = true }
                         .tint(Theme.orange).disabled(store.traces.isEmpty)
                 }
             }
-            .confirmationDialog("清除所有本地波形？", isPresented: $showClear, titleVisibility: .visible) {
-                Button("清除波形", role: .destructive) { store.clear() }
-                Button("取消", role: .cancel) { }
+            .confirmationDialog(L10n.text("Clear all local waveforms?"), isPresented: $showClear, titleVisibility: .visible) {
+                Button(L10n.text("Clear waveforms"), role: .destructive) { store.clear() }
+                Button(L10n.text("Cancel"), role: .cancel) { }
             } message: {
-                Text("仅删除可视化缓存，不影响连接或识别结果。")
+                Text(L10n.text("Deletes only the visualization cache. Connections and recognition results are unaffected."))
             }
             .task { store.reload() }
             .onChange(of: scenePhase) { _, phase in
@@ -125,18 +125,18 @@ struct WaveformReplayView: View {
                     .frame(height: 270)
                     .frame(maxWidth: .infinity)
                 HStack {
-                    MetaLabel(text: String(format: "%.2f / %.2f S", playback.elapsed, trace.duration), color: Theme.ivory)
+                    MetaLabel(text: String(format: "%.2f / %.2f S", locale: L10n.locale, playback.elapsed, trace.duration), color: Theme.ivory)
                     Spacer()
-                    MetaLabel(text: String(format: "RMS %.1f dBFS", playback.rmsDB), color: Theme.orange)
+                    MetaLabel(text: String(format: "RMS %.1f dBFS", locale: L10n.locale, playback.rmsDB), color: Theme.orange)
                 }
                 ProgressView(value: min(playback.elapsed, trace.duration), total: max(0.001, trace.duration))
                     .tint(Theme.orange)
-                    .accessibilityLabel("复看进度")
+                    .accessibilityLabel(L10n.text("Replay progress"))
                 HStack(spacing: 16) {
                     Button {
                         if playback.isPlaying { playback.pause() } else { playback.play() }
                     } label: {
-                        Label(playback.isPlaying ? "暂停" : "播放", systemImage: playback.isPlaying ? "pause.fill" : "play.fill")
+                        Label(playback.isPlaying ? L10n.text("Pause") : L10n.text("Play"), systemImage: playback.isPlaying ? "pause.fill" : "play.fill")
                             .frame(maxWidth: .infinity).frame(height: 48)
                             .foregroundStyle(Theme.ink).background(Theme.orange)
                     }
@@ -146,19 +146,19 @@ struct WaveformReplayView: View {
                             .frame(width: 48, height: 48)
                             .overlay(Rectangle().stroke(Theme.line))
                     }
-                    .accessibilityLabel("从头重播")
+                    .accessibilityLabel(L10n.text("Replay from start"))
                     .tint(Theme.ivory)
                 }
-                Toggle("循环复看", isOn: $playback.loops)
+                Toggle(L10n.text("Loop replay"), isOn: $playback.loops)
                     .font(.system(size: 13)).tint(Theme.orange).foregroundStyle(Theme.muted)
                 Hairline()
-                MetaLabel(text: String(format: "RMS AVG %.1f dBFS", trace.meanDB))
-                MetaLabel(text: String(format: "MIN %.1f · MAX %.1f dBFS", trace.minimumDB, trace.maximumDB))
-                Text("按原始采样间隔驱动同一主图。RMS 为原始数字响度（dBFS），不是校准声压；复看不会播放声音、联网、输入文字或启动麦克风。")
+                MetaLabel(text: String(format: "RMS AVG %.1f dBFS", locale: L10n.locale, trace.meanDB))
+                MetaLabel(text: String(format: "MIN %.1f · MAX %.1f dBFS", locale: L10n.locale, trace.minimumDB, trace.maximumDB))
+                Text(L10n.text("Uses the original sample intervals to drive the same display. RMS is raw digital loudness (dBFS), not calibrated sound pressure. Replay does not play sound, connect to the network, type text, or start the microphone."))
                     .font(.system(size: 12)).foregroundStyle(Theme.muted)
                 if let exportURL {
                     ShareLink(item: exportURL) {
-                        Label("导出波形 JSON", systemImage: "square.and.arrow.up")
+                        Label(L10n.text("Export waveform JSON"), systemImage: "square.and.arrow.up")
                     }
                     .font(.system(size: 13)).tint(Theme.orange)
                 }
@@ -166,7 +166,7 @@ struct WaveformReplayView: View {
             .padding(22)
         }
         .background(Theme.ink)
-        .navigationTitle("波形复看")
+        .navigationTitle(L10n.text("Waveform replay"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { playback.play() }
         .onDisappear { playback.pause() }
@@ -277,7 +277,7 @@ struct WaveformDebugReplayRoot: View {
                         if loading || (selection == "latest" && store.isLoading) {
                             ProgressView().tint(Theme.orange)
                         } else {
-                            Text(loadError ?? store.errorMessage ?? "没有波形缓存。先完成一次真实录音，或指定导出的 JSON 文件路径。")
+                            Text(loadError ?? store.errorMessage ?? L10n.text("No waveform cache. Complete a real recording first, or provide the path to an exported JSON file."))
                                 .font(.system(size: 14)).foregroundStyle(Theme.ivory)
                         }
                     }
@@ -292,7 +292,7 @@ struct WaveformDebugReplayRoot: View {
                 store.reload()
             } else {
                 do { imported = try await WaveformTraceStore.readDebugTrace(at: URL(fileURLWithPath: selection)) }
-                catch { loadError = "无法读取波形 JSON：\(error.localizedDescription)" }
+                catch { loadError = L10n.text("Cannot read waveform JSON: %@", L10n.argument(error.localizedDescription)) }
             }
             loading = false
         }

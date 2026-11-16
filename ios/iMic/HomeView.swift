@@ -2,12 +2,14 @@ import SwiftUI
 import UIKit
 
 struct HomeView: View {
+    @EnvironmentObject private var onboarding: OnboardingCoordinator
     @EnvironmentObject private var link: LinkClient
     @EnvironmentObject private var session: SessionModel
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicType
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(PhosphorEffect.preferenceKey) private var displayMaterial = PhosphorEffect.crt.rawValue
-    @AppStorage(PhosphorAttachStyle.preferenceKey) private var attachStyle = PhosphorAttachStyle.charge.rawValue
+    @AppStorage(PhosphorAttachStyle.preferenceKey) private var attachStyle = PhosphorAttachStyle.flow.rawValue
 
     @State private var pressing = false
     /// The current load has been shot or cleared: nothing is left to fire until the next take.
@@ -16,6 +18,7 @@ struct HomeView: View {
     @State private var debugStringStatus = 0
     @State private var cancelArmed = false
     @State private var showPairing = false
+    @State private var showMicrophoneTest = false
     @State private var interactionStart = false
     @State private var showCopied = false
     @State private var showResult = false
@@ -34,15 +37,18 @@ struct HomeView: View {
 
     private var linkReady: Bool { link.phase.isReady }
     private var canRecordNow: Bool {
-        linkReady || (link.hasPairedMac && link.phase.allowsBufferedRecording)
+        session.practiceActive || linkReady || (link.hasPairedMac && link.phase.allowsBufferedRecording)
     }
 
     private var stringMotion: StringMotionStore { session.spectrumStore.stringMotion }
     private var canUseString: Bool {
-        linkReady && link.gestureSupported && link.gestureReady && !link.clearPending
+        (session.practiceActive || (linkReady && link.gestureSupported && link.gestureReady && !link.clearPending))
             && session.phase != .listening && session.phase != .transcribing && !session.isUploading
             && scenePhase == .active && !showPairing && !showResult && !showDevices
+            && !onboardingConnection && !showMicrophoneTest
     }
+
+    private var onboardingConnection: Bool { onboarding.presented && [.mac, .link, .pair].contains(onboarding.step) }
 
     var body: some View {
         NavigationStack {
@@ -51,9 +57,9 @@ struct HomeView: View {
                 TechBackground()
                 let width = max(1, geometry.size.width - contentInset * 2)
                 let height = geometry.size.height
-                let instrumentHeight = min(300, height * 0.40)
-                // Keep the entire interaction area together and about 24pt lower than the draft.
-                let instrumentCenter = height * 0.52
+                let instrumentHeight = moreGestures ? min(90, height * (height < 700 ? 0.085 : 0.12)) : dynamicType.isAccessibilitySize ? min(80, height * 0.11) : min(300, height * 0.40)
+                // Large teaching copy keeps the real instrument compact and below the status block.
+                let instrumentCenter = height * (moreGestures ? (height < 700 ? 0.75 : 0.77) : dynamicType.isAccessibilitySize ? 0.75 : 0.52)
                 Group {
                     header
                         .frame(width: width, height: 62, alignment: .top)
@@ -79,7 +85,8 @@ struct HomeView: View {
                     }
                     .frame(width: width, height: instrumentHeight)
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("弦控制")
+                    .accessibilityLabel(L10n.text("String controls"))
+                    .accessibilityIdentifier("home.string")
                     .accessibilityHint("\(stringControlHint)。\(secondaryGestureHint)")
                     .accessibilityValue(stringHint ?? "")
                     .anchorPreference(key: ReceiverAnchorsKey.self, value: .bounds) {
@@ -87,7 +94,7 @@ struct HomeView: View {
                     }
                     .position(x: geometry.size.width / 2, y: instrumentCenter)
                     VStack(spacing: 0) {
-                        HoldBarRail(notice: cancelArmed ? "松开取消" : session.notice,
+                        HoldBarRail(notice: cancelArmed ? L10n.text("Release to cancel") : session.notice,
                                     noticeColor: cancelArmed ? Theme.ivory : Theme.muted)
                             .animation(.easeOut(duration: 0.18), value: session.notice)
                         holdBar(width: width)
@@ -121,7 +128,7 @@ struct HomeView: View {
                             if !receiver.unifiedAvailable {
                             TorusView(store: session.spectrumStore, dimmed: session.phase == .idle && !canRecordNow,
                                       instrumentHUD: true,
-                                      channelLabel: linkReady ? "CH 01" : (canRecordNow ? "BUFFER" : "NO LINK"),
+                                      channelLabel: session.practiceActive ? "PRACTICE" : linkReady ? "CH 01" : (canRecordNow ? "BUFFER" : "NO LINK"),
                                       viewportFrame: proxy[torus])
                             }
                             ReceiverFlowView(store: receiver, spectrum: session.spectrumStore,
@@ -133,18 +140,27 @@ struct HomeView: View {
                                              effect: PhosphorEffect(rawValue: displayMaterial) ?? .crt,
                                              clearEnabled: canUseString && session.pullDeleteEnabled,
                                              pressed: pressing && session.phase == .listening,
+                                             recordingElapsed: session.recordingVisualElapsed,
+                                             recordingEnding: session.recordingVisualEnding,
                                              processing: stringProcessing || debugStringStatus == 1,
                                              ready: stringReady || debugStringStatus == 2,
-                                             attach: PhosphorAttachStyle(rawValue: attachStyle) ?? .charge)
+                                             attach: PhosphorAttachStyle(rawValue: attachStyle) ?? .flow)
                             if !receiver.unifiedAvailable {
                             ClearDropZone(motion: stringMotion, distance: max(1, proxy[torus].midY - 84),
                                           enabled: canUseString && session.pullDeleteEnabled)
                             }
                         }
+                        .allowsHitTesting(false)
+                        // A real first-use failure must leave the existing MIC TEST
+                        // and recovery controls available, just like normal HomeView.
+                        if onboarding.presented && !onboardingConnection
+                            && !(onboarding.step == .ready && session.phase == .error) {
+                            OnboardingView(source: proxy[source], torus: proxy[torus], size: proxy.size,
+                                topInset: anchors.content.map { proxy[$0].minY } ?? 62)
+                        }
                     }
                 }
                 .ignoresSafeArea()
-                .allowsHitTesting(false)
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -156,52 +172,72 @@ struct HomeView: View {
         }
         }
         .statusBarHidden(false)
-        .simultaneousGesture(TapGesture().onEnded { session.spectrumStore.wake() })
         .sheet(isPresented: $showPairing) {
             PairingSheet()
                 .environmentObject(link)
                 .environmentObject(session)
         }
+        .fullScreenCover(isPresented: Binding(get: { onboardingConnection }, set: { _ in })) {
+            NavigationStack { DeviceSelectionView(onboardingMode: true) }
+        }
+        .sheet(isPresented: $showMicrophoneTest) {
+            MicrophoneTestView().environmentObject(session)
+        }
+        .overlay(alignment: .top) {
+            #if DEBUG
+            if !onboarding.presented { OnboardingAudit().padding(.top, 100) }
+            #endif
+            if !onboarding.presented && onboarding.unfinished && !link.phase.isReady {
+                Button(L10n.text("No Mac connected · Continue setup")) { onboarding.resume() }
+                    .font(.callout).foregroundStyle(Theme.orange)
+                    .padding(12).background(Theme.ink).padding(.top, 84)
+            }
+        }
         .onAppear {
             session.spectrumStore.configureAmbientMotion(enabled: true, reducedMotion: reduceMotion)
-            session.spectrumStore.setVisible(scenePhase == .active && !showPairing && !showResult && !showDevices)
+            session.spectrumStore.setVisible(scenePhase == .active && !showPairing && !showResult && !showDevices && !showMicrophoneTest)
             UIApplication.shared.isIdleTimerDisabled = true
             session.prepareHaptics()
-            link.start()
-            session.activateAudio()
-            warmUpBowSound()
+            configureOnboarding()
+            if !onboarding.localHome { link.start(); session.activateAudio() }
+            warmUpSounds()
             stringMotion.reduceMotion = reduceMotion
             stringMotion.onFireReturn = { [weak session = session, weak link = link, weak receiver = receiver] in
-                guard let session, let link, link.phase.isReady,
+                guard let session, let link, (session.practiceActive || link.phase.isReady),
                       session.snapReturnEnabled, !showPairing, !showResult, !showDevices,
                       UIApplication.shared.applicationState == .active,
                       session.sendInput("return") else { return false }
-                session.showGestureNotice("发射文字")
+                session.showGestureNotice(L10n.text("Launch text"))
                 receiver?.fire()
                 loadSpent = true
                 return true
             }
             stringMotion.onRepeatDelete = { [weak session = session, weak link = link] in
-                guard let session, let link, link.phase.isReady,
+                guard let session, let link, (session.practiceActive || link.phase.isReady),
                       session.pullDeleteEnabled,
                       UIApplication.shared.applicationState == .active else { return false }
-                return session.sendInput("delete")
+                guard session.sendInput("delete") else { return false }
+                SoundDesign.shared.play(.delete)
+                return true
             }
             if case .needsCode = link.phase, !showDevices {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    if !showDevices { showPairing = true }
+                    if !showDevices && !onboarding.presented { showPairing = true }
                 }
             }
+            #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--ui-preview=pairing") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showPairing = true }
             }
             if ProcessInfo.processInfo.arguments.contains("--show-result") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { showResult = true }
             }
-            #if DEBUG
             let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--ui-preview=mic-test") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showMicrophoneTest = true }
+            }
             if arguments.contains("--ui-preview=settings") {
-                showPairing = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showPairing = true }
             }
             if arguments.contains("--debug-buffer-tone") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
@@ -214,10 +250,25 @@ struct HomeView: View {
             }
             #endif
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("--ui-preview=devices") {
-                showDevices = true
+            DemoTouchOverlay.installIfNeeded()
+            if ProcessInfo.processInfo.arguments.contains(where: { $0 == "--ui-preview=devices" || $0.hasPrefix("--ui-preview=devices-manage") }) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showDevices = true }
             }
             #endif
+        }
+        .onChange(of: onboarding.localHome) { _, _ in configureOnboarding() }
+        .onChange(of: onboarding.step) { _, _ in configureOnboarding() }
+        .onChange(of: onboarding.presented) { _, _ in configureOnboarding() }
+        .onChange(of: onboarding.action) { _, action in
+            guard session.practiceActive else { return }
+            // Skips can happen mid-hold; discard local timers and seed the next lesson.
+            if (action == .cancel && !stringMotion.isClearing) || ((action == .send || action == .delete) && (session.phase != .result || session.transcript.isEmpty)) {
+                session.practice.reset(seed: action != .cancel)
+                loadSpent = false
+                stringMotion.cancel()
+                receiver.reset()
+                receiver.update(text: session.liveTranscript)
+            }
         }
         .onDisappear {
             session.spectrumStore.setVisible(false)
@@ -243,7 +294,7 @@ struct HomeView: View {
                 let requested = arguments.first { $0.hasPrefix("--debug-flight-count=") }
                     .flatMap { Int($0.replacingOccurrences(of: "--debug-flight-count=", with: "")) } ?? 120
                 let count = min(5000, max(1, requested))
-                let phrase = "把今天讨论的交互细节整理成一页说明重点保留按住说话松开即输入的节奏"
+                let phrase = L10n.text("Turn today's discussion about interaction details into a one-page brief. Keep the rhythm of hold to speak, release to type.")
                 let delay = arguments.first { $0.hasPrefix("--debug-flight-delay=") }
                     .flatMap { Double($0.replacingOccurrences(of: "--debug-flight-delay=", with: "")) } ?? 0.4
                 try? await Task.sleep(for: .seconds(min(10, max(0, delay))))
@@ -269,14 +320,14 @@ struct HomeView: View {
             #endif
         }
         .onChange(of: scenePhase) { _, phase in
-            session.spectrumStore.setVisible(phase == .active && !showPairing && !showResult && !showDevices)
+            session.spectrumStore.setVisible(phase == .active && !showPairing && !showResult && !showDevices && !showMicrophoneTest)
             if phase != .active {
                 stringMotion.cancel()
                 receiver.cancelFlight()
             }
             if phase == .active {
                 session.handleForeground()
-                warmUpBowSound()
+                warmUpSounds()
             } else if phase == .background {
                 session.handleBackground()
             }
@@ -304,7 +355,7 @@ struct HomeView: View {
             case .needsCode:
                 connectionAnnounced = false
                 Haptics.shared.play(.pairingRequired)
-                if !showDevices { showPairing = true }
+                if !showDevices && !onboarding.presented { showPairing = true }
             case .ready:
                 if !connectionAnnounced {
                     Haptics.shared.play(showPairing ? .pairingSuccess : .connected)
@@ -320,7 +371,13 @@ struct HomeView: View {
             }
         }
         .onChange(of: session.phase) { _, phase in
+            if phase == .result {
+                onboarding.receivedFirstResult(pasted: session.pasted)
+            }
             if phase == .listening { loadSpent = false }
+            if phase != .listening && !pressing && !session.isRecordingRequested {
+                interactionStart = false
+            }
             if phase == .listening || phase == .idle {
                 if !stringMotion.isClearing { receiver.reset() }
                 showResult = false
@@ -340,13 +397,17 @@ struct HomeView: View {
                 receiver.cancelFlight()
             }
         }
+        .onChange(of: showMicrophoneTest) { _, presented in
+            if presented { stringMotion.cancel(); receiver.cancelFlight() }
+            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showPairing && !showResult && !showDevices)
+        }
         .onChange(of: showPairing) { _, presented in
             if presented { stringMotion.cancel() }
-            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showResult && !showDevices)
+            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showResult && !showDevices && !showMicrophoneTest)
         }
         .onChange(of: showResult) { _, presented in
             if presented { stringMotion.cancel() }
-            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showPairing && !showDevices)
+            session.spectrumStore.setVisible(!presented && scenePhase == .active && !showPairing && !showDevices && !showMicrophoneTest)
         }
         .onChange(of: session.pullDeleteEnabled) { _, enabled in
             if !enabled { stringMotion.cancel() }
@@ -362,13 +423,18 @@ struct HomeView: View {
             stringHint = hint
         }
         .onChange(of: stringTouchActive) { _, active in
-            if !active { stringGestureBlocked = false; clearTriggeredThisGesture = false }
-            // SwiftUI can cancel a drag without delivering onEnded (sheet/background).
-            if !active, stringAxis != nil {
-                stringMotion.cancel(preserveClear: true)
-                stringAxis = nil
-                cursorStep = 0
-                stringHint = nil
+            // GestureState may reset before onEnded in optimized builds. Let the
+            // real release finish first; still clean up gestures canceled by the OS.
+            if !active {
+                Task { @MainActor in
+                    await Task.yield()
+                    guard !stringTouchActive else { return }
+                    stringGestureBlocked = false; clearTriggeredThisGesture = false
+                    if stringAxis != nil {
+                        stringMotion.cancel(preserveClear: true)
+                        stringAxis = nil; cursorStep = 0; stringHint = nil
+                    }
+                }
             }
         }
         .onChange(of: showCopied) { _, value in
@@ -380,38 +446,79 @@ struct HomeView: View {
         }
     }
 
+    private func configureOnboarding() {
+        if onboarding.localHome {
+            showPairing = false; showDevices = false; showResult = false
+            if !session.practiceActive {
+                link.suspendForPractice()
+                session.setPracticeActive(true)
+                if onboarding.step == .practice && ![.hold, .release, .cancel].contains(onboarding.action) {
+                    session.practice.reset(seed: true)
+                    receiver.update(text: session.liveTranscript)
+                }
+            }
+            session.practice.performed = { event in onboarding.performed(event) }
+            #if DEBUG
+            if onboarding.preview == "release", session.phase == .idle { session.beginListening() }
+            #endif
+        } else {
+            let wasPractice = session.practiceActive
+            if wasPractice {
+                session.setPracticeActive(false)
+                pressing = false; cancelArmed = false; interactionStart = false
+                loadSpent = false; stringAxis = nil; cursorStep = 0; stringHint = nil
+                clearTriggeredThisGesture = false; stringGestureBlocked = false
+                stringMotion.cancel(); receiver.reset()
+            }
+            if onboarding.connectionDeferred && onboarding.preview == nil {
+                link.suspendForPractice()
+            } else {
+                link.startDeferred = false
+                link.start()
+            }
+        }
+    }
+
+    private func startConnection() {
+        onboarding.connectNow()
+        link.startDeferred = false
+        link.start()
+    }
+
     // MARK: - Header
 
     private func artwork(size: CGSize, content: CGRect, torus: CGRect) -> PhosphorArtworkState {
         let width=max(1,size.width-contentInset*2)
         return PhosphorArtworkState(size:size,content:content,torus:torus,
             connection:connectionLabel,connectionColor:connectionColor,
-            channel:linkReady ? "CH 01" : (canRecordNow ? "BUFFER" : "NO LINK"),
+            channel:session.practiceActive ? "PRACTICE" : linkReady ? "CH 01" : (canRecordNow ? "BUFFER" : "NO LINK"),
             status:statusWord,statusLine:statusLine,statusCell:statusCell(width:width),statusColor:statusColor,
             barLabel:barLabel,barCell:barCell(width:width),barFill:barFill,barText:barTextColor,
             canRecord:canRecordNow,listening:session.phase == .listening,
-            elapsed:String(format:"%.1f s",session.elapsed),hasResult:hasResultText,
-            notice:cancelArmed ? "松开取消":session.notice,
-            noticeColor:cancelArmed ? Theme.ivory:Theme.muted)
+            elapsed:String(format: "%.1f s", locale: L10n.locale,session.elapsed),hasResult:hasResultText,
+            notice:cancelArmed ? L10n.text("Release to cancel"):session.notice,
+            noticeColor:cancelArmed ? Theme.ivory:Theme.muted,
+            teaching:guideStatus, guideHeader:guideHeader, statusDetail:statusDetail,
+            celebrating:onboarding.celebrating, dynamicType:dynamicType)
     }
 
     private var header: some View {
         HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                Image("Wordmark")
-                    .renderingMode(.original)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: HoldBarLayout.wordmark.width, height: HoldBarLayout.wordmark.height,
-                           alignment: .leading)
-                    .blendMode(.screen)
-                    .accessibilityLabel("iMic")
-                HUDLabel(text: "SYS 01")
-            }
+            InstrumentIdentity()
             Spacer(minLength: 12)
+            if guideStatus {
+                Button {
+                    if onboarding.step == .welcome { onboarding.go(.link) } else { onboarding.skip() }
+                } label: {
+                    HUDLabel(text: guideHeader ?? "GUIDE", color: Theme.ivory).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).offset(y: -9)
+                .accessibilityIdentifier(onboarding.step == .welcome ? "onboarding.existing" : "onboarding.skip")
+            } else {
             HStack(spacing: 5) {
                 Button {
                     Haptics.shared.play(.tap)
+                    startConnection()
                     showPairing = false
                     showDevices = true
                 } label: {
@@ -431,9 +538,10 @@ struct HomeView: View {
                     .contentShape(Rectangle())
                 }
                 .frame(maxWidth: 150, alignment: .trailing)
-                .accessibilityLabel("连接电脑，\(connectionLabel)，点击切换 Mac")
+                .accessibilityLabel(L10n.text("Connect to a computer, %@, tap to switch Macs", L10n.argument(connectionLabel)))
                 Button {
                     Haptics.shared.play(.tap)
+                    startConnection()
                     showPairing = true
                 } label: {
                     PixelSymbol(kind: .settings, color: Theme.ivory.opacity(0.72))
@@ -441,35 +549,39 @@ struct HomeView: View {
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
-                .accessibilityLabel("设置")
+                .accessibilityLabel(L10n.text("Settings"))
             }
             .buttonStyle(.plain)
+            .disabled(onboarding.localHome)
             // Align the visible glyph, rather than its 44pt touch target, to the content edge.
             .padding(.trailing, -12)
             .offset(y: -9)
+            }
         }
     }
 
     // MARK: - Status
 
     private func statusBlock(width: CGFloat) -> some View {
-        VStack(alignment: .center, spacing: 0) {
-            HUDLabel(text: "VOICE / INPUT")
-                .padding(.bottom, 13)
-            PixelText(text: statusWord, cell: statusCell(width: width),
-                      color: statusColor, tracking: 2.8)
-                .modifier(PhosphorReadout(color: statusColor))
-                .frame(height: 30, alignment: .center)
-            Text(statusLine)
-                .modifier(InstrumentHint())
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .lineSpacing(3)
-                .frame(minHeight: 34, alignment: .top)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 13)
-        }
-        .frame(width: width, alignment: .center)
+        InstrumentStatus(word: statusWord, description: statusLine, detail: statusDetail,
+                         cell: statusCell(width: width), color: statusColor, teaching: guideStatus,
+                         celebrating: onboarding.celebrating)
+            .frame(width: width)
+    }
+
+    private var moreGestures: Bool { onboarding.localHome && onboarding.step == .practice && onboarding.action == .more }
+    private var guideStatus: Bool {
+        onboarding.presented && !onboardingConnection && !(onboarding.step == .ready && session.phase == .error)
+    }
+    private var guideHeader: String? {
+        guard guideStatus else { return nil }
+        if onboarding.step == .welcome { return "GUIDE · " + L10n.text("Used VoxChord") }
+        let progress = onboarding.step == .practice ? onboarding.action.progress.replacingOccurrences(of: " / ", with: "/0") : "3/03"
+        return "GUIDE 0" + progress + " · " + L10n.text("Skip")
+    }
+    private var statusDetail: String? {
+        guideStatus && onboarding.step == .ready && !onboarding.celebrating
+            ? L10n.text("Microphone access is needed when you speak") : nil
     }
 
     // MARK: - Result
@@ -502,7 +614,7 @@ struct HomeView: View {
                             .frame(width: 28, height: 28)
                             .contentShape(Rectangle())
                     }
-                    .accessibilityLabel("关闭结果")
+                    .accessibilityLabel(L10n.text("Close result"))
                 }
 
                 ScrollView {
@@ -526,7 +638,7 @@ struct HomeView: View {
                         HStack(spacing: 5) {
                             Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
                                 .font(.system(size: 10, weight: .semibold))
-                            Text(showCopied ? "已复制" : "复制")
+                            Text(showCopied ? L10n.text("Copied") : L10n.text("Copy"))
                                 .font(.system(size: 11, weight: .medium))
                         }
                         .foregroundStyle(Theme.ivory)
@@ -579,7 +691,7 @@ struct HomeView: View {
                 Spacer(minLength: HoldBarLayout.labelGap)
                 ZStack {
                     if session.phase == .listening {
-                        Text(String(format: "%.1f s", session.elapsed))
+                        Text(String(format: "%.1f s", locale: L10n.locale, session.elapsed))
                             .font(.system(size: 12, weight: .medium, design: .monospaced))
                             .foregroundStyle(barTextColor.opacity(0.8))
                             .minimumScaleFactor(0.8)
@@ -612,6 +724,7 @@ struct HomeView: View {
                     let armed = translation < -64
                     if armed != cancelArmed {
                         cancelArmed = armed
+                        if session.practiceActive { session.practice.cancelGestureArmed = armed }
                         Haptics.shared.play(armed ? .cancelArmed : .cancelDisarmed)
                     }
                 },
@@ -619,25 +732,33 @@ struct HomeView: View {
                     pressing = false
                     cancelArmed = false
                     interactionStart = false
-                    if session.phase == .listening {
+                    if session.phase == .listening || session.isRecordingRequested {
                         session.endListening(cancelled: cancelled)
                     }
                 },
                 onPositionChanged: { fraction in
                     receiver.updateTouch(xFraction: fraction)
+                },
+                onDurationMeasured: { duration in
+                    if session.practiceActive { session.practice.measuredHoldDuration = duration }
                 }
             )
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(barLabel)
+        .accessibilityIdentifier("home.hold")
         .accessibilityHint(statusLine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction {
-            if session.phase == .listening {
+            if session.phase == .listening || session.isRecordingRequested {
+                interactionStart = false
                 session.endListening(cancelled: false)
             } else {
                 receiver.updateTouch(xFraction: 0.5)
                 beginInteraction()
+                if session.phase != .listening && !session.isRecordingRequested {
+                    interactionStart = false
+                }
             }
         }
     }
@@ -652,7 +773,7 @@ struct HomeView: View {
                 guard canUseString else {
                     stringGestureBlocked = true
                     stringMotion.cancel()
-                    stringHint = link.gestureSupported ? "等待电脑完成处理后再拉弦" : "请更新 Mac 端启用弦控制"
+                    stringHint = link.gestureSupported ? L10n.text("Wait for your Mac to finish before pulling the string") : L10n.text("Update VoxChord on your Mac to enable string controls")
                     return
                 }
                 guard !clearTriggeredThisGesture else { return }
@@ -692,9 +813,9 @@ struct HomeView: View {
                                 session.sendInput(direction)
                             }
                             Haptics.shared.play(.selection)
-                            stringHint = direction == "right" ? "光标 →" : "光标 ←"
+                            stringHint = direction == "right" ? L10n.text("Cursor →") : L10n.text("Cursor ←")
                         } else {
-                            stringHint = "光标已在 Mac 关闭"
+                            stringHint = L10n.text("Cursor movement is disabled on your Mac")
                         }
                         cursorStep = step
                     }
@@ -718,8 +839,8 @@ struct HomeView: View {
                     )
                     if let command {
                         session.sendInput(command)
-                        session.showGestureNotice("删除")
-                        Haptics.shared.play(.warning)
+                        session.showGestureNotice(L10n.text("Delete"))
+                        Haptics.shared.play(.deleteChar)
                     }
                 }
                 stringHint = nil
@@ -734,20 +855,22 @@ struct HomeView: View {
         clearTriggeredThisGesture = true
         stringMotion.completeClearContact()
         if session.sendInput("clear") {
-            session.showGestureNotice("正在清空输入框…")
+            session.showGestureNotice(L10n.text("Clearing the text field…"))
             Haptics.shared.play(.cancelArmed)
         }
     }
 
     private func beginInteraction() {
         guard !interactionStart else { return }
-        interactionStart = true
+        if onboarding.localHome && onboarding.step == .practice && !onboarding.action.bar { return }
+        if onboarding.presented && onboarding.step == .welcome { onboarding.startPractice() }
+        if !session.practiceActive && onboarding.connectionDeferred { startConnection() }
         if !canRecordNow {
             Haptics.shared.play(.pairingRequired)
             showPairing = true
             return
         }
-        if session.micDenied {
+        if !session.practiceActive && session.micDenied {
             Haptics.shared.play(.warning)
             session.openMicrophoneSettings()
             return
@@ -755,10 +878,14 @@ struct HomeView: View {
         if stringProcessing {
             return
         }
+        interactionStart = true
         if session.phase == .error || session.phase == .result {
             session.reset()
         }
         session.beginListening()
+        if session.phase != .listening && !session.isRecordingRequested {
+            interactionStart = false
+        }
     }
 
     // MARK: - Footer
@@ -766,47 +893,52 @@ struct HomeView: View {
     private var footer: some View {
         HStack {
             Spacer()
+            if session.phase == .error {
+                Button(L10n.text("Open microphone test")) { showMicrophoneTest = true }
+                    .font(.caption).foregroundStyle(Theme.orange).frame(minHeight: 44)
+                Spacer()
+            }
             ZStack(alignment: .trailing) {
-                HUDLabel(text: "PCM / 16K")
-                    .opacity(hasResultText ? 0 : 1)
-                Button {
-                    Haptics.shared.play(.overlayOpen)
-                    showResult = true
-                } label: {
-                    Text("查看结果  ›")
-                        .modifier(InstrumentHint())
-                        .frame(minWidth: 74, minHeight: 32)
-                        .contentShape(Rectangle())
+                if hasResultText {
+                    Button {
+                        Haptics.shared.play(.overlayOpen)
+                        showResult = true
+                    } label: {
+                        Text(L10n.text("View result  ›"))
+                            .modifier(InstrumentHint())
+                            .frame(minWidth: 74, minHeight: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L10n.text("View recognition result"))
+                } else {
+                    HUDLabel(text: "PCM / 16K")
                 }
-                .buttonStyle(.plain)
-                .opacity(hasResultText ? 1 : 0)
-                .allowsHitTesting(hasResultText)
-                .accessibilityHidden(!hasResultText)
-                .accessibilityLabel("查看识别结果")
             }
             .frame(width: 98, height: 32, alignment: .trailing)
         }
         .frame(height: 32)
         .padding(.top, 3)
+        .accessibilityHidden(onboarding.localHome)
     }
 
     /// After audio activation settles and outside a gesture, never on the first pull.
-    private func warmUpBowSound(attempt: Int = 0) {
+    private func warmUpSounds(attempt: Int = 0) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             guard scenePhase == .active else { return }
             guard !stringTouchActive, !pressing else {
                 // Busy: try again shortly rather than stall the gesture in progress.
-                if attempt < 5 { warmUpBowSound(attempt: attempt + 1) }
+                if attempt < 5 { warmUpSounds(attempt: attempt + 1) }
                 return
             }
-            BowReleaseSound.shared.warmUp()
+            SoundDesign.shared.warmUp()
         }
     }
 
     /// The result is back on the phone but the Mac is still polishing, animating or typing it.
     /// The Mac rejects a new session until it reports ready, so the bar waits with it.
     private var macFinishing: Bool {
-        (session.phase == .result && linkReady && link.gestureSupported && !link.gestureReady)
+        (!session.practiceActive && session.phase == .result && linkReady && link.gestureSupported && !link.gestureReady)
             || debugStringStatus == 1
     }
 
@@ -836,6 +968,7 @@ struct HomeView: View {
     }
 
     private var connectionLabel: String {
+        if session.practiceActive { return "PRACTICE" }
         switch link.phase {
         case .ready(let name): return name
         case .connecting(let name): return "LINKING \(name)".uppercased()
@@ -851,6 +984,23 @@ struct HomeView: View {
     }
 
     private var statusWord: String {
+        if guideStatus {
+            if onboarding.celebrating { return "DONE" }
+            if onboarding.step == .welcome { return "READY" }
+            if onboarding.step == .practice {
+                if session.phase == .transcribing { return "POLISH" }
+                switch onboarding.action {
+                case .hold: return "HOLD"
+                case .release: return "RELEASE"
+                case .send: return "PULL"
+                case .more: return "DONE"
+                case .delete: return "DELETE"
+                case .cursor: return "SLIDE"
+                case .clear: return "CLEAR"
+                case .cancel: return "CANCEL"
+                }
+            }
+        }
         switch session.phase {
         case .listening: return "LISTEN"
         case .transcribing: return session.isUploading ? "SENDING" : "POLISH"
@@ -875,41 +1025,55 @@ struct HomeView: View {
     }
 
     private var statusLine: String {
+        if guideStatus {
+            if onboarding.celebrating { return L10n.text("That's it.") }
+            if onboarding.step == .welcome { return L10n.text("One phone. Every input.") }
+            if onboarding.step == .practice { return onboarding.action.prompt }
+            if session.phase == .idle { return L10n.text("Click your Mac's input, then hold to speak") }
+        }
+        if session.practiceActive {
+            if session.phase == .result {
+                if [.delete, .cursor, .clear].contains(onboarding.action) { return session.practice.cursorText }
+                return L10n.text("Typed in practice")
+            }
+            return ""
+        }
         if canUseString, session.snapReturnEnabled, stringMotion.armed, stringMotion.chargeTension > 0 {
-            return "松手弹射想法"
+            return L10n.text("Release to launch your idea")
         }
         switch session.phase {
         case .listening:
-            if !linkReady { return "正在连接 Mac · 先说着，连上即发送" }
-            return "松开即发送 · 上滑取消"
+            if !linkReady { return L10n.text("Connecting to Mac · Speak now, send when connected") }
+            return L10n.text("Release to send · Slide up to cancel")
         case .transcribing:
-            if !linkReady { return "正在连接 Mac，连接后立即发送" }
-            return session.message ?? (session.isUploading ? "正在上传音频…" : "正在把语音变成文字")
+            if !linkReady { return L10n.text("Connecting to Mac. Your audio will send as soon as it connects.") }
+            return session.message ?? (session.isUploading ? L10n.text("Uploading audio…") : L10n.text("Turning your voice into text"))
         case .result:
-            if macFinishing { return "等待电脑完成润色与输入" }
-            let done = session.pasted ? session.target.map { "已填入 \($0)" } : nil
-            if stringReady { return (done.map { $0 + " · " } ?? "") + "下拉松手发射" }
-            return done ?? "文字已回传到 iPhone"
+            if macFinishing { return L10n.text("Waiting for your Mac to finish polishing and typing") }
+            let done = session.pasted ? session.target.map { L10n.text("Typed into %@", L10n.argument($0)) } : nil
+            if stringReady { return (done.map { $0 + " · " } ?? "") + L10n.text("Pull down and release to launch") }
+            return done ?? L10n.text("Text sent back to your iPhone")
         case .error:
-            return session.message ?? "请再试一次"
+            return session.message ?? L10n.text("Please try again")
         case .idle:
             break
         }
         if !linkReady {
-            if canRecordNow { return "按住先说着，连上即发送" }
+            if canRecordNow { return L10n.text("Hold to speak now. Send when connected.") }
             switch link.phase {
-            case .searching: return link.macs.isEmpty ? "正在寻找你的 Mac" : "找到多台 Mac，点右上角选择"
-            case .connecting(let name): return "正在连接 \(name)"
-            case .needsCode: return "输入 Mac 上显示的配对码"
-            case .failed: return "链路不可用，点右上角重试"
-            case .idle: return "在 Mac 上打开 iMic"
+            case .searching: return link.macs.isEmpty ? L10n.text("Looking for your Mac") : L10n.text("Multiple Macs found. Choose one at the top right.")
+            case .connecting(let name): return L10n.text("Connecting to %@", L10n.argument(name))
+            case .needsCode: return L10n.text("Enter the pairing code shown on your Mac")
+            case .failed: return L10n.text("Connection unavailable. Tap the top right to retry.")
+            case .idle: return L10n.text("Open VoxChord on your Mac")
             case .ready: return ""
             }
         }
-        return "按住底部横条开始说话"
+        return L10n.text("Hold the bottom bar to speak")
     }
 
     private var barFill: Color {
+        if guideStatus { return Theme.orange }
         if macFinishing { return Theme.orangeDeep }
         switch session.phase {
         case .transcribing: return Theme.orangeDeep
@@ -919,6 +1083,7 @@ struct HomeView: View {
     }
 
     private var barTextColor: Color {
+        if guideStatus { return Theme.ink }
         if session.phase == .listening || stringProcessing {
             return stringProcessing ? Theme.ivory : Theme.ink
         }
@@ -926,7 +1091,8 @@ struct HomeView: View {
     }
 
     private var barLabel: String {
-        if session.micDenied { return "ENABLE MIC" }
+        if guideStatus && onboarding.step == .welcome { return "HOLD TO START" }
+        if !session.practiceActive && session.micDenied { return "ENABLE MIC" }
         switch session.phase {
         case .listening: return cancelArmed ? "RELEASE TO CANCEL" : "RELEASE TO SEND"
         case .transcribing: return "TRANSCRIBING"
@@ -942,22 +1108,23 @@ struct HomeView: View {
     }
 
     private var stringControlHint: String {
-        guard linkReady else { return "连接 Mac 后可拨弦" }
-        guard link.gestureSupported else { return "请更新 Mac 端启用弦控制" }
-        if link.clearPending { return "正在清空输入框…" }
-        if session.phase == .listening { return "录音结束并完成输入后可拉弦" }
+        if session.practiceActive { return onboarding.action.prompt }
+        guard linkReady else { return L10n.text("Connect to a Mac to use the string") }
+        guard link.gestureSupported else { return L10n.text("Update VoxChord on your Mac to enable string controls") }
+        if link.clearPending { return L10n.text("Clearing the text field…") }
+        if session.phase == .listening { return L10n.text("Finish recording and typing before pulling the string") }
         guard link.gestureReady, session.phase != .transcribing, !session.isUploading else {
-            return "等待电脑完成润色、动画与输入"
+            return L10n.text("Waiting for polishing, animation, and typing on your Mac")
         }
-        return session.snapReturnEnabled ? "下拉松手发射文字" : "发射已在 Mac 关闭"
+        return session.snapReturnEnabled ? L10n.text("Pull down and release to launch text") : L10n.text("Text launch is disabled on your Mac")
     }
 
     private var secondaryGestureHint: String {
-        guard linkReady else { return "语音和按键发送到当前选择的 Mac" }
+        guard linkReady else { return L10n.text("Voice and keystrokes go to the selected Mac") }
         var actions: [String] = []
-        if session.pullDeleteEnabled { actions.append("上拉删除／顶部清空") }
-        if session.swipeCursorEnabled { actions.append("左右移动光标") }
-        return actions.isEmpty ? "弦手势已在 Mac 关闭" : actions.joined(separator: " · ")
+        if session.pullDeleteEnabled { actions.append(L10n.text("Pull up to delete / Pull to the top to clear")) }
+        if session.swipeCursorEnabled { actions.append(L10n.text("Slide left or right to move the cursor")) }
+        return actions.isEmpty ? L10n.text("String gestures are disabled on your Mac") : actions.joined(separator: " · ")
     }
 }
 

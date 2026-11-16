@@ -8,6 +8,8 @@ struct iMicApp: App {
             #if DEBUG
             if let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--waveform-replay=") }) {
                 WaveformDebugReplayRoot(selection: String(argument.dropFirst("--waveform-replay=".count)))
+            } else if ProcessInfo.processInfo.arguments.contains("--ui-preview=sounds") {
+                SoundPreviewRoot()
             } else {
                 LiveApplicationView()
             }
@@ -20,10 +22,12 @@ struct iMicApp: App {
 
 private struct LiveApplicationView: View {
     @StateObject private var link: LinkClient
+    @StateObject private var onboarding: OnboardingCoordinator
     @StateObject private var session: SessionModel
 
     init() {
         let link = LinkClient()
+        _onboarding = StateObject(wrappedValue: OnboardingCoordinator(link: link))
         _link = StateObject(wrappedValue: link)
         _session = StateObject(wrappedValue: SessionModel(link: link))
     }
@@ -32,10 +36,11 @@ private struct LiveApplicationView: View {
         HomeView()
             .environmentObject(link)
             .environmentObject(session)
+            .environmentObject(onboarding)
             .preferredColorScheme(.dark)
             .background {
-                IdleScreenObserver(busy: session.phase == .listening || session.phase == .transcribing || session.isUploading)
-                    .frame(width: 0, height: 0)
+                IdleScreenObserver(busy: session.phase == .listening || session.phase == .transcribing || session.isUploading,
+                                   onActivity: { session.spectrumStore.wake() })
             }
     }
 }

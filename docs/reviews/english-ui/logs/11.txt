@@ -1,0 +1,39 @@
+[agent-browser] launched browser
+PASS Real latest API → matching DMG, version and checksum
+PASS Seven sections, three FEEL features, MODES and legacy START
+PASS 1440px hero fits one screen; wider layout and legible Mac text
+PASS Tablet uses two columns; 390px hero uses the portrait recording
+PASS ANYWHERE reduced motion: six complete, static, accessible fields
+PASS ANYWHERE types sequentially, pauses offscreen and resumes
+PASS ANYWHERE manual pause and live reduced-motion changes
+PASS 390px ANYWHERE has two readable columns and no overflow
+PASS SOUND retains opt-in audio and an accessible mute state
+PASS One API request; dynamic release replaces every DMG link
+PASS API fallback: 403
+PASS API fallback: 429
+PASS API fallback: missing DMG
+PASS API fallback: invalid JSON
+PASS API fallback: unsafe asset URL
+PASS API fallback: offline
+PASS API fallback: 4-second timeout
+PASS Explicit fail query
+PASS No JavaScript: download remains usable; TestFlight disabled
+PASS 390px iPhone: share button, direct link, no horizontal overflow
+PASS Native share receives production URL
+PASS Share cancel preserves UI without error
+PASS Clipboard fallback and manual recovery
+PASS 768px iPad desktop-UA detection and layout
+PASS from=ios scroll, banner, 1.5s Mac highlight
+PASS 390px from=ios exposes sharing, the Mac button and sticky banner
+PASS Legacy #start opens the combined installation section
+PASS Hash-only deep link
+PASS Reduced motion: posters only until explicit play
+PASS Lazy videos start in viewport and pause after leaving
+PASS Bailian FAQ gives Beijing, full permissions and rejects plan keys
+PASS FAQ keyboard interaction and storage-free page
+PASS English 1440px: metadata, navigation, no clipping and downloads
+PASS English 390px: metadata, navigation, no clipping and downloads
+PASS English animation pause labels and reduced-motion fallback
+PASS English API fallback, no JavaScript and from=ios
+PASS Language suggestion is dismissible, storage-free and never redirects
+37/37 browser checks passed

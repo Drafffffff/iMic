@@ -4,7 +4,8 @@ import QuartzCore
 import UIKit
 
 /// 全 App 的语义化触感。优先 Core Haptics 播放细腻短模式，
-/// 失败或不支持时回落到 UIFeedbackGenerator。
+/// 失败或不支持时回落到 UIFeedbackGenerator。同一语义事件的音效由 SoundDesign 播放，
+/// 映射见 `SoundCue.forHaptic`。
 @MainActor
 final class Haptics {
     static let shared = Haptics()
@@ -17,6 +18,7 @@ final class Haptics {
         case stringNotchLow
         case stringNotchHigh
         case stringSnap
+        case deleteChar
         case cancelArmed
         case cancelDisarmed
         case cancelled
@@ -79,7 +81,7 @@ final class Haptics {
         startEngine()
     }
 
-    /// 只预热拉满提示；真正释放的音触由 BowReleaseSound 统一拥有。
+    /// 拉满时预热提示与释放触感，发射帧不再创建引擎。
     func prepareBowArmed() {
         guard UIApplication.shared.applicationState == .active else { return }
         prepare(force: true)
@@ -108,6 +110,7 @@ final class Haptics {
         let now = CACurrentMediaTime()
         if let last = lastPlayed[event], now - last < minimumInterval(event) { return }
         lastPlayed[event] = now
+        if let cue = SoundCue.forHaptic(event) { SoundDesign.shared.play(cue) }
 
         if coreReady, let engine = engine, let pattern = patterns[event] {
             do {
@@ -128,12 +131,32 @@ final class Haptics {
         playFallback(event)
     }
 
+    /// 弦回到中线、回车已发出：力度决定触感强度与音高档位。
+    func playBowRelease(strength: Float) {
+        guard UIApplication.shared.applicationState == .active else { return }
+        let bounded = strength.isFinite ? min(1, max(0, strength)) : 0
+        SoundDesign.shared.play(.snapReturn, strength: bounded)
+        if coreReady, let engine, let pattern = pattern(
+            [(0, 0.65 + 0.35 * bounded, 0.72 + 0.20 * bounded)],
+            continuous: (0, 0.022, 0.12 + 0.10 * bounded, 0.40)
+        ) {
+            do {
+                try engine.makePlayer(with: pattern).start(atTime: CHHapticTimeImmediate)
+                return
+            } catch {
+                IMicLog.write("iphone.haptics", "bow release failed: \(error.localizedDescription)")
+                stop()
+            }
+        }
+        rigid.impactOccurred(intensity: CGFloat(0.65 + 0.35 * bounded))
+    }
+
     private func minimumInterval(_ event: Event) -> CFTimeInterval {
         switch event {
         case .codeDigit: return 0.03
         case .connected, .pairingSuccess, .result: return 0.4
         case .recordingStarted: return 0.15
-        case .stringNotchLow, .stringNotchHigh: return 0.045
+        case .stringNotchLow, .stringNotchHigh, .deleteChar: return 0.045
         default: return 0.06
         }
     }
@@ -217,6 +240,7 @@ final class Haptics {
         patterns[.stringNotchLow] = pattern([(0, 0.48, 0.83)], continuous: (0, 0.018, 0.12, 0.6))
         patterns[.stringNotchHigh] = pattern([(0, 0.80, 0.98)], continuous: (0, 0.022, 0.22, 0.75))
         patterns[.stringSnap] = pattern([(0, 1, 0.92), (0.075, 0.38, 0.7)], continuous: (0, 0.045, 0.45, 0.45))
+        patterns[.deleteChar] = pattern([(0, 0.4, 0.3), (0.08, 0.3, 0.2)])
         patterns[.cancelArmed] = pattern([(0, 0.55, 0.8), (0.05, 0.4, 0.7)])
         patterns[.cancelDisarmed] = pattern([(0, 0.25, 0.4)])
         patterns[.cancelled] = pattern([(0, 0.6, 0.4), (0.08, 0.3, 0.2)])
@@ -300,7 +324,7 @@ final class Haptics {
             heavy.impactOccurred(intensity: 1)
         case .cancelArmed, .cancelDisarmed:
             rigid.impactOccurred(intensity: event == .cancelArmed ? 0.8 : 0.45)
-        case .cancelled, .warning, .tooShort:
+        case .cancelled, .warning, .tooShort, .deleteChar:
             notification.notificationOccurred(.warning)
         case .connected:
             light.impactOccurred(intensity: 0.7)

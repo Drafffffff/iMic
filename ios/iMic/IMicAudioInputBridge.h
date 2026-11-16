@@ -14,6 +14,7 @@ NS_ASSUME_NONNULL_BEGIN
                               onChunk:(void (^)(NSData *pcm16))onChunk
                              onBuffer:(void (^ _Nullable)(AVAudioPCMBuffer *nativeBuffer))onBuffer
                             onFailure:(void (^)(NSString *message))onFailure
+                              onMeter:(void (^)(double rms, double peak, uint64_t callbacks, BOOL hasSamples, BOOL allZero, double elapsed))onMeter
                                 onLog:(void (^)(NSString *message))onLog
                                 error:(NSError * _Nullable * _Nullable)error;
 

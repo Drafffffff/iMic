@@ -13,8 +13,47 @@ final class PhosphorScene {
     var effect: PhosphorEffect = .crt
     var reduceTransparency = false
     var clearProgress:Float=0
-    var attachStyle:PhosphorAttachStyle = .charge
+    var attachStyle:PhosphorAttachStyle = .flow
     private var press=PhosphorPressSpring()
+    private var recordingCollapse=PhosphorCollapse()
+    private var collapseRecording=false
+    private(set) var collapseCenter=SIMD2<Float>.zero
+    private var collapseFrame=PhosphorCollapse.Sample(amount:0,vignette:0,streak:0,needsFrames:false)
+    private let debugCollapse: Double? = {
+        #if DEBUG
+        if let arg=ProcessInfo.processInfo.arguments.first(where:{$0.hasPrefix("--debug-collapse=")}),
+           let value=Double(arg.dropFirst("--debug-collapse=".count)),value.isFinite {
+            return min(1,max(0,value))
+        }
+        #endif
+        return nil
+    }()
+    private let debugCollapseElapsed: Double? = {
+        #if DEBUG
+        if let arg=ProcessInfo.processInfo.arguments.first(where:{$0.hasPrefix("--debug-collapse-time=")}),
+           let value=Double(arg.dropFirst("--debug-collapse-time=".count)),value.isFinite {
+            return max(0,value)
+        }
+        #endif
+        return nil
+    }()
+
+    func setRecording(elapsed:Double?,ending:PhosphorCollapse.Ending,reduced:Bool,now:Double){
+        if (elapsed != nil) != collapseRecording {
+            let event=elapsed != nil ? "begin":(ending == .sent ? "send":"cancel")
+            let current=recordingCollapse.sample(at:now)
+            IMicLog.write("iphone.visual",String(format:"collapse %@ amount=%.5f optics=%.3f",event,current.amount,current.streak))
+            collapseRecording=elapsed != nil
+        }
+        recordingCollapse.configure(elapsed:elapsed,ending:ending,reduced:reduced,now:now)
+    }
+    func needsCollapseFrames(at now:Double)->Bool{recordingCollapse.sample(at:now).needsFrames}
+    func collapse(at now:Double)->PhosphorCollapse.Sample{recordingCollapse.sample(at:now)}
+    var collapseUniform:SIMD4<Float>{
+        SIMD4(Float(collapseFrame.amount),collapseCenter.x,collapseCenter.y,
+              Float(collapseFrame.streak))
+    }
+    var collapseVignette:Float{Float(collapseFrame.vignette)}
 
     func setPressed(_ pressed:Bool,now:Double){press.set(pressed:pressed,at:now)}
 
@@ -46,6 +85,21 @@ final class PhosphorScene {
 
     func update(spectrum: SpectrumStore, torus: CGRect, size: CGSize,
                 reduced: Bool, dimmed: Bool, scale: CGFloat) {
+        collapseCenter=SIMD2(Float(torus.midX),Float(torus.midY))
+        let wasActive=collapseFrame.needsFrames
+        collapseFrame=recordingCollapse.advance(level:Double(spectrum.frame.level),now:CACurrentMediaTime())
+        if wasActive && !collapseFrame.needsFrames { IMicLog.write("iphone.visual","collapse settled") }
+        if let debugCollapse {
+            collapseFrame.amount=reduced ? 0:debugCollapse*PhosphorCollapse.maximum
+            collapseFrame.streak=reduced ? 0:debugCollapse
+            collapseFrame.vignette=reduced ? debugCollapse*0.25:0
+        }
+        if let elapsed=debugCollapseElapsed {
+            var preview=PhosphorCollapse()
+            preview.configure(elapsed:elapsed,ending:.cancelled,reduced:reduced,now:0)
+            collapseFrame=preview.advance(level:0.5,now:0)
+            collapseFrame.needsFrames=false
+        }
         let motion=spectrum.stringMotion
         let layout=TorusGeometry.Layout(size:torus.size,frame:spectrum.frame,pull:motion.pull,
             anchor:motion.anchor,reducedMotion:reduced,extendedUpward:true,
@@ -274,7 +328,7 @@ enum PhosphorAttachStyle: String, CaseIterable {
     case charge, flow, arc
     static let preferenceKey="imic.display.attach"
     var label:String{switch self{case .charge:return "CHARGE";case .flow:return "FLOW";case .arc:return "ARC"}}
-    var title:String{switch self{case .charge:return "整环充能";case .flow:return "流动光弧";case .arc:return "静止光弧"}}
+    var title:String{switch self{case .charge:return L10n.text("Full ring");case .flow:return L10n.text("Flowing arc");case .arc:return L10n.text("Fixed arc")}}
 
     /// Flowing arcs circle their ring on the ambient clock (it slows to rest with the HUD and
     /// never runs under Reduce Motion). Half go each way, at slightly different speeds; the
@@ -291,6 +345,6 @@ enum PhosphorEffect: String, CaseIterable {
     static let preferenceKey="imic.display.material"
     var crtStrength:Float{self == .crt ? 0.82:0}
     var bloomStrength:Float{self == .clean ? 0:0.5}
-    var title:String{switch self{case .clean:return "清晰";case .glow:return "荧光";case .crt:return "荧光 CRT"}}
+    var title:String{switch self{case .clean:return L10n.text("Clear");case .glow:return L10n.text("Phosphor");case .crt:return L10n.text("Phosphor CRT")}}
     var label:String{rawValue.uppercased()}
 }

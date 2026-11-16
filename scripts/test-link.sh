@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
+source "$ROOT/scripts/ios-bundle-id.sh"
 PORT=${IMIC_TEST_PORT:-47844}
 CODE=$([[ $(date +%S) -lt 30 ]] && echo 246810 || echo 135790)
 WORK=$(mktemp -d /tmp/imic-link-test.XXXXXX)
@@ -40,16 +41,34 @@ mkdir -p "$ROOT/build/tools"
 swiftc -swift-version 5 -O -target arm64-apple-macosx13.0 \
   -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
   -framework Network -framework CryptoKit \
-  "$ROOT/shared/iMicLink.swift" "$ROOT/shared/PolishOptions.swift" "$ROOT/tools/imic-client/main.swift" \
+  "$ROOT/shared/Localization.swift" "$ROOT/shared/LinkStatusText.swift" "${ROOT}/shared/iMicLink.swift" "$ROOT/shared/PolishOptions.swift" "$ROOT/tools/imic-client/main.swift" \
   -o "$CLIENT"
 
 # 避免模拟器里的 iPhone 应用自动重连并抢走测试连接。
 if [ "${IMIC_KEEP_SIMULATOR:-0}" != 1 ]; then
-  xcrun simctl terminate booted com.drafffffff.imic 2>/dev/null || true
+  xcrun simctl terminate booted "$IMIC_SIM_BUNDLE_ID" 2>/dev/null || true
+fi
+
+MAC_BIN="${IMIC_BUILD_DIR:-$ROOT/build/mac.noindex}/iMic.app/Contents/MacOS/iMic"
+if [ "${IMIC_SKIP_MAC_BUILD:-0}" != 1 ]; then
+  NEED_MAC_BUILD=0
+  if [ ! -x "$MAC_BIN" ]; then
+    NEED_MAC_BUILD=1
+  else
+    for src in "$ROOT"/mac/*.swift "$ROOT"/shared/*.swift; do
+      if [ "$src" -nt "$MAC_BIN" ]; then
+        NEED_MAC_BUILD=1
+        break
+      fi
+    done
+  fi
+  if [ "$NEED_MAC_BUILD" -eq 1 ]; then
+    "$ROOT/scripts/build-mac.sh"
+  fi
 fi
 
 echo "==> 3/4 启动无界面 Mac（端口 ${PORT}，配对码 ${CODE}）"
-"${IMIC_BUILD_DIR:-$ROOT/build/mac.noindex}/iMic.app/Contents/MacOS/iMic" \
+"$MAC_BIN" \
   --headless --pair-code="$CODE" --no-input --port="$PORT" > "$LOG" 2>&1 &
 MAC_PID=$!
 for _ in $(seq 1 40); do

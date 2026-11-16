@@ -328,8 +328,8 @@ final class BLEBridge: NSObject, CBPeripheralManagerDelegate {
         failed = true
         IMicLog.write("mac.ble", "failed reason=\(reason) uplinkQueued=\(incomingBytes) downlinkQueued=\(outgoingBytes)")
         closeLocal()
-        // CoreBluetooth 没有外设端主动断连 API；保持失败状态，后续有响应写明确拒绝，
-        // 直到中心取消订阅/重连才允许新 loopback，不能静默丢帧后继续成功。
+        self.central = nil
+        self.failed = false
     }
 
     private func closeLocal() {

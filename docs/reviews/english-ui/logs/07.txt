@@ -1,0 +1,105 @@
+/tmp/imic-mac-selection.XS1sTa/LinkClient.swift:1472:137: warning: 'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+1459 |         }
+1460 |         #endif
+1461 |         queue.async {
+     |                     |- note: 'self' implicitly strongly captured here
+     |                     `- note: add 'self' as a capture list item to silence
+1462 |             guard epoch == self.currentEpoch(), self.ready, self.supportsPolishPreferences else {
+1463 |                 self.publish {
+     :
+1470 |             let generation = self.polishSaveGeneration
+1471 |             self.pendingPolishPreferences = preferences
+1472 |             self.sendSealed(.polishSettings(preferences, features: IMicLink.polishOutputFeature | IMicLink.polishModesFeature)) { [weak self] success in
+     |                                                                                                                                         |- warning: 'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+     |                                                                                                                                         `- note: explicitly assign the capture list item to silence
+1473 |                 guard let self, !success, epoch == self.currentEpoch(),
+1474 |                       generation == self.polishSaveGeneration, self.pendingPolishPreferences != nil else { return }
+
+/tmp/imic-mac-selection.XS1sTa/LinkClient.swift:1462:28: warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+  41 | /// iPhone 侧链路：Bonjour 发现 → Curve25519 握手 → 六位配对码 → 令牌会话。
+  42 | /// 所有网络状态在私有串行队列，`@Published` 只在主线程更新。
+  43 | final class LinkClient: ObservableObject {
+     |             `- note: class 'LinkClient' does not conform to the 'Sendable' protocol
+  44 |     enum Phase: Equatable {
+  45 |         case idle
+     :
+1460 |         #endif
+1461 |         queue.async {
+1462 |             guard epoch == self.currentEpoch(), self.ready, self.supportsPolishPreferences else {
+     |                            `- warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+1463 |                 self.publish {
+1464 |                     self.polishPreferencesSaving = false
+
+/tmp/imic-mac-selection.XS1sTa/LinkClient.swift:1805:21: warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+  41 | /// iPhone 侧链路：Bonjour 发现 → Curve25519 握手 → 六位配对码 → 令牌会话。
+  42 | /// 所有网络状态在私有串行队列，`@Published` 只在主线程更新。
+  43 | final class LinkClient: ObservableObject {
+     |             `- note: class 'LinkClient' does not conform to the 'Sendable' protocol
+  44 |     enum Phase: Equatable {
+  45 |         case idle
+     :
+1803 |             queue.async {
+1804 |                 if begin {
+1805 |                     self.running = true
+     |                     `- warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+1806 |                     self.closeConnectionLocked()
+1807 |                     self.resetSelectionLocked()
+
+/tmp/imic-mac-selection.XS1sTa/LinkClient.swift:1827:58: warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+  41 | /// iPhone 侧链路：Bonjour 发现 → Curve25519 握手 → 六位配对码 → 令牌会话。
+  42 | /// 所有网络状态在私有串行队列，`@Published` 只在主线程更新。
+  43 | final class LinkClient: ObservableObject {
+     |             `- note: class 'LinkClient' does not conform to the 'Sendable' protocol
+  44 |     enum Phase: Equatable {
+  45 |         case idle
+     :
+1825 |     func selectionTestHasBrowser() async -> Bool {
+1826 |         await withCheckedContinuation { continuation in
+1827 |             queue.async { continuation.resume(returning: self.browser != nil) }
+     |                                                          `- warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+1828 |         }
+1829 |     }
+
+/tmp/imic-mac-selection.XS1sTa/LinkClient.swift:1834:49: warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+  41 | /// iPhone 侧链路：Bonjour 发现 → Curve25519 握手 → 六位配对码 → 令牌会话。
+  42 | /// 所有网络状态在私有串行队列，`@Published` 只在主线程更新。
+  43 | final class LinkClient: ObservableObject {
+     |             `- note: class 'LinkClient' does not conform to the 'Sendable' protocol
+  44 |     enum Phase: Equatable {
+  45 |         case idle
+     :
+1832 |         await withCheckedContinuation { continuation in
+1833 |             queue.async {
+1834 |                 continuation.resume(returning: (self.attemptedThisRound, self.reconnectAttempts,
+     |                                                 `- warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+1835 |                                                 self.reconnectWork != nil && self.connection == nil))
+1836 |             }
+
+/tmp/imic-mac-selection.XS1sTa/LinkClient.swift:1843:17: warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+  41 | /// iPhone 侧链路：Bonjour 发现 → Curve25519 握手 → 六位配对码 → 令牌会话。
+  42 | /// 所有网络状态在私有串行队列，`@Published` 只在主线程更新。
+  43 | final class LinkClient: ObservableObject {
+     |             `- note: class 'LinkClient' does not conform to the 'Sendable' protocol
+  44 |     enum Phase: Equatable {
+  45 |         case idle
+     :
+1841 |         await withCheckedContinuation { continuation in
+1842 |             queue.async {
+1843 |                 self.running = false
+     |                 `- warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+1844 |                 self.browser?.cancel()
+1845 |                 self.browser = nil
+
+[#ImplicitStrongCapture]: <https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture>
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+PASS grace, authenticated fallback identity/recency, late discovery preserves active link
+PASS preferred wins when discovered 200ms later
+PASS failed network target advances to next candidate without recording success
+PASS discovered endpoint cannot substitute another Mac identity
+PASS exhausted candidate round uses existing backoff without rapid ping-pong
+PASS revoked automatic token skips pairing and authenticates the next Mac
+PASS auth rejection removes only the stale token and falls back without pairing
+PASS manual offline wait, foreground unlock, forget removes authenticated recency
+PASS any offline pairing prevents automatic pairing with an unpaired discovery
+PASS first-install single-Mac pairing stays explicit and records success only after ready
+PASS all automatic Mac selection integration checks

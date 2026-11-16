@@ -1,0 +1,40 @@
+/Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/LinkClient.swift:1472:137: warning: 'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+1459 |         }
+1460 |         #endif
+1461 |         queue.async {
+     |                     |- note: 'self' implicitly strongly captured here
+     |                     `- note: add 'self' as a capture list item to silence
+1462 |             guard epoch == self.currentEpoch(), self.ready, self.supportsPolishPreferences else {
+1463 |                 self.publish {
+     :
+1470 |             let generation = self.polishSaveGeneration
+1471 |             self.pendingPolishPreferences = preferences
+1472 |             self.sendSealed(.polishSettings(preferences, features: IMicLink.polishOutputFeature | IMicLink.polishModesFeature)) { [weak self] success in
+     |                                                                                                                                         |- warning: 'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+     |                                                                                                                                         `- note: explicitly assign the capture list item to silence
+1473 |                 guard let self, !success, epoch == self.currentEpoch(),
+1474 |                       generation == self.polishSaveGeneration, self.pendingPolishPreferences != nil else { return }
+
+/Users/drafff/.codex/worktrees/english-ui/iMic/ios/iMic/LinkClient.swift:1462:28: warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+  41 | /// iPhone 侧链路：Bonjour 发现 → Curve25519 握手 → 六位配对码 → 令牌会话。
+  42 | /// 所有网络状态在私有串行队列，`@Published` 只在主线程更新。
+  43 | final class LinkClient: ObservableObject {
+     |             `- note: class 'LinkClient' does not conform to the 'Sendable' protocol
+  44 |     enum Phase: Equatable {
+  45 |         case idle
+     :
+1460 |         #endif
+1461 |         queue.async {
+1462 |             guard epoch == self.currentEpoch(), self.ready, self.supportsPolishPreferences else {
+     |                            `- warning: capture of 'self' with non-Sendable type 'LinkClient' in a '@Sendable' closure [#SendableClosureCaptures]
+1463 |                 self.publish {
+1464 |                     self.polishPreferencesSaving = false
+
+[#ImplicitStrongCapture]: <https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture>
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+PASS healthy resume 12ms; same encrypted connection
+Background blackhole: 1s; waiting across the Mac heartbeat deadline when long
+PASS stale resume 821ms; loss delivered once; authenticated without re-pairing
+PASS idle stale reconnect preserves newly buffered recording
+PASS backoff bypass 23ms
+PASS all foreground reconnect checks

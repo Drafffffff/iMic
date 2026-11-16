@@ -62,19 +62,24 @@ private final class ASRWebSocketTransport:ASRMessageTransport {
         // WebSocket 可能长时间只上传音频；不能把单次 HTTP 的 15/90 秒用于整段任务。
         config.timeoutIntervalForRequest=ASRConfiguration.resourceTimeout
         config.timeoutIntervalForResource=ASRConfiguration.resourceTimeout
-        session=URLSession(configuration:config)
+        session=URLSession(configuration:config, delegate:BailianRedirectPolicy(), delegateQueue:nil)
         socket=session.webSocketTask(with:request)
     }
     func resume(){socket.resume()}
     func send(_ message:ASRWireMessage,completion:@escaping (Error?)->Void) {
         let frame:URLSessionWebSocketTask.Message
         switch message {case .text(let text):frame = .string(text);case .audio(let pcm):frame = .data(pcm)}
-        socket.send(frame){error in DispatchQueue.main.async{completion(error)}}
+        socket.send(frame){error in DispatchQueue.main.async {
+            let status = (self.socket.response as? HTTPURLResponse)?.statusCode ?? 0
+            completion(error != nil && (status == 401 || status == 403) ? NSError(domain: "iMic.ASR.HTTP", code: status) : error)
+        }}
     }
     func receive(completion:@escaping (Result<Data,Error>)->Void) {
         socket.receive{result in DispatchQueue.main.async {
             switch result {
-            case .failure(let error):completion(.failure(error))
+            case .failure(let error):
+                let status = (self.socket.response as? HTTPURLResponse)?.statusCode ?? 0
+                completion(.failure(status == 401 || status == 403 ? NSError(domain: "iMic.ASR.HTTP", code: status) : error))
             case .success(let message):
                 switch message {
                 case .string(let text):completion(.success(Data(text.utf8)))
@@ -91,9 +96,11 @@ final class BailianASR {
     // Interim hypotheses and confirmed prefixes are separate callbacks; the caller
     // chooses its preview/input policy. onFinal represents the complete utterance.
     var onPreview: ((String)->Void)?
+    var onPartial: ((String)->Void)? { get { onPreview } set { onPreview = newValue } }
     var onConfirmed: ((String)->Void)?
     var previewEnabled = false
     var onFinal: ((String,Double)->Void)?
+    private(set) var failureCode = "asr"
     var onError: ((String)->Void)?
     var onMetrics: ((ASRMetrics)->Void)?
     private let transportFactory:(URLRequest)->ASRMessageTransport
@@ -129,16 +136,15 @@ final class BailianASR {
     init(manual:Bool=true,transportFactory:@escaping (URLRequest)->ASRMessageTransport = {ASRWebSocketTransport($0)}) {
         self.transportFactory=transportFactory
     }
+    var onFailure: ((CloudFailure) -> Void)?
     func start(key:String,endpoint:String,model:String) {
         guard !started,!cancelled else{return}
         started=true;startedAt=Date()
-        guard !key.isEmpty else{fail("请先配置百炼 API Key");return}
-        guard model==ASRConfiguration.model else{fail("识别模型请设置为 \(ASRConfiguration.model)");return}
+        guard !key.isEmpty else{fail(L10n.text("Configure your Model Studio API Key first"), code: "key");return}
+        guard model==ASRConfiguration.model else{fail(L10n.text("Set the recognition model to %@", L10n.argument(ASRConfiguration.model)), code: "asr_model");return}
         IMicLog.write("mac.asr", "start model=\(model)")
-        guard let components=URLComponents(string:ASRConfiguration.inferenceEndpoint(endpoint)),
-              components.scheme=="wss",components.host?.isEmpty==false,
-              components.path=="/api-ws/v1/inference",let url=components.url else{
-            fail("识别地址应为 wss:// 服务域名/api-ws/v1/inference");return
+        guard let url = BailianAddress.url(ASRConfiguration.inferenceEndpoint(endpoint), scheme: "wss", path: "/api-ws/v1/inference") else {
+            onFailure?(.address); fail(BailianIssue.address.message, code: "cloud_address"); return
         }
         var request=URLRequest(url:url);request.timeoutInterval=ASRConfiguration.resourceTimeout
         request.setValue("Bearer \(key)",forHTTPHeaderField:"Authorization")
@@ -152,11 +158,11 @@ final class BailianASR {
                 "vad_model":"near_meeting_16k","heartbeat":true]]]){[weak self] error in
             guard let self=self,!self.cancelled else{return}
             self.sending=false
-            if error != nil{self.fail("识别任务启动失败")}else{self.pump()}
+            if let error {self.failTransport(error)}else{self.pump()}
         }
         if !cancelled && !ready {
             startupTimer=Timer.scheduledTimer(withTimeInterval:10,repeats:false){[weak self] _ in
-                if self?.ready != true{self?.fail("百炼连接超时，请检查网络、Key、地域和模型")}
+                if self?.ready != true{self?.failTransport(URLError(.timedOut))}
             }
         }
     }
@@ -164,18 +170,18 @@ final class BailianASR {
     private func sendJSON(_ value:[String:Any],completion:@escaping (Error?)->Void) {
         guard let transport=transport,!cancelled else{return}
         guard let data=try? JSONSerialization.data(withJSONObject:value),let text=String(data:data,encoding:.utf8) else{
-            fail("识别请求编码失败");return
+            fail(L10n.text("Could not encode the recognition request"), code: "asr_encoding");return
         }
         transport.send(.text(text),completion:completion)
     }
     func append(_ pcm:Data) {
         guard started,!cancelled,!ended,!pcm.isEmpty else{return}
-        guard pcm.count%2==0 else{fail("录音数据格式错误");return}
+        guard pcm.count%2==0 else{fail(L10n.text("Invalid recording data format"), code: "asr_audio");return}
         // 累计音频与共享会话上限一致，队列只是尚未上传的子集，不能靠排空绕过上限。
         let limit = IMicLink.maxSessionSeconds * IMicLink.sampleRate * 2
         guard pcm.count<=limit-totalBytes else{
             IMicLog.write("mac.asr", "audio overflow total=\(totalBytes) incoming=\(pcm.count) limit=\(limit)")
-            fail("录音超过单次时长上限，本次输入已停止");return
+            fail(L10n.text("Recording exceeded the session limit. This input has stopped."), code: "recording_limit");return
         }
         totalBytes+=pcm.count
         queue.append(pcm);queuedBytes+=pcm.count
@@ -188,15 +194,15 @@ final class BailianASR {
         guard started,!cancelled,!ended else{return}
         ended=true;endAt=Date();queuedAtEndMS=Double(queuedBytes)/32
         let wait=ASRConfiguration.uploadTimeout(audioSeconds:Double(queuedBytes)/Double(IMicLink.sampleRate*2))
-        armDeadline(wait,message:"百炼音频上传超时")
+        armDeadline(wait,code:"asr_upload_timeout",message:L10n.text("Model Studio audio upload timed out"))
         IMicLog.write("mac.asr", "end queued=\(queuedBytes) at=\(String(format: "%.1f", queuedAtEndMS))ms upload_timeout=\(Int(wait))")
         pump()
     }
-    private func armDeadline(_ interval:TimeInterval,message:String) {
+    private func armDeadline(_ interval:TimeInterval,code:String,message:String) {
         timer?.invalidate()
         completionDeadline=Date().addingTimeInterval(interval)
         timer=Timer.scheduledTimer(withTimeInterval:interval,repeats:false){[weak self] _ in
-            self?.fail(message)
+            self?.fail(message, code: code)
         }
     }
     private func pump() {
@@ -221,15 +227,15 @@ final class BailianASR {
             sending=true
             transport.send(.audio(pcm)){[weak self] error in
                 guard let self=self,!self.cancelled else{return};self.sending=false
-                if error != nil{self.fail("百炼音频上传失败")}else{self.pump()}
+                if error != nil{self.fail(L10n.text("Model Studio audio upload failed"), code: "asr_upload")}else{self.pump()}
             }
         }else if ended && !finishSent {
             finishSent=true;finishAt=Date();sending=true
             sendJSON(["header":header("finish-task"),"payload":["input":[:]]]){[weak self] error in
                 guard let self=self,!self.cancelled else{return};self.sending=false
-                if error != nil{self.fail("结束识别失败")}else{
+                if error != nil{self.fail(L10n.text("Could not finish recognition"), code: "asr_end")}else{
                     self.finishAt=Date()
-                    self.armDeadline(ASRConfiguration.finalResultTimeout,message:"等待最终识别结果超时")
+                    self.armDeadline(ASRConfiguration.finalResultTimeout,code:"asr_final_timeout",message:L10n.text("Timed out waiting for the final recognition result"))
                     IMicLog.write("mac.asr", "finish-task drained final_timeout=\(Int(ASRConfiguration.finalResultTimeout))")
                 }
             }
@@ -239,10 +245,10 @@ final class BailianASR {
         transport?.receive{[weak self] result in
             guard let self=self,!self.cancelled else{return}
             switch result {
-            case .failure:self.fail("百炼连接中断，请检查 Key、网络、地域和模型")
+            case .failure(let error):self.failTransport(error)
             case .success(let data):
                 guard data.count<=1_000_000,let object=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any] else{
-                    self.fail("百炼返回了无效的识别事件");return
+                    self.fail(L10n.text("Model Studio returned an invalid recognition event"), code: "asr_event");return
                 }
                 self.handle(object)
                 if !self.cancelled{self.receive()}
@@ -265,11 +271,11 @@ final class BailianASR {
             IMicLog.write("mac.asr", "sentence ended=\(ended) chars=\(text.count)")
             if ended {
                 guard let id=sentence["sentence_id"] as? Int,id>0 else{return}
-                guard id<=4096,text.count<=24000 else{fail("识别结果过长，请缩短本次录音");return}
+                guard id<=4096,text.count<=24000 else{fail(L10n.text("Recognition result too long. Please make a shorter recording."), code: "asr_long");return}
                 guard results[id] != text else { return }
                 let previous = confirmedText
                 results[id]=text
-                guard results.values.reduce(0,{$0+$1.count})<=24000 else{fail("识别结果过长，请缩短本次录音");return}
+                guard results.values.reduce(0,{$0+$1.count})<=24000 else{fail(L10n.text("Recognition result too long. Please make a shorter recording."), code: "asr_long");return}
                 if id <= confirmedThrough {
                     confirmedText = (1...confirmedThrough).compactMap { results[$0] }.joined()
                 }
@@ -291,21 +297,28 @@ final class BailianASR {
                 onPreview?((confirmedText+text).trimmingCharacters(in:.whitespacesAndNewlines))
             }
         case "task-finished":
-            guard finishSent else{fail("识别任务提前结束，请重试");return}
-            let text=results.keys.sorted().compactMap{results[$0]}.joined(),now=Date()
+            guard finishSent else{fail(L10n.text("Recognition ended early. Please retry."), code: "asr_early");return}
+            guard confirmedThrough == (results.keys.max() ?? 0) else {
+                fail(L10n.text("Recognition ended early. Please retry."), code: "asr_early"); return
+            }
+            let text=confirmedText,now=Date()
             IMicLog.write("mac.asr", "task finished chars=\(text.count) sentences=\(results.count) queued=\(queuedBytes)")
             let latency=endAt.map{now.timeIntervalSince($0)*1000} ?? 0
+            let finalCallback = onFinal
             onMetrics?(ASRMetrics(connectionMS:readyAt.map{$0.timeIntervalSince(startedAt)*1000} ?? 0,
                 queuedAtEndMS:queuedAtEndMS,uploadTailMS:finishAt.flatMap{finish in endAt.map{finish.timeIntervalSince($0)*1000}} ?? 0,
                 serverFinalMS:finishAt.map{now.timeIntervalSince($0)*1000} ?? 0,endToFinalMS:latency,previews:previewCount))
-            cancel();onFinal?(text,latency)
+            cancel();finalCallback?(text,latency)
         case "task-failed":
             // Display bounded code identifiers only; never echo error_message
             // or request payloads, which can contain credential/audio data.
             let raw=header["error_code"] as? String ?? "unknown"
-            let code=String(raw.prefix(64).filter{$0.isASCII && ($0.isLetter || $0.isNumber || $0=="_" || $0=="-" || $0==".")})
+            let safeRaw = raw.hasPrefix("sk-") ? "redacted" : raw
+            let code=String(safeRaw.prefix(64).filter{$0.isASCII && ($0.isLetter || $0.isNumber || $0=="_" || $0=="-" || $0==".")})
             IMicLog.write("mac.asr", "task failed code=\(code) queued=\(queuedBytes)")
-            fail("百炼识别失败（\(code.isEmpty ? "unknown":code)）")
+            let issue = CloudFailure.classify(code: code, message: header["error_message"] as? String ?? "")
+            onFailure?(issue)
+            fail(issue.title(service: L10n.text("Model Studio")), code: issue.linkCode)
         default:break
         }
     }
@@ -313,6 +326,21 @@ final class BailianASR {
         cancelled=true;timer?.invalidate();timer=nil;startupTimer?.invalidate();startupTimer=nil
         completionDeadline=nil;queue.removeAll();queueHead=0;queueOffset=0;queuedBytes=0
         transport?.cancel();transport=nil
+        onPartial=nil;onPreview=nil;onConfirmed=nil;onFinal=nil;onError=nil;onFailure=nil;onMetrics=nil
     }
-    private func fail(_ message:String){guard !cancelled else{return};IMicLog.write("mac.asr", "fail reason=\(message) queued=\(queuedBytes)");cancel();onError?(message)}
+    private func failTransport(_ error: Error) {
+        guard !cancelled else { return }
+        let ns = error as NSError
+        let issue = CloudFailure.classify(status: ns.domain == "iMic.ASR.HTTP" ? ns.code : 0, error: error)
+        onFailure?(issue)
+        fail(issue.title(service: L10n.text("Model Studio")), code: issue.linkCode)
+    }
+    private func fail(_ message:String, code: String = "asr"){
+        guard !cancelled else{return}
+        IMicLog.write("mac.asr", "fail reason=\(message) queued=\(queuedBytes)")
+        failureCode = code
+        let errorCallback = onError
+        cancel()
+        errorCallback?(message)
+    }
 }

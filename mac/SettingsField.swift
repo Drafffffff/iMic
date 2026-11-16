@@ -1,0 +1,123 @@
+import AppKit
+
+/// A text draft has its own field and baseline, separate from the running ASR config.
+final class SettingsField: NSStackView, NSTextFieldDelegate {
+    let id: String
+    let title: String
+    let secure: Bool
+    private let concealed: NSTextField
+    private let revealed = NSTextField()
+    let saveButton = NSButton(title: L10n.text("Verify and save"), target: nil, action: nil)
+    private let eye = NSButton()
+    let feedback = NSTextField(wrappingLabelWithString: "")
+    let source = NSTextField(wrappingLabelWithString: "")
+    private var showing = false
+    private(set) var baseline: String
+    var task: URLSessionDataTask?
+    var discovery: BailianDiscovery?
+    var debounce: DispatchWorkItem?
+    var generation = UUID()
+    var onSave: ((SettingsField, @escaping (Bool) -> Void) -> Void)?
+    var onEdit: (() -> Void)?
+    var dirty: Bool { value != baseline }
+    var value: String {
+        get {
+            let text = (showing ? revealed : concealed).stringValue
+            return id == "bailian.key" ? ShellCredentials.clean(text) : text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        set { concealed.stringValue = newValue; revealed.stringValue = newValue }
+    }
+
+    init(id: String, title: String, value: String, secure: Bool = false) {
+        self.id = id; self.title = title; self.secure = secure; self.baseline = value
+        concealed = secure ? NSSecureTextField() : NSTextField()
+        super.init(frame: .zero)
+        orientation = .vertical; alignment = .leading; spacing = 6; detachesHiddenViews = true
+        let heading = NSTextField(labelWithString: title)
+        heading.font = .systemFont(ofSize: 12, weight: .medium); heading.textColor = .imicIvory
+        let fields = NSStackView(views: [concealed, revealed])
+        fields.orientation = .horizontal; fields.spacing = 0; fields.detachesHiddenViews = true
+        revealed.isHidden = true
+        for field in [concealed, revealed] {
+            field.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+            field.bezelStyle = .roundedBezel; field.delegate = self
+            field.configureSingleLineInput()
+            field.target = self; field.action = #selector(saveAction)
+            field.setAccessibilityLabel(title)
+            field.heightAnchor.constraint(equalToConstant: 28).isActive = true
+            field.setContentHuggingPriority(.init(1), for: .horizontal)
+        }
+        self.value = value
+        eye.image = NSImage(systemSymbolName: "eye", accessibilityDescription: L10n.text("Show Key"))
+        eye.bezelStyle = .inline; eye.target = self; eye.action = #selector(toggleReveal)
+        eye.setAccessibilityLabel(L10n.text("Show %@", L10n.argument(title))); eye.isHidden = !secure
+        eye.widthAnchor.constraint(equalToConstant: 26).isActive = true
+        saveButton.bezelStyle = .rounded; saveButton.controlSize = .small
+        saveButton.target = self; saveButton.action = #selector(saveAction)
+        saveButton.setAccessibilityLabel(L10n.text("Verify and save %@", L10n.argument(title)))
+        let controls = NSStackView(views: [fields, eye, saveButton])
+        controls.orientation = .horizontal; controls.spacing = 8; controls.alignment = .centerY
+        for label in [feedback, source] {
+            label.font = .systemFont(ofSize: 10); label.textColor = .imicMuted
+            label.maximumNumberOfLines = 0; label.preferredMaxLayoutWidth = 512
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
+        for view in [heading, controls, source, feedback] { addArrangedSubview(view) }
+        for view in [controls, source, feedback] { view.widthAnchor.constraint(equalTo: widthAnchor).isActive = true }
+        source.isHidden = true
+        updateButton()
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    func setEditable(_ value: Bool) {
+        concealed.isEditable = value; revealed.isEditable = value
+    }
+    func markSaved(_ value: String) {
+        baseline = value; self.value = value; updateButton()
+    }
+    func cancel() { discovery?.cancel(); discovery = nil; debounce?.cancel(); debounce = nil; task?.cancel(); task = nil; generation = UUID(); saveButton.isEnabled = true }
+    func reset() { cancel(); value = baseline; hideKey(); feedback.stringValue = ""; updateButton() }
+    func hideKey() {
+        guard showing else { return }
+        value = revealed.stringValue; showing = false
+        revealed.isHidden = true; concealed.isHidden = false
+        eye.image = NSImage(systemSymbolName: "eye", accessibilityDescription: L10n.text("Show Key"))
+        eye.setAccessibilityLabel(L10n.text("Show %@", L10n.argument(title)))
+    }
+    func message(_ text: String, error: Bool = false) {
+        feedback.stringValue = text; feedback.textColor = error ? .systemRed : .imicMuted
+        updateButton()
+    }
+    func updateButton() {
+        saveButton.title = dirty ? L10n.text("Verify and save") : L10n.text("Verify")
+        saveButton.bezelColor = dirty ? .imicOrange : nil
+    }
+    func controlTextDidChange(_ notification: Notification) {
+        let text = (notification.object as? NSTextField)?.stringValue ?? value
+        cancel(); value = text; message(dirty ? L10n.text("Not saved") : ""); onEdit?()
+    }
+    @objc func saveAction() { save { _ in } }
+    func save(_ completion: @escaping (Bool) -> Void) { onSave?(self, completion) }
+    @objc private func toggleReveal() {
+        let current = value
+        value = current; showing.toggle()
+        concealed.isHidden = showing; revealed.isHidden = !showing
+        eye.image = NSImage(systemSymbolName: showing ? "eye.slash" : "eye", accessibilityDescription: nil)
+        eye.setAccessibilityLabel(L10n.text("%@ %@", L10n.argument(showing ? L10n.text("Hide") : L10n.text("Show")), L10n.argument(title)))
+        window?.makeFirstResponder(showing ? revealed : concealed)
+    }
+}
+
+// Configure the cell as well as the field: secure cells otherwise wrap long masks.
+extension NSTextField {
+    func configureSingleLineInput() {
+        maximumNumberOfLines = 1
+        cell?.wraps = false
+        cell?.isScrollable = true
+        cell?.usesSingleLineMode = true
+        cell?.lineBreakMode = .byClipping
+        textColor = .imicIvory
+        drawsBackground = true
+        backgroundColor = .imicCard
+    }
+}

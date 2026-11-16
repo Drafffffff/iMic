@@ -1,7 +1,143 @@
 import AppKit
+import ApplicationServices
 import XCTest
 
 final class PolishEffectTests: XCTestCase {
+    func testProtectionScanDistinguishesMissingAttributesFromReadFailures() {
+        typealias Attribute = PolishCaptureSafety.Attribute
+        let role = Attribute(value: "AXTextField" as CFString, error: .success)
+        let missing = Attribute(value: nil, error: .attributeUnsupported)
+        let noValue = Attribute(value: nil, error: .noValue)
+        let children = Attribute(value: [] as CFArray, error: .success)
+        let unprotected = Attribute(value: kCFBooleanFalse, error: .success)
+        XCTAssertTrue(PolishCaptureSafety.readableNode(role: role, subrole: missing, protectedContent: unprotected, children: children))
+        XCTAssertTrue(PolishCaptureSafety.readableNode(role: role, subrole: noValue, protectedContent: missing, children: missing))
+        for error in [AXError.cannotComplete, .invalidUIElement, .failure, .apiDisabled] {
+            let failed = Attribute(value: nil, error: error)
+            // A readable role does not prove that an unread child tree is empty,
+            // or that inaccessible protection/subrole flags are false.
+            XCTAssertFalse(PolishCaptureSafety.readableNode(role: role, subrole: missing, protectedContent: unprotected, children: failed))
+            XCTAssertFalse(PolishCaptureSafety.readableNode(role: role, subrole: failed, protectedContent: unprotected, children: children))
+            XCTAssertFalse(PolishCaptureSafety.readableNode(role: role, subrole: missing, protectedContent: failed, children: children))
+        }
+        XCTAssertFalse(PolishCaptureSafety.readableNode(role: missing, subrole: missing, protectedContent: missing, children: missing))
+        XCTAssertFalse(PolishCaptureSafety.readableNode(role: role, subrole: missing, protectedContent: unprotected,
+            children: Attribute(value: "not an AX children array" as CFString, error: .success)))
+        XCTAssertFalse(PolishCaptureSafety.readableNode(role: role, subrole: missing, protectedContent: unprotected,
+            children: Attribute(value: ["not an AX element"] as CFArray, error: .success)))
+    }
+
+    func testBatchedAXErrorsPreserveFailureReason() throws {
+        for expected in [AXError.cannotComplete, .invalidUIElement, .attributeUnsupported, .noValue] {
+            var raw = expected
+            let encoded = try XCTUnwrap(AXValueCreate(.axError, &raw))
+            let decoded = PolishCaptureSafety.Attribute.batched(encoded)
+            XCTAssertEqual(decoded.error, expected)
+            XCTAssertNil(decoded.value)
+        }
+        let role = PolishCaptureSafety.Attribute.batched("AXTextField" as CFString)
+        XCTAssertEqual(role.error, .success)
+        XCTAssertEqual(role.value as? String, "AXTextField")
+    }
+
+    func testCaptureRejectsFallbackWindowOutsideScannedRoot() throws {
+        let root = CGRect(x: 100, y: 100, width: 600, height: 400)
+        let overlapping = root.offsetBy(dx: 30, dy: 20)
+        // choose intentionally supports a geometry fallback for AX animation;
+        // that fallback must never inherit a different window's screenshot trust.
+        let selected = try XCTUnwrap(PolishWindowSelection.choose([
+            .init(id: 7, pid: 42, frame: overlapping, layer: 0, visible: true)
+        ], pid: 42, preferred: root))
+        XCTAssertFalse(PolishCaptureSafety.matchesScannedWindow(selected: selected.frame, scanned: root))
+        XCTAssertFalse(PolishCaptureSafety.matchesScannedWindow(selected: root, scanned: nil))
+        XCTAssertTrue(PolishCaptureSafety.matchesScannedWindow(selected: root, scanned: root))
+        XCTAssertTrue(PolishCaptureSafety.matchesScannedWindow(selected: root.offsetBy(dx: 0.5, dy: 0.5), scanned: root))
+    }
+
+    func testWindowCaptureRequiresCompleteProtectionScan() {
+        // Captured field is early in the tree; an unread sibling may be a secure field.
+        XCTAssertFalse(PolishCaptureSafety.allowsCapture(hasWindow: true, visited: 2, discovered: 3, protectedSeen: false, unreadableSeen: false))
+        // Both node and time budget exhaustion leave undiscovered protection unknown.
+        XCTAssertFalse(PolishCaptureSafety.allowsCapture(hasWindow: true, visited: 2_000, discovered: 2_001, protectedSeen: false, unreadableSeen: false))
+        XCTAssertFalse(PolishCaptureSafety.allowsCapture(hasWindow: true, visited: 3, discovered: 3, protectedSeen: true, unreadableSeen: false))
+        XCTAssertFalse(PolishCaptureSafety.allowsCapture(hasWindow: true, visited: 3, discovered: 3, protectedSeen: false, unreadableSeen: true))
+        XCTAssertFalse(PolishCaptureSafety.allowsCapture(hasWindow: false, visited: 1, discovered: 1, protectedSeen: false, unreadableSeen: false))
+        XCTAssertTrue(PolishCaptureSafety.allowsCapture(hasWindow: true, visited: 3, discovered: 3, protectedSeen: false, unreadableSeen: false))
+    }
+
+    func testOverlayFrameNeverMovesToFitTheVisibleWorkArea() {
+        _ = NSApplication.shared
+        let rect = NSRect(x: -2568, y: 21, width: 2576, height: 1343)
+        let panel = SweepPanel(contentRect: rect, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.isReleasedWhenClosed = false
+        XCTAssertEqual(panel.constrainFrameRect(rect, to: NSScreen.screens.last), rect)
+        XCTAssertFalse(panel.canBecomeKey); XCTAssertFalse(panel.canBecomeMain)
+        XCTAssertFalse(panel.isVisible, "A geometry test must not open a foreground window")
+        panel.close()
+    }
+    func testInitialAndFinalRowsUseTheActualSecondaryScreenPanelOrigin() {
+        let screenTop: CGFloat = 1440
+        let glyph = CGRect(x: -2266, y: 1287, width: 346, height: 17)
+        let requested = CGRect(x: -2568, y: 21, width: 2576, height: 1343)
+        let displaced = requested.offsetBy(dx: 0, dy: -8)
+        let initial = SweepPanelCoordinates.row(glyph, panel: requested, screenTop: screenTop)
+        let final = SweepPanelCoordinates.row(glyph, panel: displaced, screenTop: screenTop)
+        XCTAssertEqual(initial.minY+requested.minY, final.minY+displaced.minY)
+        XCTAssertEqual(screenTop-(initial.maxY+requested.minY), glyph.minY)
+        let wrongScreenY = screenTop-(initial.maxY+displaced.minY)
+        XCTAssertEqual(wrongScreenY-glyph.minY, 8, "Using the requested origin after AppKit shifts the panel reproduces the initial downward offset")
+        let point = SweepPanelCoordinates.point(CGPoint(x: glyph.maxX, y: glyph.midY), panel: displaced, screenTop: screenTop)
+        XCTAssertEqual(point.x+displaced.minX, glyph.maxX)
+        XCTAssertEqual(screenTop-point.y-displaced.minY, glyph.midY)
+    }
+
+    func testBottomAnchoredShrinkFollowsTheVisibleTopInsteadOfTheBottom() {
+        let old = CGRect(x: 20, y: 300, width: 500, height: 90)
+        let new = CGRect(x: 25, y: 330, width: 500, height: 60)
+        let delta = FieldFollow.delta(from: old, to: new)
+        XCTAssertEqual(delta.dx, 5); XCTAssertEqual(delta.dy, 30)
+        // An underline under row 1 must move down with the new top edge.
+        XCTAssertEqual(CGRect(x: 30, y: 310, width: 100, height: 20).offsetBy(dx: delta.dx, dy: delta.dy).minY, 340)
+        XCTAssertEqual(FieldFollow.delta(from: old, to: CGRect(x: 20, y: 300, width: 500, height: 160)).dy, 0)
+    }
+    func testFieldResizeIsFollowableButWindowReplacementIsFatal() {
+        let old = FieldFollow.Geometry(windowID: 1, window: CGRect(x: 0, y: 0, width: 800, height: 600),
+            element: CGRect(x: 20, y: 300, width: 500, height: 90), visible: CGRect(x: 20, y: 300, width: 500, height: 90))
+        var new = old; new.element.origin.y += 30; new.visible.origin.y += 30; new.element.size.height -= 30
+        XCTAssertEqual(FieldFollow.classify(old: old, new: new), .followable)
+        new = old; new.windowID = 2
+        XCTAssertEqual(FieldFollow.classify(old: old, new: new), .fatal)
+        new = old; new.window.origin.y += 30
+        XCTAssertEqual(FieldFollow.classify(old: old, new: new), .fatal)
+        XCTAssertEqual(FieldFollow.classify(old: old, new: nil), .fatal)
+    }
+    func testAnimatedGeometryResetsStabilityAndBoundsTheVisualDeadline() {
+        var geometry = FieldFollow.Geometry(windowID: 1, window: CGRect(x: 0, y: 0, width: 800, height: 600),
+            element: CGRect(x: 20, y: 300, width: 500, height: 90), visible: CGRect(x: 20, y: 300, width: 500, height: 90))
+        var tracker = FieldFollow.Stability()
+        tracker.observe(geometry, at: 0)
+        tracker.observe(geometry, at: 0.03)
+        XCTAssertNil(tracker.stableSince)
+        tracker.observe(geometry, at: 0.06)
+        XCTAssertEqual(tracker.stableSince, 0.06)
+        XCTAssertEqual(tracker.deadline(start: 0), 0.36, accuracy: 0.001)
+        geometry.visible.origin.y += 1
+        tracker.observe(geometry, at: 0.09)
+        XCTAssertNil(tracker.stableSince)
+        XCTAssertEqual(tracker.deadline(start: 0), 0.9)
+        tracker.observe(geometry, at: 0.85); tracker.observe(geometry, at: 0.88)
+        XCTAssertEqual(tracker.deadline(start: 0), 0.9)
+    }
+    func testEstimateUsesLatestFieldOriginExactlyOnceAfterFollowing() {
+        let old = CGRect(x: 20, y: 100, width: 120, height: 90)
+        let new = CGRect(x: 30, y: 130, width: 120, height: 60)
+        let rows = [CGRect(x: 30, y: 110, width: 70, height: 20), CGRect(x: 30, y: 135, width: 70, height: 20)]
+        let estimate = PolishEndpointEstimate.layout(original: String(repeating: "字", count: 14), final: "字字字", rows: rows,
+            field: new, referenceField: old)
+        XCTAssertEqual(estimate.first?.minX, 40)
+        XCTAssertEqual(estimate.first?.minY, 140)
+    }
+
     func testWindowFallbackIncludesFloatingDialogButNeverOtherApp() {
         let main = PolishWindowSelection.Candidate(id: 1, pid: 10, frame: CGRect(x: 0, y: 0, width: 800, height: 600), layer: 0, visible: true)
         let dialog = PolishWindowSelection.Candidate(id: 2, pid: 10, frame: CGRect(x: 100, y: 100, width: 400, height: 200), layer: 8, visible: true)
@@ -228,14 +364,21 @@ final class PolishEffectTests: XCTestCase {
     }
     func testLinesShareParagraphHeightAndSnapContinuationIndent() {
         let rows = [CGRect(x: 32, y: 100, width: 260, height: 20),   // first-line indent kept
-                    CGRect(x: 21, y: 125, width: 280, height: 16),   // OCR jitter on left/height
-                    CGRect(x: 20, y: 148, width: 90, height: 18)]
+                    CGRect(x: 21, y: 130, width: 280, height: 16),   // OCR jitter on left/height
+                    CGRect(x: 20, y: 156, width: 90, height: 18)]
         let lines = SweepLineLayout.lines(in: rows)
         XCTAssertEqual(lines.map(\.height), [18, 18, 18])
         XCTAssertEqual(lines.map(\.maxY), rows.map(\.maxY))
         XCTAssertEqual(lines[0].minX, 32)
         XCTAssertEqual(lines[1].minX, 20)
         XCTAssertEqual(lines[1].maxX, rows[1].maxX)
+    }
+    func testTightLineSpacingKeepsRailsOffTheNextLine() {
+        let rows = [CGRect(x: 20, y: 100, width: 300, height: 24), CGRect(x: 20, y: 126, width: 200, height: 24)]
+        let lines = SweepLineLayout.lines(in: rows)
+        XCTAssertEqual(lines[1].minY-lines[0].maxY, 6, accuracy: 0.01)
+        XCTAssertEqual(lines[0].minY, 100)
+        XCTAssertEqual(lines[1], rows[1])
     }
     func testStrokeFollowsTextSize() {
         XCTAssertEqual(SweepLineLayout.stroke(lineHeight: 11), 1)
@@ -279,6 +422,75 @@ final class PolishEffectTests: XCTestCase {
         XCTAssertEqual(segment(19, 4)?.1, false)
         XCTAssertEqual(segment(23, 7)?.1, true)
         XCTAssertNil(TextLineSegment.visible(NSRange(location: 0, length: 4), in: "   \n" as NSString))
+    }
+    func testMisreadEndsStillCoverTheWholeLine() {
+        // OCR misreads the first two and last two characters of the line.
+        let text = "哎我来试试在这里输入的效果呢请再验证一次OCR的位置是否正确"
+        let ocr = "哀，戎来试试在这里输入的效果呢。请再验证一次 OCR 的位置是否正嗬。"
+        let match = TextRegionMatcher.locate(expected: text, fragments: [ocr], fieldScoped: true)
+        XCTAssertEqual(match?.spans, [TextRegionMatcher.Span(fragment: 0, range: NSRange(location: 0, length: (ocr as NSString).length))])
+        XCTAssertEqual(match?.includesEnd, true)
+    }
+    func testDraftBeforeTranscriptOnSameLineIsNotCovered() {
+        let draft = "原稿开头的文字，"
+        let text = "这是本轮新输入的一段文字需要准确定位"
+        let match = TextRegionMatcher.locate(expected: text, fragments: [draft+text+"。"], fieldScoped: true)
+        XCTAssertEqual(match?.spans.first?.range.location, (draft as NSString).length)
+        XCTAssertEqual(NSMaxRange(match!.spans[0].range), (draft+text+"。" as NSString).length)
+    }
+    func testShortTranscriptMatchesOnlyAUniqueExactOccurrenceInsideAField() {
+        XCTAssertEqual(TextRegionMatcher.locate(expected: "好的", fragments: ["搜索：好的"], fieldScoped: true)?.spans.first?.range,
+                       NSRange(location: 3, length: 2))
+        XCTAssertNil(TextRegionMatcher.locate(expected: "好的", fragments: ["好的，好的"], fieldScoped: true))
+        XCTAssertNil(TextRegionMatcher.locate(expected: "好的", fragments: ["搜索：好的"]))
+        XCTAssertNil(TextRegionMatcher.locate(expected: "好", fragments: ["好"], fieldScoped: true))
+    }
+    func testWindowOCRIgnoresLineNumberGutter() {
+        let lines = ["今天下午三点开会讨论输入框动画", "的细节以及终端里的下划线位置", "最后统一替换成整理后的内容"]
+        let fragments = ["12", lines[0], "13", lines[1], "14", lines[2]]
+        let match = TextRegionMatcher.locate(expected: lines.joined(), fragments: fragments)
+        XCTAssertEqual(match?.spans.map(\.fragment), [1, 3, 5])
+        XCTAssertEqual(TextRegionMatcher.locate(expected: "好的呀", fragments: ["7", "回复：好的呀"])?.spans.first?.fragment, 1)
+        XCTAssertNil(TextRegionMatcher.locate(expected: "好的", fragments: ["回复：好的"]))
+    }
+    /// A white canvas with dark "glyph" blocks; returns the image and helpers.
+    private func canvas(width: Int, height: Int, glyphs: [CGRect]) -> InkImage {
+        var pixels = [UInt8](repeating: 250, count: width*height)
+        for glyph in glyphs {
+            for y in Int(glyph.minY)..<Int(glyph.maxY) { for x in Int(glyph.minX)..<Int(glyph.maxX) { pixels[y*width+x] = 30 } }
+        }
+        return InkImage(pixels: pixels, width: width, height: height)
+    }
+    func testInkBoundsSnapsFloatingOCRBoxToGlyphs() {
+        // Glyph band y 40..<60, x 20..<200; Vision's box floats 6px low and 10px wide.
+        let image = canvas(width: 300, height: 120, glyphs: [CGRect(x: 20, y: 40, width: 180, height: 20)])
+        let box = CGRect(x: 14, y: 46, width: 196, height: 22)
+        let refined = InkBounds.refine(box, in: image, window: 20...90)
+        XCTAssertEqual(refined, CGRect(x: 20, y: 40, width: 180, height: 20))
+    }
+    func testInkBoundsStaysOffNeighbouringLines() {
+        let image = canvas(width: 300, height: 140, glyphs: [CGRect(x: 20, y: 20, width: 200, height: 20),
+                                                             CGRect(x: 20, y: 50, width: 150, height: 20),
+                                                             CGRect(x: 20, y: 80, width: 180, height: 20)])
+        let middle = InkBounds.refine(CGRect(x: 18, y: 52, width: 160, height: 22), in: image, window: 45...75)
+        XCTAssertEqual(middle, CGRect(x: 20, y: 50, width: 150, height: 20))
+    }
+    func testInkBoundsRecoversClippedTrailingGlyphOnlyAtLineEnd() {
+        // Text 20..<160 plus a separate trailing 。 at 166..<174 that OCR clipped.
+        let image = canvas(width: 300, height: 100, glyphs: [CGRect(x: 20, y: 30, width: 140, height: 20),
+                                                             CGRect(x: 166, y: 42, width: 8, height: 8)])
+        let box = CGRect(x: 20, y: 30, width: 140, height: 20)
+        XCTAssertEqual(InkBounds.refine(box, in: image, window: 10...70, extendRight: true)?.maxX, 174)
+        XCTAssertEqual(InkBounds.refine(box, in: image, window: 10...70)?.maxX, 160)
+    }
+    func testInkBoundsWorksOnDarkBackgroundsAndRejectsEmptyBoxes() {
+        var pixels = [UInt8](repeating: 20, count: 200*80)
+        for y in 30..<46 { for x in 40..<150 { pixels[y*200+x] = 230 } }
+        let dark = InkImage(pixels: pixels, width: 200, height: 80)
+        XCTAssertEqual(InkBounds.refine(CGRect(x: 36, y: 33, width: 120, height: 18), in: dark, window: 10...70),
+                       CGRect(x: 40, y: 30, width: 110, height: 16))
+        let blank = canvas(width: 200, height: 80, glyphs: [])
+        XCTAssertNil(InkBounds.refine(CGRect(x: 36, y: 33, width: 120, height: 18), in: blank, window: 10...70))
     }
     func testRowStaggerIsOrderedAndHandoffRemainsBounded() {
         for count in [1, 3, 8, 40] {
@@ -341,7 +553,8 @@ final class PolishEffectTests: XCTestCase {
         let text = String(repeating: "这部分已经滚出输入框的可见区域。", count: 300)+suffix
         let result = TextRegionMatcher.match(expected: text, fragments: ["旧草稿的尾部", suffix])
         XCTAssertEqual(result?.map(\.fragment), [1])
-        XCTAssertEqual(result?.last?.range.length, (suffix as NSString).length-1)
+        // The line has no letters after the transcript: the span snaps to the line end, period included.
+        XCTAssertEqual(result?.last?.range.length, (suffix as NSString).length)
     }
     func testOnlyVisibleSuffixOfLongTranscriptCanBeMatched() {
         let suffix = "这是当前输入框最后可见的文字需要保留完整的逐行区域并在润色结束后播放扫光"

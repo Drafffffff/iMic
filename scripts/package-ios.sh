@@ -33,6 +33,8 @@ mkdir -p "$WORK/source/ios" "$WORK/package/Payload"
 cp "$ROOT/ios/project.yml" "$WORK/source/ios/project.yml"
 cp "$ROOT/ios/Info.plist" "$WORK/source/ios/Info.plist"
 /usr/bin/ditto "$ROOT/shared" "$WORK/source/shared"
+cp "$ROOT/LICENSE" "$ROOT/THIRD_PARTY_NOTICES.md" "$WORK/source/"
+/usr/bin/ditto "$ROOT/licenses" "$WORK/source/licenses"
 # The generated scheme also references the development-only UI test target.
 # Keep its sources available to XcodeGen; they are not bundled in the Release app.
 /usr/bin/ditto "$ROOT/tests/iOSUI" "$WORK/source/tests/iOSUI"
@@ -111,10 +113,6 @@ if /usr/bin/codesign -d "$APP" >/dev/null 2>&1; then
 fi
 
 /usr/bin/ditto "$APP" "$WORK/package/Payload/iMic.app"
-LEGAL="$WORK/package/Payload/iMic.app/Legal"
-mkdir -p "$LEGAL"
-cp "$ROOT/LICENSE" "$ROOT/THIRD_PARTY_NOTICES.md" "$LEGAL/"
-/usr/bin/ditto "$ROOT/licenses" "$LEGAL/licenses"
 /usr/bin/ditto -c -k --norsrc --noextattr --noqtn --keepParent \
   "$WORK/package/Payload" "$WORK/$IPA_NAME"
 mv -f "$WORK/$IPA_NAME" "$OUTPUT_DIR/$IPA_NAME"
