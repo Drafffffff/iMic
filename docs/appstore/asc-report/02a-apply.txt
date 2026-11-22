@@ -1,0 +1,55 @@
+Identity verified: App 6829771739, bundleId art.malette.imic.app, primaryLocale zh-Hans; Key ID 0N62MERQLNT3
+Field lengths: {"zh-Hans": {"name": {"length": 13, "limit": 30}, "subtitle": {"length": 16, "limit": 30}, "promotionalText": {"length": 68, "limit": 170}, "keywords": {"length": 56, "limit": 100}, "description": {"length": 629, "limit": 4000}}, "en-US": {"name": {"length": 22, "limit": 30}, "subtitle": {"length": 27, "limit": 30}, "promotionalText": {"length": 166, "limit": 170}, "keywords": {"length": 97, "limit": 100}, "description": {"length": 1551, "limit": 4000}}}
+AppInfo.zh-Hans.name: "iMic" → "VoxChord 语音输入"
+AppInfo.zh-Hans.subtitle: null → "按住说话，字落进 Mac 输入框"
+AppInfo.zh-Hans.privacyPolicyUrl: null → "https://github.com/Drafffffff/iMic/blob/"… (length=60)
+AppInfo.en-US.name: null → "VoxChord: Voice Typing"
+AppInfo.en-US.subtitle: null → "Hold to speak. Type on Mac."
+AppInfo.en-US.privacyPolicyUrl: null → "https://github.com/Drafffffff/iMic/blob/"… (length=60)
+primaryCategory: null → "PRODUCTIVITY"
+secondaryCategory: null → "UTILITIES"
+AgeRating.advertising: null → false
+AgeRating.datingAndRelationships: null → false
+AgeRating.gambling: null → false
+AgeRating.healthOrWellnessTopics: null → false
+AgeRating.lootBox: null → false
+AgeRating.messagingAndChat: null → false
+AgeRating.parentalControls: null → false
+AgeRating.ageAssurance: null → false
+AgeRating.sharedLocation: null → false
+AgeRating.socialMedia: null → false
+AgeRating.socialMediaAgeRestricted: null → false
+AgeRating.unrestrictedWebAccess: null → false
+AgeRating.userGeneratedContent: null → false
+AgeRating.alcoholTobaccoOrDrugUseOrReferences: null → "NONE"
+AgeRating.contests: null → "NONE"
+AgeRating.gamblingSimulated: null → "NONE"
+AgeRating.gunsOrOtherWeapons: null → "NONE"
+AgeRating.medicalOrTreatmentInformation: null → "NONE"
+AgeRating.profanityOrCrudeHumor: null → "NONE"
+AgeRating.sexualContentGraphicAndNudity: null → "NONE"
+AgeRating.sexualContentOrNudity: null → "NONE"
+AgeRating.horrorOrFearThemes: null → "NONE"
+AgeRating.matureOrSuggestiveThemes: null → "NONE"
+AgeRating.violenceCartoonOrFantasy: null → "NONE"
+AgeRating.violenceRealisticProlongedGraphicOrSadistic: null → "NONE"
+AgeRating.violenceRealistic: null → "NONE"
+AgeRating.ageRatingOverrideV2: "NONE" (unchanged)
+AgeRating.koreaAgeRatingOverride: "NONE" (unchanged)
+Absent optional resource /v1/appPriceSchedules/6829771739/manualPrices: HTTP 404: [{"code": "NOT_FOUND", "title": "The specified resource does not exist", "detail": "There is no resource of type 'null' with id '6829771739'"}]
+Price: null → "free (base territory USA)"
+Absent optional resource /v1/apps/6829771739/appAvailabilityV2: HTTP 404: [{"code": "NOT_FOUND", "title": "The specified resource does not exist", "detail": "There is no resource of type 'appAvailabilities' with id '6829771739'"}]
+Territories.count: 0 → 174
+Territories.excluded: ["AFG", "AGO", "AIA", "ALB", "ARE", "ARG", "ARM", "ATG", "AUS", "AUT", "AZE", "BEL", "BEN", "BFA", "BGR", "BHR", "BHS", "BIH", "BLR", "BLZ", "BMU", "BOL", "BRA", "BRB", "BRN", "BTN", "BWA", "CAN", "CHE", "CHL", "CHN", "CIV", "CMR", "COD", "COG", "COL", "CPV", "CRI", "CYM", "CYP", "CZE", "DEU", "DMA", "DNK", "DOM", "DZA", "ECU", "EGY", "ESP", "EST", "FIN", "FJI", "FRA", "FSM", "GAB", "GBR", "GEO", "GHA", "GMB", "GNB", "GRC", "GRD", "GTM", "GUY", "HKG", "HND", "HRV", "HUN", "IDN", "IND", "IRL", "IRQ", "ISL", "ISR", "ITA", "JAM", "JOR", "JPN", "KAZ", "KEN", "KGZ", "KHM", "KNA", "KOR", "KWT", "LAO", "LBN", "LBR", "LBY", "LCA", "LKA", "LTU", "LUX", "LVA", "MAC", "MAR", "MDA", "MDG", "MDV", "MEX", "MKD", "MLI", "MLT", "MMR", "MNE", "MNG", "MOZ", "MRT", "MSR", "MUS", "MWI", "MYS", "NAM", "NER", "NGA", "NIC", "NLD", "NOR", "NPL", "NRU", "NZL", "OMN", "PAK", "PAN", "PER", "PHL", "PLW", "PNG", "POL", "PRT", "PRY", "QAT", "ROU", "RUS", "RWA", "SAU", "SEN", "SGP", "SLB", "SLE", "SLV", "SRB", "STP", "SUR", "SVK", "SVN", "SWE", "SWZ", "SYC", "TCA", "TCD", "THA", "TJK", "TKM", "TON", "TTO", "TUN", "TUR", "TWN", "TZA", "UGA", "UKR", "URY", "USA", "UZB", "VCT", "VEN", "VGB", "VNM", "VUT", "XKS", "YEM", "ZAF", "ZMB", "ZWE"] → ["CHN"]
+Territories.availableInNewTerritories: null → true
+Version.versionString: "1.0" → "1.4.9"
+Version.copyright: null → "2026 KE CHENG"
+Version.build: null → "7b4a50ec-bbe3-4b44-b9eb-dc159d1002c3"
+VersionLocalization.zh-Hans.description: null → "一只手机，接管所有输入。\n\nVoxChord 把 iPhone 变成 Mac 的"… (length=629)
+VersionLocalization.zh-Hans.keywords: null → "语音输入,听写,语音转文字,Mac,键盘,远程输入,AI润色,Agent,终端,"… (length=56)
+VersionLocalization.zh-Hans.promotionalText: null → "给 Agent 下指令、写文档、回消息，都不用再敲键盘。按住 iPhone 说话"… (length=68)
+VersionLocalization.zh-Hans.supportUrl: null → "https://drafffffff.github.io/iMic/"
+VersionLocalization.zh-Hans.marketingUrl: null → "https://drafffffff.github.io/iMic/"
+VersionLocalization.zh-Hans.whatsNew: null → "VoxChord 首次上架 App Store。按住说话、琴弦手势、AI 润色、"… (length=50)
+VersionLocalization.zh-Hans: HTTP 409: [{"code": "STATE_ERROR", "title": "The request cannot be fulfilled because of the state of another resource.", "detail": "Attribute 'whatsNew' cannot be edited at this time"}]
+STOPPED: HTTP 409: [{"code": "STATE_ERROR", "title": "The request cannot be fulfilled because of the state of another resource.", "detail": "Attribute 'whatsNew' cannot be edited at this time"}]
