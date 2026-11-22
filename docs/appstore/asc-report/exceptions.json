@@ -1,0 +1,22 @@
+{
+  "284484cf-6c76-4821-9eab-568adbe8ea2e.zh-Hans.whatsNew": {
+    "field": "whatsNew",
+    "errors": [
+      {
+        "code": "STATE_ERROR",
+        "title": "The request cannot be fulfilled because of the state of another resource.",
+        "detail": "Attribute 'whatsNew' cannot be edited at this time"
+      }
+    ]
+  },
+  "284484cf-6c76-4821-9eab-568adbe8ea2e.en-US.whatsNew": {
+    "field": "whatsNew",
+    "errors": [
+      {
+        "code": "STATE_ERROR",
+        "title": "The request cannot be fulfilled because of the state of another resource.",
+        "detail": "Attribute 'whatsNew' cannot be edited at this time"
+      }
+    ]
+  }
+}

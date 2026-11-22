@@ -1,0 +1,104 @@
+Identity verified: App 6829771739, bundleId art.malette.imic.app, primaryLocale zh-Hans; Key ID 0N62MERQLNT3
+Field lengths: {"zh-Hans": {"name": {"length": 13, "limit": 30}, "subtitle": {"length": 16, "limit": 30}, "promotionalText": {"length": 68, "limit": 170}, "keywords": {"length": 56, "limit": 100}, "description": {"length": 629, "limit": 4000}}, "en-US": {"name": {"length": 22, "limit": 30}, "subtitle": {"length": 27, "limit": 30}, "promotionalText": {"length": 166, "limit": 170}, "keywords": {"length": 97, "limit": 100}, "description": {"length": 1551, "limit": 4000}}}
+AppInfo.zh-Hans.name: "VoxChord 语音输入" (unchanged)
+AppInfo.zh-Hans.subtitle: "按住说话，字落进 Mac 输入框" (unchanged)
+AppInfo.zh-Hans.privacyPolicyUrl: "https://github.com/Drafffffff/iMic/blob/"… (length=60) (unchanged)
+AppInfo.en-US.name: "VoxChord: Voice Typing" (unchanged)
+AppInfo.en-US.subtitle: "Hold to speak. Type on Mac." (unchanged)
+AppInfo.en-US.privacyPolicyUrl: "https://github.com/Drafffffff/iMic/blob/"… (length=60) (unchanged)
+primaryCategory: "PRODUCTIVITY" (unchanged)
+secondaryCategory: "UTILITIES" (unchanged)
+AgeRating.advertising: false (unchanged)
+AgeRating.datingAndRelationships: false (unchanged)
+AgeRating.gambling: false (unchanged)
+AgeRating.healthOrWellnessTopics: false (unchanged)
+AgeRating.lootBox: false (unchanged)
+AgeRating.messagingAndChat: false (unchanged)
+AgeRating.parentalControls: false (unchanged)
+AgeRating.ageAssurance: false (unchanged)
+AgeRating.sharedLocation: false (unchanged)
+AgeRating.socialMedia: false (unchanged)
+AgeRating.socialMediaAgeRestricted: false (unchanged)
+AgeRating.unrestrictedWebAccess: false (unchanged)
+AgeRating.userGeneratedContent: false (unchanged)
+AgeRating.alcoholTobaccoOrDrugUseOrReferences: "NONE" (unchanged)
+AgeRating.contests: "NONE" (unchanged)
+AgeRating.gamblingSimulated: "NONE" (unchanged)
+AgeRating.gunsOrOtherWeapons: "NONE" (unchanged)
+AgeRating.medicalOrTreatmentInformation: "NONE" (unchanged)
+AgeRating.profanityOrCrudeHumor: "NONE" (unchanged)
+AgeRating.sexualContentGraphicAndNudity: "NONE" (unchanged)
+AgeRating.sexualContentOrNudity: "NONE" (unchanged)
+AgeRating.horrorOrFearThemes: "NONE" (unchanged)
+AgeRating.matureOrSuggestiveThemes: "NONE" (unchanged)
+AgeRating.violenceCartoonOrFantasy: "NONE" (unchanged)
+AgeRating.violenceRealisticProlongedGraphicOrSadistic: "NONE" (unchanged)
+AgeRating.violenceRealistic: "NONE" (unchanged)
+AgeRating.ageRatingOverrideV2: "NONE" (unchanged)
+AgeRating.koreaAgeRatingOverride: "NONE" (unchanged)
+Price: free (unchanged), 1 manual + 174 automatic prices
+Territories.count: 174 (unchanged)
+Territories.excluded: ["CHN"] (unchanged)
+Territories.availableInNewTerritories: true (unchanged)
+Version.versionString: "1.4.9" (unchanged)
+Version.copyright: "2026 KE CHENG" (unchanged)
+Version.build: "7b4a50ec-bbe3-4b44-b9eb-dc159d1002c3" (unchanged)
+VersionLocalization.zh-Hans.whatsNew: skipped; Apple rejection recorded
+VersionLocalization.zh-Hans.description: null → "一只手机，接管所有输入。\n\nVoxChord 把 iPhone 变成 Mac 的"… (length=629)
+VersionLocalization.zh-Hans.keywords: null → "语音输入,听写,语音转文字,Mac,键盘,远程输入,AI润色,Agent,终端,"… (length=56)
+VersionLocalization.zh-Hans.promotionalText: null → "给 Agent 下指令、写文档、回消息，都不用再敲键盘。按住 iPhone 说话"… (length=68)
+VersionLocalization.zh-Hans.supportUrl: null → "https://drafffffff.github.io/iMic/"
+VersionLocalization.zh-Hans.marketingUrl: null → "https://drafffffff.github.io/iMic/"
+VersionLocalization.en-US.description: null → "One phone. Every text field.\n\nVoxChord t"… (length=1551)
+VersionLocalization.en-US.keywords: null → "dictation,voice typing,speech to text,ma"… (length=97)
+VersionLocalization.en-US.promotionalText: null → "Prompt your agents, draft docs and reply"… (length=166)
+VersionLocalization.en-US.supportUrl: null → "https://drafffffff.github.io/iMic/en/"
+VersionLocalization.en-US.marketingUrl: null → "https://drafffffff.github.io/iMic/en/"
+VersionLocalization.en-US.whatsNew: null → "VoxChord is now on the App Store, with h"… (length=105)
+VersionLocalization.en-US: HTTP 409: [{"code": "STATE_ERROR", "title": "The request cannot be fulfilled because of the state of another resource.", "detail": "Attribute 'whatsNew' cannot be edited at this time"}]
+Screenshots.zh-Hans.set: null → "APP_IPHONE_67"
+Screenshots.zh-Hans.01-listen.png: null → "COMPLETE"
+Screenshot PUT: offset=0, length=2324846, success
+Screenshot 01-listen.png: COMPLETE
+Screenshots.zh-Hans.02-pull.png: null → "COMPLETE"
+Screenshot PUT: offset=0, length=1896964, success
+Screenshot 02-pull.png: COMPLETE
+Screenshots.zh-Hans.03-polish.png: null → "COMPLETE"
+Screenshot PUT: offset=0, length=2256462, success
+Screenshot 03-polish.png: COMPLETE
+Screenshots.zh-Hans.04-settings.png: null → "COMPLETE"
+Screenshot PUT: offset=0, length=601217, success
+Screenshot 04-settings.png: COMPLETE
+Screenshots.zh-Hans.05-devices-manage.png: null → "COMPLETE"
+Screenshot PUT: offset=0, length=521050, success
+Screenshot 05-devices-manage.png: COMPLETE
+Screenshots.zh-Hans.06-pairing.png: null → "COMPLETE"
+Screenshot PUT: offset=0, length=536530, success
+Screenshot 06-pairing.png: COMPLETE
+Screenshots.en-US.set: null → "APP_IPHONE_67"
+Screenshots.en-US.01-listen.png: null → "COMPLETE"
+Screenshot PUT: offset=0, length=2270978, success
+Screenshot 01-listen.png: COMPLETE
+Screenshots.en-US.02-pull.png: null → "COMPLETE"
+Screenshot PUT: offset=0, length=1840478, success
+Screenshot 02-pull.png: COMPLETE
+Screenshots.en-US.03-polish.png: null → "COMPLETE"
+Screenshot PUT: offset=0, length=2281725, success
+Screenshot 03-polish.png: COMPLETE
+Screenshots.en-US.04-settings.png: null → "COMPLETE"
+Screenshot PUT: offset=0, length=664017, success
+Screenshot 04-settings.png: COMPLETE
+Screenshots.en-US.05-devices-manage.png: null → "COMPLETE"
+Screenshot PUT: offset=0, length=565903, success
+Screenshot 05-devices-manage.png: COMPLETE
+Screenshots.en-US.06-pairing.png: null → "COMPLETE"
+Screenshot PUT: offset=0, length=632794, success
+Screenshot 06-pairing.png: COMPLETE
+Review.contactFirstName: null → "龙飞"
+Review.contactLastName: null → "周"
+Review.contactPhone: null → "+86 13818611371"
+Review.contactEmail: null → "i0.0ia@qq.com"
+Review.demoAccountRequired: null → false
+Review.notes: null → "VoxChord is the iPhone companion of a fr"… (length=1627)
+RESULT: pending=31, writes=29, reads=88
+Elapsed: 195.79 seconds

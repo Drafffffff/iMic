@@ -1,0 +1,425 @@
+{
+  "appInfoLocalizations": {
+    "zh-Hans": {
+      "name": "VoxChord 语音输入",
+      "subtitle": "按住说话，字落进 Mac 输入框",
+      "privacyPolicyUrl": {
+        "length": 60,
+        "sha256": "448dd187b9a08ce8cd86266cee573893ba52dade55b08ac9666b1771ed912e3c"
+      }
+    },
+    "en-US": {
+      "name": "VoxChord: Voice Typing",
+      "subtitle": "Hold to speak. Type on Mac.",
+      "privacyPolicyUrl": {
+        "length": 60,
+        "sha256": "448dd187b9a08ce8cd86266cee573893ba52dade55b08ac9666b1771ed912e3c"
+      }
+    }
+  },
+  "ageRating": {
+    "appStoreState": "PREPARE_FOR_SUBMISSION",
+    "state": "PREPARE_FOR_SUBMISSION",
+    "appStoreAgeRating": "FOUR_PLUS",
+    "australiaAgeRating": null,
+    "brazilAgeRating": "L",
+    "brazilAgeRatingV2": "SELF_RATED_L",
+    "franceAgeRating": null,
+    "koreaAgeRating": null
+  },
+  "price": {
+    "customerPrices": [
+      "0",
+      "0.0"
+    ],
+    "free": true,
+    "manualCount": 1,
+    "automaticCount": 174
+  },
+  "territories": [
+    "AFG",
+    "AGO",
+    "AIA",
+    "ALB",
+    "ARE",
+    "ARG",
+    "ARM",
+    "ATG",
+    "AUS",
+    "AUT",
+    "AZE",
+    "BEL",
+    "BEN",
+    "BFA",
+    "BGR",
+    "BHR",
+    "BHS",
+    "BIH",
+    "BLR",
+    "BLZ",
+    "BMU",
+    "BOL",
+    "BRA",
+    "BRB",
+    "BRN",
+    "BTN",
+    "BWA",
+    "CAN",
+    "CHE",
+    "CHL",
+    "CIV",
+    "CMR",
+    "COD",
+    "COG",
+    "COL",
+    "CPV",
+    "CRI",
+    "CYM",
+    "CYP",
+    "CZE",
+    "DEU",
+    "DMA",
+    "DNK",
+    "DOM",
+    "DZA",
+    "ECU",
+    "EGY",
+    "ESP",
+    "EST",
+    "FIN",
+    "FJI",
+    "FRA",
+    "FSM",
+    "GAB",
+    "GBR",
+    "GEO",
+    "GHA",
+    "GMB",
+    "GNB",
+    "GRC",
+    "GRD",
+    "GTM",
+    "GUY",
+    "HKG",
+    "HND",
+    "HRV",
+    "HUN",
+    "IDN",
+    "IND",
+    "IRL",
+    "IRQ",
+    "ISL",
+    "ISR",
+    "ITA",
+    "JAM",
+    "JOR",
+    "JPN",
+    "KAZ",
+    "KEN",
+    "KGZ",
+    "KHM",
+    "KNA",
+    "KOR",
+    "KWT",
+    "LAO",
+    "LBN",
+    "LBR",
+    "LBY",
+    "LCA",
+    "LKA",
+    "LTU",
+    "LUX",
+    "LVA",
+    "MAC",
+    "MAR",
+    "MDA",
+    "MDG",
+    "MDV",
+    "MEX",
+    "MKD",
+    "MLI",
+    "MLT",
+    "MMR",
+    "MNE",
+    "MNG",
+    "MOZ",
+    "MRT",
+    "MSR",
+    "MUS",
+    "MWI",
+    "MYS",
+    "NAM",
+    "NER",
+    "NGA",
+    "NIC",
+    "NLD",
+    "NOR",
+    "NPL",
+    "NRU",
+    "NZL",
+    "OMN",
+    "PAK",
+    "PAN",
+    "PER",
+    "PHL",
+    "PLW",
+    "PNG",
+    "POL",
+    "PRT",
+    "PRY",
+    "QAT",
+    "ROU",
+    "RUS",
+    "RWA",
+    "SAU",
+    "SEN",
+    "SGP",
+    "SLB",
+    "SLE",
+    "SLV",
+    "SRB",
+    "STP",
+    "SUR",
+    "SVK",
+    "SVN",
+    "SWE",
+    "SWZ",
+    "SYC",
+    "TCA",
+    "TCD",
+    "THA",
+    "TJK",
+    "TKM",
+    "TON",
+    "TTO",
+    "TUN",
+    "TUR",
+    "TWN",
+    "TZA",
+    "UGA",
+    "UKR",
+    "URY",
+    "USA",
+    "UZB",
+    "VCT",
+    "VEN",
+    "VGB",
+    "VNM",
+    "VUT",
+    "XKS",
+    "YEM",
+    "ZAF",
+    "ZMB",
+    "ZWE"
+  ],
+  "availableInNewTerritories": true,
+  "territoryCount": 174,
+  "build": {
+    "id": "7b4a50ec-bbe3-4b44-b9eb-dc159d1002c3",
+    "version": "11",
+    "processingState": "VALID",
+    "uploadedDate": "2026-11-10T10:52:38-08:00",
+    "usesNonExemptEncryption": false
+  },
+  "versionLocalizations": {
+    "zh-Hans": {
+      "description": {
+        "length": 629,
+        "sha256": "eaa83a28eca044ed64f64507f3e581b199a93177d6635146f17d70ad936998c2"
+      },
+      "keywords": {
+        "length": 56,
+        "sha256": "a6be66e4db24cbaf8651a252d5702577d88da385757bd5acf41f96e2340c5546"
+      },
+      "promotionalText": {
+        "length": 68,
+        "sha256": "88d1f295b7290f340a6aeb166fd1afd13f6e2170eb03f7cd95612eebf003565b"
+      },
+      "supportUrl": "https://drafffffff.github.io/iMic/",
+      "marketingUrl": "https://drafffffff.github.io/iMic/",
+      "whatsNew": null
+    },
+    "en-US": {
+      "description": {
+        "length": 1551,
+        "sha256": "2dd788281b2f68462565ded61099d29f2911105b8ce15bd5dc36119067c2c361"
+      },
+      "keywords": {
+        "length": 97,
+        "sha256": "ec221bfee079736e0c31f1c5578c83dc186d6ac967aca3d3305265afe8df40bd"
+      },
+      "promotionalText": {
+        "length": 166,
+        "sha256": "978155259c8e68261de98a741b6c112f030a1d568b887704ce6bd3dc2bff4f17"
+      },
+      "supportUrl": "https://drafffffff.github.io/iMic/en/",
+      "marketingUrl": "https://drafffffff.github.io/iMic/en/",
+      "whatsNew": null
+    }
+  },
+  "screenshots": {
+    "zh-Hans": [
+      {
+        "fileName": "01-listen.png",
+        "id": "97000019-7160-8bdb-800f-e0eb167585e4",
+        "state": "COMPLETE",
+        "md5": "dcb025dcf5d6f060c35a144f0443f85a"
+      },
+      {
+        "fileName": "02-pull.png",
+        "id": "29400019-7160-8bdb-8024-d2ecb72cb48c",
+        "state": "COMPLETE",
+        "md5": "bdedc01b3168417c39969ed1ee91444e"
+      },
+      {
+        "fileName": "03-polish.png",
+        "id": "4cc00019-7160-8bdb-8014-cce93fcfd011",
+        "state": "COMPLETE",
+        "md5": "7627d41a4684db6e6b2df8eb3f8c6924"
+      },
+      {
+        "fileName": "04-settings.png",
+        "id": "dd400019-7160-8bdb-8013-c270a0e02d6b",
+        "state": "COMPLETE",
+        "md5": "38afc9155d2e7bb3d2e59ee70f088323"
+      },
+      {
+        "fileName": "05-devices-manage.png",
+        "id": "57000019-7160-8bdb-8026-3ee6732ca5cc",
+        "state": "COMPLETE",
+        "md5": "8170978b4ac41291f5038862f4bb99c6"
+      },
+      {
+        "fileName": "06-pairing.png",
+        "id": "5ec00019-7160-8bdb-8027-4bd661391ef3",
+        "state": "COMPLETE",
+        "md5": "4f43c9f52449fdf69842ac23a9c8e2f2"
+      }
+    ],
+    "en-US": [
+      {
+        "fileName": "01-listen.png",
+        "id": "00400019-7160-8bdb-8022-206d61f5e606",
+        "state": "COMPLETE",
+        "md5": "99db2d413d78ca769d1911113b2a9f09"
+      },
+      {
+        "fileName": "02-pull.png",
+        "id": "9a400019-7160-8bdb-800a-8520faed5b77",
+        "state": "COMPLETE",
+        "md5": "dcf8581c94c7d6e8e3c3342fcddac492"
+      },
+      {
+        "fileName": "03-polish.png",
+        "id": "0b800019-7160-8bdb-8033-ac945a687756",
+        "state": "COMPLETE",
+        "md5": "91b919619b265c35acfd6ee4cc480305"
+      },
+      {
+        "fileName": "04-settings.png",
+        "id": "f2400019-7160-8bdb-801e-294eb19589ad",
+        "state": "COMPLETE",
+        "md5": "056a0c6c70c7cd4481d2a18cff122bf5"
+      },
+      {
+        "fileName": "05-devices-manage.png",
+        "id": "cac00019-7160-8bdb-801d-facb399a71c3",
+        "state": "COMPLETE",
+        "md5": "3b467844b3e7db52ab95e088f572f9f8"
+      },
+      {
+        "fileName": "06-pairing.png",
+        "id": "46800019-7160-8bdb-8001-469f687039f7",
+        "state": "COMPLETE",
+        "md5": "63bddf306f7dbf7a28a3e467038ecb60"
+      }
+    ]
+  },
+  "review": {
+    "contactFirstName": "龙飞",
+    "contactLastName": "周",
+    "contactPhone": "+86 13818611371",
+    "contactEmail": "i0.0ia@qq.com",
+    "demoAccountRequired": false,
+    "notes": {
+      "length": 1627,
+      "sha256": "ffa972d6376a5101d37c650605e0367e2da2e02c4d9ffb7abb6ee43c61fa723b"
+    }
+  },
+  "appId": "6829771739",
+  "bundleId": "art.malette.imic.app",
+  "versionId": "284484cf-6c76-4821-9eab-568adbe8ea2e",
+  "versionState": "PREPARE_FOR_SUBMISSION",
+  "fieldLengths": {
+    "zh-Hans": {
+      "name": {
+        "length": 13,
+        "limit": 30
+      },
+      "subtitle": {
+        "length": 16,
+        "limit": 30
+      },
+      "promotionalText": {
+        "length": 68,
+        "limit": 170
+      },
+      "keywords": {
+        "length": 56,
+        "limit": 100
+      },
+      "description": {
+        "length": 629,
+        "limit": 4000
+      }
+    },
+    "en-US": {
+      "name": {
+        "length": 22,
+        "limit": 30
+      },
+      "subtitle": {
+        "length": 27,
+        "limit": 30
+      },
+      "promotionalText": {
+        "length": 166,
+        "limit": 170
+      },
+      "keywords": {
+        "length": 97,
+        "limit": 100
+      },
+      "description": {
+        "length": 1551,
+        "limit": 4000
+      }
+    }
+  },
+  "pending": 0,
+  "writes": 0,
+  "reads": 24,
+  "exceptions": {
+    "284484cf-6c76-4821-9eab-568adbe8ea2e.zh-Hans.whatsNew": {
+      "field": "whatsNew",
+      "errors": [
+        {
+          "code": "STATE_ERROR",
+          "title": "The request cannot be fulfilled because of the state of another resource.",
+          "detail": "Attribute 'whatsNew' cannot be edited at this time"
+        }
+      ]
+    },
+    "284484cf-6c76-4821-9eab-568adbe8ea2e.en-US.whatsNew": {
+      "field": "whatsNew",
+      "errors": [
+        {
+          "code": "STATE_ERROR",
+          "title": "The request cannot be fulfilled because of the state of another resource.",
+          "detail": "Attribute 'whatsNew' cannot be edited at this time"
+        }
+      ]
+    }
+  },
+  "elapsedSeconds": 24.15
+}
