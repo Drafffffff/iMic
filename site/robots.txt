@@ -1,2 +1,4 @@
 User-agent: *
 Allow: /
+
+Sitemap: https://drafffffff.github.io/iMic/sitemap.xml

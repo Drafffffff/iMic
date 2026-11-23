@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url><loc>https://drafffffff.github.io/iMic/</loc>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://drafffffff.github.io/iMic/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://drafffffff.github.io/iMic/en/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://drafffffff.github.io/iMic/"/>
+  </url>
+  <url><loc>https://drafffffff.github.io/iMic/en/</loc>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://drafffffff.github.io/iMic/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://drafffffff.github.io/iMic/en/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://drafffffff.github.io/iMic/"/>
+  </url>
+  <url><loc>https://drafffffff.github.io/iMic/changelog/</loc>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://drafffffff.github.io/iMic/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://drafffffff.github.io/iMic/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://drafffffff.github.io/iMic/changelog/"/>
+  </url>
+  <url><loc>https://drafffffff.github.io/iMic/en/changelog/</loc>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://drafffffff.github.io/iMic/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://drafffffff.github.io/iMic/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://drafffffff.github.io/iMic/changelog/"/>
+  </url>
+</urlset>

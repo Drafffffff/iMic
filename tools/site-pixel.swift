@@ -15,7 +15,7 @@ for match in regex.matches(in: source, range: NSRange(location: 0, length: ns.le
 guard glyphs.count >= 40 else { fatalError("PixelFont glyph table format changed") }
 let output = root.appendingPathComponent("site/assets/pixel")
 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-for label in ["FEEL", "STRING", "POLISH", "MODES", "SOUND", "ANYWHERE", "PRIVATE", "START", "DOWNLOAD", "FAQ", "RETURN", "LINK", "404"] {
+for label in ["FEEL", "STRING", "POLISH", "MODES", "SOUND", "ANYWHERE", "PRIVATE", "START", "DOWNLOAD", "FAQ", "RETURN", "LINK", "CHANGELOG", "404"] {
     // PixelText uppercases its input in the App too.
     let text = label.uppercased()
     let width = text.count * 6 - 1

@@ -16,7 +16,7 @@ ANALYTICS_HOSTS = {'cloud.umami.is', 'gateway.umami.is'}
 EXTERNAL_HOSTS = {
     'api.github.com', 'github.com', 'drafffffff.github.io',
     'bailian.console.aliyun.com', 'modelstudio.console.alibabacloud.com',
-    'testflight.apple.com',
+    'apps.apple.com',
 } | ANALYTICS_HOSTS
 ANALYTICS_URLS = {'https://cloud.umami.is/script.js', 'https://gateway.umami.is'}
 
@@ -61,7 +61,7 @@ for path in sorted(root.rglob('*.html')):
     page = Page(path)
     documents[path] = page
     require(page.h1 == 1, f'{path.name}: expected exactly one h1, got {page.h1}')
-    expected_language = 'en' if path.parent.name == 'en' else 'zh-Hans'
+    expected_language = 'en' if path.relative_to(root).parts[0] == 'en' else 'zh-Hans'
     require(page.lang == expected_language, f'{path}: lang must be {expected_language}')
 
 def resolve(path, url):
@@ -128,7 +128,7 @@ if faq:
     require('macOS 14+' in answers and '屏幕录制' in answers, 'Polish highlight requirements missing from FAQ')
     require('手写' in answers and '不会自动执行' in answers, 'Polish example and terminal-mode notes missing from FAQ')
 require('Mac 上任意输入框' in index and '一只手机，接管所有输入' in index, 'Slogan or any-field metadata missing')
-for identifier in ('origin-banner', 'mac-download-link', 'share-link', 'release-meta', 'mobile-download-note', 'share-status', 'share-manual', 'checksum-link', 'testflight-pending', 'testflight-link'):
+for identifier in ('origin-banner', 'mac-download-link', 'share-link', 'release-meta', 'mobile-download-note', 'share-status', 'share-manual', 'checksum-link', 'appstore-link'):
     require(identifier in documents[root/'index.html'].ids, f'Download contract missing: {identifier}')
 require('data-hero-version' in index and index.count('data-dmg-link') >= 2, 'Download data attributes missing')
 require('brand-dot' not in index, 'Duplicate brand dot')
@@ -253,6 +253,25 @@ for link in external:
         require(link in ANALYTICS_URLS, f'Unexpected analytics URL: {link}')
 print('\nExternal links (navigation/API; optional Umami script/ingestion only):')
 for link in sorted(external):print('  '+link)
+# The changelog pages are generated from docs/releases/changelog.json.
+import subprocess
+if root == (Path(__file__).resolve().parents[1] / 'site'):
+    generated = subprocess.run([sys.executable, str(Path(__file__).with_name('site-changelog.py')), '--check'],
+                               capture_output=True, text=True)
+    require(generated.returncode == 0, (generated.stderr or generated.stdout).strip() or 'changelog check failed')
+    seo = subprocess.run([sys.executable, str(Path(__file__).with_name('site-seo.py')), '--check'],
+                         capture_output=True, text=True)
+    require(seo.returncode == 0, (seo.stderr or seo.stdout).strip() or 'SEO check failed')
+require((root / 'sitemap.xml').is_file(), 'sitemap.xml missing')
+require('Sitemap: https://drafffffff.github.io/iMic/sitemap.xml' in (root / 'robots.txt').read_text(), 'robots.txt lacks Sitemap')
+for source, name in ((index, 'index.html'), (english, 'en/index.html')):
+    require(source.count('application/ld+json') == 1, f'{name}: structured data missing')
+    require('id="mac-mini"' in source, f'{name}: Mac mini FAQ missing')
+for name in ('changelog/index.html', 'en/changelog/index.html'):
+    require((root / name).is_file(), f'{name} missing')
+for source, href in ((index, 'changelog/'), (english, 'changelog/')):
+    require(f'<a href="{href}">' in source, 'Footer changelog link missing')
+
 if errors:
     print('\nFAILED:\n'+'\n'.join('  '+e for e in errors),file=sys.stderr)
     sys.exit(1)
