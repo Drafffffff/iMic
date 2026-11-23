@@ -1,0 +1,61 @@
+sentence	condition	run	terms_sent	rejected	polished	end_to_final_ms	asr_raw	final
+T1	A	1	0	0	0	296	我在Voice Chat里打开了VoIP终端。	我在Voice Chat里打开了VoIP终端。
+T1	A	2	0	0	0	233	我在Voice Chat里打开了VoIP终端。	我在Voice Chat里打开了VoIP终端。
+T1	A	3	0	0	0	981	我在Voice Chat里打开了VoIP终端。	我在Voice Chat里打开了VoIP终端。
+T1	B	1	8	0	0	208	我在Voice Chat里打开了VoIP终端。	我在Voice Chat里打开了VoIP终端。
+T1	B	2	8	0	0	211	我在Voice Chat里打开了VoIP终端。	我在Voice Chat里打开了VoIP终端。
+T1	B	3	8	0	0	328	我在Voice Chat里打开了VoIP终端。	我在Voice Chat里打开了VoIP终端。
+T1	B5	1	8	0	0	240	我在Voice Chat里打开了VoIP终端。	我在Voice Chat里打开了VoIP终端。
+T1	B5	2	8	0	0	293	我在Voice Chat里打开了VoIP终端。	我在Voice Chat里打开了VoIP终端。
+T1	B5	3	8	0	0	307	我在Voice Chat里打开了VoIP终端。	我在Voice Chat里打开了VoIP终端。
+T1	D	1	2000	0	0	561	我在Voice Chat里打开了VoIP终端。	我在Voice Chat里打开了VoIP终端。
+T1	D	2	2000	0	0	861	我在Voice Chat里打开了VoIP终端。	我在Voice Chat里打开了VoIP终端。
+T1	D	3	2000	0	0	488	我在Voice Chat里打开了VoIP终端。	我在Voice Chat里打开了VoIP终端。
+T1	C	1	8	0	1	353	我在Voice Chat里打开了VoIP终端。	我在 Voice Chat 里打开了 VoIP 终端。
+T1	C	2	8	0	1	777	我在Voice Chat里打开了VoIP终端。	我在 Voice Chat 里打开了 VoIP 终端。
+T1	C	3	8	0	1	235	我在Voice Chat里打开了VoIP终端。	我在 Voice Chat 里打开了 VoIP 终端。
+T2	A	1	0	0	0	748	把 Kubernetes 的 Helm chart 推到 ArgoCD。	把 Kubernetes 的 Helm chart 推到 ArgoCD。
+T2	A	2	0	0	0	434	把 Kubernetes 的 Helm chart 推到 ArgoCD。	把 Kubernetes 的 Helm chart 推到 ArgoCD。
+T2	A	3	0	0	0	311	把pooler nodes的home chart推到阿哥西地。	把pooler nodes的home chart推到阿哥西地。
+T2	B	1	8	0	0	315	把 Kubernetes 的 Helm Chart 推到 ArgoCD。	把 Kubernetes 的 Helm Chart 推到 ArgoCD。
+T2	B	2	8	0	0	631	把 Kubernetes 的 Helm chart 推到 Harbor 里。	把 Kubernetes 的 Helm chart 推到 Harbor 里。
+T2	B	3	8	0	0	549	把 Kubernetes 的 Helm chart 推到阿哥西地。	把 Kubernetes 的 Helm chart 推到阿哥西地。
+T2	B5	1	8	0	0	767	把 Kubernetes 的 Helm chart 推到 ArgoCD。	把 Kubernetes 的 Helm chart 推到 ArgoCD。
+T2	B5	2	8	0	0	298	把 Kubernetes 的 Helm chart 推到 Argo CD。	把 Kubernetes 的 Helm chart 推到 Argo CD。
+T2	B5	3	8	0	0	263	把 Kubernetes 的 Helm chart 推到 ArgoCD。	把 Kubernetes 的 Helm chart 推到 ArgoCD。
+T2	D	1	2000	0	0	385	把 Kubernetes 的 Helm chart 推到 ArgoCD。	把 Kubernetes 的 Helm chart 推到 ArgoCD。
+T2	D	2	2000	0	0	635	把Kubernetes的helm chart推到Artifactory。	把Kubernetes的helm chart推到Artifactory。
+T2	D	3	2000	0	0	1068	把 Kubernetes 的 Helm chart 推到 ArgoCD。	把 Kubernetes 的 Helm chart 推到 ArgoCD。
+T2	C	1	8	0	1	254	把Pooperlotus的home chart推到2个CD。	把 Pooperlotus 的 home chart 推到 2 个 CD。
+T2	C	2	8	0	1	1136	把Kubernetes的helm chart推到Artifactory。	把 Kubernetes 的 Helm chart 推到 Artifactory。
+T2	C	3	8	0	1	276	把 Kubernetes 的 Helm chart 推到 ArgoCD。	把 Kubernetes 的 Helm chart 推到 Argo CD。
+T3	A	1	0	0	0	313	请奇缘和洛科明天参加选书评审。	请奇缘和洛科明天参加选书评审。
+T3	A	2	0	0	0	304	请奇缘和洛科明天参加选书评审。	请奇缘和洛科明天参加选书评审。
+T3	A	3	0	0	0	645	请齐源和洛科明天参加选书评审。	请齐源和洛科明天参加选书评审。
+T3	B	1	8	0	0	237	请祺元和洛柯明天参加璇枢评审。	请祺元和洛柯明天参加璇枢评审。
+T3	B	2	8	0	0	462	请祺元和洛柯明天参加璇枢评审。	请祺元和洛柯明天参加璇枢评审。
+T3	B	3	8	0	0	319	请祺元和洛柯明天参加璇枢评审。	请祺元和洛柯明天参加璇枢评审。
+T3	B5	1	8	0	0	926	请祺元和洛柯明天参加璇枢评审。	请祺元和洛柯明天参加璇枢评审。
+T3	B5	2	8	0	0	252	请祺元和洛柯明天参加璇枢评审。	请祺元和洛柯明天参加璇枢评审。
+T3	B5	3	8	0	0	504	请祺元和洛柯明天参加璇枢评审。	请祺元和洛柯明天参加璇枢评审。
+T3	D	1	2000	0	0	773	请祺元和洛柯明天参加璇枢评审。	请祺元和洛柯明天参加璇枢评审。
+T3	D	2	2000	0	0	900	请祺元和洛柯明天参加璇枢评审。	请祺元和洛柯明天参加璇枢评审。
+T3	D	3	2000	0	0	1090	请祺元和洛柯明天参加璇枢评审。	请祺元和洛柯明天参加璇枢评审。
+T3	C	1	8	0	1	309	请祺元和洛柯明天参加璇枢评审。	请祺元和洛柯明天参加璇枢评审。
+T3	C	2	8	0	1	504	请祺元和洛柯明天参加璇枢评审。	请祺元和洛柯明天参加璇枢评审。
+T3	C	3	8	0	1	413	请祺元和洛柯明天参加璇枢评审。	请祺元和洛柯明天参加璇枢评审。
+T4	A	1	0	0	0	226	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	A	2	0	0	0	429	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	A	3	0	0	0	803	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	B	1	8	0	0	210	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	B	2	8	0	0	266	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	B	3	8	0	0	307	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	B5	1	8	0	0	318	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	B5	2	8	0	0	611	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	B5	3	8	0	0	387	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	D	1	2000	0	0	493	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	D	2	2000	0	0	856	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	D	3	2000	0	0	431	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	C	1	8	0	1	219	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	C	2	8	0	1	297	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。
+T4	C	3	8	0	1	346	今天天气不错，我们去公园走走。	今天天气不错，我们去公园走走。

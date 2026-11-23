@@ -86,7 +86,8 @@ FFT 使用最近 512 个 16 kHz 样本组成约 32ms 重叠窗，采集 hop 与�
 | `BLEBridge.swift` | Mac BLE 外设与回环桥；GATT 字节流复用 LinkServer |
 | `DeepSeek.swift` / `shared/PolishOptions.swift` | 官方、百炼与自定义 OpenAI-compatible 润色；每来源独立模型和完整地址，官方与百炼关闭思考模式，自定义不发送供应商私有参数；失败回退完整原文，保留原意/问句守门 |
 | `PairingStore.swift` | Mac 身份、配对设备令牌、六位码轮换、0600 持久化 |
-| `ASR.swift` | 百炼 message ASR，流式 PCM 上传，最终文本聚合 |
+| `ASR.swift` | 百炼 message ASR，流式 PCM 上传，最终文本聚合；可选即时热词（词库被拒时开始前不带词库重试一次） |
+| `shared/Vocabulary.swift` / `VocabularySettings.swift` | 本地自定义词库：校验、按模式筛选、纯文本导入导出、`vocabulary.json` 存储与设置页 |
 | `Interface.swift` / `main.swift` | 菜单栏、主窗口、设置、输入与状态机；模式、语气与四种语言按顺序分组，选中即保存；终端模式保留但禁用语气和语言 |
 | `Permissions.swift` | 输入权限状态与应用包位置 |
 | `Onboarding.swift` | 两步设置向导：权限 → 百炼 Key；状态实时检测、可随时重开 |

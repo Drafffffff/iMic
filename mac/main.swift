@@ -10,6 +10,9 @@ private let pairCodeArgument = launchArguments.first { $0.hasPrefix("--pair-code
 private let disableInput = headlessMode || launchArguments.contains("--no-input")
 private let portArgument = launchArguments.first { $0.hasPrefix("--port=") }
     .flatMap { UInt16($0.dropFirst("--port=".count)) }
+/// 仅 --headless 生效：从纯文本词库文件读取（格式同导出），不读写用户词库。
+private let vocabularyFileArgument = launchArguments.first { $0.hasPrefix("--vocabulary-file=") }
+    .map { String($0.dropFirst("--vocabulary-file=".count)) }
 
 enum SingleInstance {
     static var reopenNotification: Notification.Name {
@@ -150,6 +153,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return TextHistoryStore(directory: PairingStore.defaultDirectory)
     }()
     var textHistoryWindow: TextHistoryWindowController?
+    /// Local custom vocabulary. Headless runs use only --vocabulary-file (or nothing).
+    lazy var vocabulary: VocabularyStore = {
+        if headless {
+            let text = vocabularyFileArgument.flatMap { try? String(contentsOfFile: $0, encoding: .utf8) } ?? ""
+            return VocabularyStore(entries: Vocabulary.parse(text).entries)
+        }
+        if let preview {
+            return VocabularyStore(entries: preview == "settings-vocabulary" ? VocabularyPreview.entries : [])
+        }
+        return VocabularyStore(directory: PairingStore.defaultDirectory)
+    }()
+    var vocabularyForRecognition: Bool { MacPreferences.defaults.object(forKey: "vocabulary.recognition") as? Bool ?? true }
+    var vocabularyForPolish: Bool { MacPreferences.defaults.object(forKey: "vocabulary.polish") as? Bool ?? true }
     /// Line breaks typed into a terminal would press Return and run the line.
     var targetIsTerminal = false
     var transcriptText = ""
@@ -746,10 +762,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if self.cloudFailure == nil { self.showCloudFailure(.service, provider: .bailian, recognition: true) }
             self.abortSession(notifyPhone: true, code: recognizer?.failureCode ?? "asr", message: message)
         }
+        let hotwords = vocabularyForRecognition
+            ? Vocabulary.hotwords(vocabulary.entries, mode: DeepSeekConfiguration.options.mode) : [:]
+        if headless { emit("VOCABULARY recognition=\(hotwords.count)") }
+        recognizer.onVocabularyRejected = { [weak self] in
+            guard let self else { return }
+            IMicLog.write("mac.asr", "vocabulary rejected; recognized without vocabulary session=\(session)")
+            if self.headless { self.emit("VOCABULARY rejected") }
+            guard !self.headless else { return }
+            MacPreferences.defaults.set(true, forKey: "vocabulary.lastRejected")
+            NotificationCenter.default.post(name: VocabularyStore.didChange, object: nil)
+        }
         recognizer.start(
             key: key.stringValue,
             endpoint: endpoint.stringValue,
-            model: ASRConfiguration.model
+            model: ASRConfiguration.model,
+            vocabulary: hotwords
         )
     }
 
@@ -837,6 +865,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func finishSession(_ session: Int, text: String, latency: Double) {
         guard currentSession == session, !recognitionFinalReceived else { return }
         let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Headless test runs print the raw recognition so vocabulary effects can be told apart from polish.
+        if headless { emit("ASR_RAW \(raw)") }
         guard !raw.isEmpty else {
             completeSession(session, text: "", latency: latency)
             return
@@ -902,6 +932,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             endpoint: polishAddress,
             provider: provider,
             options: options,
+            glossary: vocabularyForPolish ? Vocabulary.glossary(vocabulary.entries, mode: options.mode) : [],
             failure: { [weak self] failure in
                 guard let self, self.currentSession == session, self.polishFinalChoice.source == nil else { return }
                 self.showCloudFailure(failure, provider: provider)

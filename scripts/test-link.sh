@@ -68,8 +68,14 @@ if [ "${IMIC_SKIP_MAC_BUILD:-0}" != 1 ]; then
 fi
 
 echo "==> 3/4 启动无界面 Mac（端口 ${PORT}，配对码 ${CODE}）"
+# IMIC_TEST_VOCAB：纯文本词库文件（格式同设置页导出），只对本次无界面进程生效，不读写用户词库。
+VOCAB_ARGS=()
+if [ -n "${IMIC_TEST_VOCAB:-}" ]; then
+  [ -f "$IMIC_TEST_VOCAB" ] || { echo "词库文件不存在：$IMIC_TEST_VOCAB" >&2; exit 1; }
+  VOCAB_ARGS=(--vocabulary-file="$IMIC_TEST_VOCAB")
+fi
 "$MAC_BIN" \
-  --headless --pair-code="$CODE" --no-input --port="$PORT" > "$LOG" 2>&1 &
+  --headless --pair-code="$CODE" --no-input --port="$PORT" ${VOCAB_ARGS[@]+"${VOCAB_ARGS[@]}"} > "$LOG" 2>&1 &
 MAC_PID=$!
 for _ in $(seq 1 40); do
   grep -q HEADLESS_READY "$LOG" 2>/dev/null && break

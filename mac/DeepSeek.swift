@@ -156,7 +156,7 @@ enum DeepSeekClient {
 
     static func request(
         text: String, key: String, model: String, endpoint: String,
-        provider: PolishProvider, options: PolishOptions
+        provider: PolishProvider, options: PolishOptions, glossary: [String] = []
     ) throws -> URLRequest {
         let url = try validatedURL(provider: provider, model: model, endpoint: endpoint)
         guard PolishCredentials.valid(key, for: provider) else { throw PolishConfigurationError.key }
@@ -168,7 +168,7 @@ enum DeepSeekClient {
         var body: [String: Any] = [
             "model": model,
             "messages": [
-                ["role": "system", "content": options.systemPrompt],
+                ["role": "system", "content": options.systemPrompt(glossary: glossary)],
                 ["role": "user", "content": "<transcript>\n\(text)\n</transcript>"]
             ],
             "temperature": options.temperature,
@@ -189,12 +189,13 @@ enum DeepSeekClient {
     static func polish(
         text: String, key: String, model: String, endpoint: String,
         provider: PolishProvider, options: PolishOptions,
+        glossary: [String] = [],
         session: URLSession? = nil,
         failure: ((CloudFailure) -> Void)? = nil,
         completion: @escaping (String?) -> Void
     ) -> URLSessionDataTask? {
         guard !text.isEmpty,
-              let request = try? request(text: text, key: key, model: model, endpoint: endpoint, provider: provider, options: options) else {
+              let request = try? request(text: text, key: key, model: model, endpoint: endpoint, provider: provider, options: options, glossary: glossary) else {
             IMicLog.write("mac.polish", "skipped provider=\(provider.rawValue) reason=invalid_configuration")
             DispatchQueue.main.async { failure?(.service); completion(nil) }
             return nil
@@ -212,7 +213,7 @@ enum DeepSeekClient {
             let milliseconds = Int(Date().timeIntervalSince(started) * 1000)
             // Never log endpoints, response bodies, error descriptions or credentials.
             let code = (error as NSError?)?.code ?? 0
-            IMicLog.write("mac.polish", "\(result == nil ? "fallback" : "ok") provider=\(provider.rawValue) model=\(diagnosticModel) status=\(status) code=\(code) in=\(text.count) out=\(result?.count ?? 0) ms=\(milliseconds)")
+            IMicLog.write("mac.polish", "\(result == nil ? "fallback" : "ok") provider=\(provider.rawValue) model=\(diagnosticModel) glossary=\(glossary.count) status=\(status) code=\(code) in=\(text.count) out=\(result?.count ?? 0) ms=\(milliseconds)")
             DispatchQueue.main.async {
                 if result == nil {
                     let issue = provider == .bailian
