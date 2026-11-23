@@ -259,6 +259,14 @@ if root == (Path(__file__).resolve().parents[1] / 'site'):
     generated = subprocess.run([sys.executable, str(Path(__file__).with_name('site-changelog.py')), '--check'],
                                capture_output=True, text=True)
     require(generated.returncode == 0, (generated.stderr or generated.stdout).strip() or 'changelog check failed')
+    seo = subprocess.run([sys.executable, str(Path(__file__).with_name('site-seo.py')), '--check'],
+                         capture_output=True, text=True)
+    require(seo.returncode == 0, (seo.stderr or seo.stdout).strip() or 'SEO check failed')
+require((root / 'sitemap.xml').is_file(), 'sitemap.xml missing')
+require('Sitemap: https://drafffffff.github.io/iMic/sitemap.xml' in (root / 'robots.txt').read_text(), 'robots.txt lacks Sitemap')
+for source, name in ((index, 'index.html'), (english, 'en/index.html')):
+    require(source.count('application/ld+json') == 1, f'{name}: structured data missing')
+    require('id="mac-mini"' in source, f'{name}: Mac mini FAQ missing')
 for name in ('changelog/index.html', 'en/changelog/index.html'):
     require((root / name).is_file(), f'{name} missing')
 for source, href in ((index, 'changelog/'), (english, 'changelog/')):

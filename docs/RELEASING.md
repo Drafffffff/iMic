@@ -15,7 +15,7 @@ Mac 构建仍使用 `swiftc` 和命令行工具，不引入 Xcode 工程。更�
 
 1. 更新 `VERSION`（若发行新版本）并保持 Mac/iOS 营销版本一致。将根目录 **`MAC_BUILD` 加 1**，包括原地覆盖同一个 `VERSION`。`CFBundleVersion` 读取它。任务书原定名称 `BUILD` 在 macOS 默认不区分大小写的文件系统上与 `build/` 冲突，因此使用 `MAC_BUILD`；iOS `CURRENT_PROJECT_VERSION` 不受影响。
 2. 同步最新的 `site/appcast.xml`。`./scripts/package-release.sh --check-only` 只检查公钥与构建号，不构建、不签名、不发布。构建号必须严格大于 appcast 所有条目的最大值。不要以旧分支的 appcast 绕过检查。
-3. 准备 `docs/releases/v<VERSION>.md`，将 `docs/releases/NEXT.md` 的有关改动并入。发布脚本将说明文字作为安全的内嵌 HTML 放进 appcast，Sparkle 不需要访问 GitHub Markdown 页面。同时在 `docs/releases/changelog.json` 顶部加一条中英文要点（面向用户、精简），运行 `python3 tools/site-changelog.py` 重新生成官网 `/changelog/` 与 `/en/changelog/`；`tools/check-site.py` 会拒绝过期页面。
+3. 准备 `docs/releases/v<VERSION>.md`，将 `docs/releases/NEXT.md` 的有关改动并入。发布脚本将说明文字作为安全的内嵌 HTML 放进 appcast，Sparkle 不需要访问 GitHub Markdown 页面。同时在 `docs/releases/changelog.json` 顶部加一条中英文要点（面向用户、精简），运行 `python3 tools/site-changelog.py` 重新生成官网 `/changelog/` 与 `/en/changelog/`；`tools/check-site.py` 会拒绝过期页面。appcast 更新后还要运行 `python3 tools/site-seo.py`，同步首页结构化数据中的 Mac 版本号（同时重建 sitemap）；同样由 `check-site.py` 把关。
 4. 执行：
 
    ```bash

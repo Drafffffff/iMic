@@ -4,7 +4,7 @@
 
 **一只手机，接管所有输入。**
 
-多台 Mac 随时切换，任意输入框按住就说。给 Agent 下指令，下拉弹射想法。
+用 iPhone 给 Mac 语音输入：任意输入框按住就说，松手落字。Mac mini、Mac Studio 没有麦克风也能用；多台 Mac 随时切换，给 Agent 下指令，下拉弹射想法。
 
 [English](README.en.md) · [官网](https://drafffffff.github.io/iMic/) · [下载 Mac 版](https://github.com/Drafffffff/iMic/releases/latest) · [反馈](https://github.com/Drafffffff/iMic/issues)
 
@@ -14,6 +14,7 @@
 
 ## 能做什么
 
+- **Mac 不需要麦克风**：用 iPhone 收音，Mac mini、Mac Studio、Mac Pro 或合盖使用的 MacBook 都能直接语音输入，不用另买麦克风。
 - **一个输入源，多台 Mac**：iPhone 记住你的每台 Mac，随时切换。
 - **任意输入框**：终端、编辑器、浏览器、聊天，按住说话，松手落字。
 - **弦手势**：下拉发送回车，上拨删字，左右移动光标。和 Agent 一来一回，手不用回到键盘。
