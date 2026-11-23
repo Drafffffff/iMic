@@ -20,6 +20,7 @@ if not __debug__:
 ROOT = Path(__file__).resolve().parents[2]
 APP = '6829771739'
 BUNDLE = 'art.malette.imic.app'
+PRICE_USD = '2.99'
 KEY_ID = '0N62MERQLNT3'
 DISPLAY = 'APP_IPHONE_67'  # Apple's enum for the current 6.9-inch screenshot slot.
 REPORT = ROOT / 'docs/appstore/asc-report'
@@ -476,6 +477,7 @@ class Sync:
         return self.facts
 
     def prices(self, app):
+        # Owner decision 2026-11-23: USD 2.99 in base territory USA; other territories use Apple's automatic prices.
         schedule = self.api.child(app, 'appPriceSchedule', missing=True)
         prices = self.api.child(schedule, 'manualPrices', many=True, missing=True,
                                 query={'include': 'appPricePoint,territory', 'limit': '200'}) if schedule else []
@@ -483,28 +485,32 @@ class Sync:
         points = []
         automatic = self.api.child(schedule, 'automaticPrices', many=True,
                                    query={'include': 'appPricePoint,territory', 'limit': '200'}) if prices else []
+        manual = []
         for price in prices + automatic:
             point_id = price['relationships']['appPricePoint']['data']['id']
             point = self.api.resources.get(('appPricePoints', point_id))
             if point is None:
                 point = self.api.request('GET', f'/v3/appPricePoints/{point_id}')['data']
             points.append(attrs(point)['customerPrice'])
+            if price in prices:
+                manual.append((price['relationships']['territory']['data']['id'], attrs(point)['customerPrice']))
         if prices:
-            assert all(float(p) == 0 for p in points), 'Existing non-free plan; do not overwrite pricing'
-            print(f'Price: free (unchanged), {len(prices)} manual + {len(automatic)} automatic prices', flush=True)
-            self.facts['price'] = {'customerPrices': sorted(set(points)), 'free': True,
+            assert all(t == 'USA' and float(p) == float(PRICE_USD) for t, p in manual), \
+                f'Existing price plan {manual} differs from USD {PRICE_USD}; do not overwrite pricing'
+            print(f'Price: USD {PRICE_USD} (unchanged), {len(prices)} manual + {len(automatic)} automatic prices', flush=True)
+            self.facts['price'] = {'baseTerritory': 'USA', 'customerPriceUSD': PRICE_USD,
                                   'manualCount': len(prices), 'automaticCount': len(automatic)}
             return
-        self.change('Price', None, 'free (base territory USA)')
+        self.change('Price', None, f'USD {PRICE_USD} (base territory USA)')
         points = self.api.child(app, 'appPricePoints', many=True,
                                 query={'filter[territory]': 'USA', 'limit': '200'})
-        free = next(p for p in points if float(attrs(p)['customerPrice']) == 0)
+        target = next(p for p in points if float(attrs(p)['customerPrice']) == float(PRICE_USD))
         if self.api.apply:
             self.api.create('appPriceSchedules', {}, app, 'app',
                             extra={'baseTerritory': relationship('territories', 'USA'),
-                                   'manualPrices': {'data': [{'type': 'appPrices', 'id': '${free}'}]}},
-                            included=[dict(type='appPrices', id='${free}', attributes={'startDate': None, 'endDate': None},
-                                           relationships={'appPricePoint': relationship('appPricePoints', free['id'])})])
+                                   'manualPrices': {'data': [{'type': 'appPrices', 'id': '${price}'}]}},
+                            included=[dict(type='appPrices', id='${price}', attributes={'startDate': None, 'endDate': None},
+                                           relationships={'appPricePoint': relationship('appPricePoints', target['id'])})])
 
     def availability(self, app):
         territories = self.api.request('GET', '/v1/territories?limit=200')['data']

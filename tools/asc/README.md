@@ -55,8 +55,8 @@ assets. A mismatching checksum or duplicate filename stops without deleting data
 
 The script reuses an editable iOS version, updating its version string to `VERSION`,
 and selects the latest processed, unexpired, App Store eligible matching iOS
-build. No build is uploaded. An absent price plan is initialized at USD 0 in USA;
-an existing non-free plan stops instead of being replaced. All manual and
+build. No build is uploaded. An absent price plan is initialized at `PRICE_USD` (USD 2.99) in USA;
+an existing plan with a different price stops instead of being replaced. All manual and
 automatic price points are read back. Availability enables every returned
 territory except CHN, and automatic inclusion of new territories. Screenshots use
 Apple's current API enum `APP_IPHONE_67` for its 6.9-inch slot (1320×2868).
