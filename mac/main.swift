@@ -135,6 +135,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var gate = ShortClipGate()
     var targetPID: pid_t?
     var targetAppName: String?
+    var targetBundleID: String?
+    /// Polish settings captured when the final recognition arrived; nil when polish was off.
+    var sessionPolish: TextHistoryEntry.Polish?
+    /// Local-only history of every utterance. Disabled for headless test runs.
+    lazy var textHistory: TextHistoryStore? = {
+        if headless { return nil }
+        if let preview {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("VoxChord-history-preview-\(UUID().uuidString)")
+            let store = TextHistoryStore(directory: directory)
+            if preview == "history" { TextHistoryPreview.seed(store) }
+            return store
+        }
+        return TextHistoryStore(directory: PairingStore.defaultDirectory)
+    }()
+    var textHistoryWindow: TextHistoryWindowController?
     /// Line breaks typed into a terminal would press Return and run the line.
     var targetIsTerminal = false
     var transcriptText = ""
@@ -677,10 +692,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastInsertSucceeded = false
         targetPID = nil
         targetAppName = nil
+        targetBundleID = nil
+        sessionPolish = nil
         inputTarget = nil
         if let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid() {
             targetPID = app.processIdentifier
             targetAppName = app.localizedName
+            targetBundleID = app.bundleIdentifier
         }
         if let targetPID { inputTarget = InputTarget.capture(pid: targetPID) }
         targetIsTerminal = targetPID.map { InputTarget.looksLikeTerminal(pid: $0, element: inputTarget?.visualElement) } ?? false
@@ -835,6 +853,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             completeSession(session, text: raw, latency: latency)
             return
         }
+        sessionPolish = TextHistoryEntry.Polish(mode: options.mode.rawValue, tone: options.tone.rawValue,
+                                                output: options.output.rawValue, fallback: false)
         if !headless, automatic.state == .on, !disableInput,
            let target = inputTarget, target.allowsStreaming, let pid = targetPID {
             polishEffect.prepare(pid: pid, element: target.visualElement, text: committedInputText,
@@ -895,6 +915,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func choosePolishResult(_ session: Int, raw: String, polished: String?, latency: Double) {
         guard currentSession == session, let final = polishFinalChoice.settle(raw: raw, polished: polished) else { return }
         polishFallback = polished == nil
+        sessionPolish?.fallback = polished == nil
         polishDeadlineWork?.cancel(); polishDeadlineWork = nil
         polishTask?.cancel(); polishTask = nil
         if !headless { setStatus(L10n.text("Finishing typing…")) }
@@ -981,6 +1002,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setStatus(L10n.text("No speech recognized"))
         }
         IMicLog.write("mac.session", "finish session=\(session) chars=\(clean.count) latency_ms=\(Int(latency)) pasted=\(pasted) frames=\(frames) samples=\(samples)")
+        recordHistory(original: recognitionFinalReceived ? confirmedTranscript : clean, final: clean,
+                      outcome: pasted ? .typed : .kept)
         inserting = false
         polishEffect.finishDelivery(succeeded: pasted, finalText: clean,
                                     verified: inputTarget?.requiresConfirmation == true)
@@ -1041,6 +1064,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // On failure keep the latest local transcript available for copying,
         // independently of any best-effort rollback in the target editor.
         if !recognitionFinalReceived { transcriptText = notifyPhone ? retainedPreview : confirmedTranscript }
+        // Interrupted sessions are the ones most likely to lose text: keep what was recognized.
+        let recovered = transcriptText.trimmingCharacters(in: .whitespacesAndNewlines)
+        recordHistory(original: confirmedTranscript.isEmpty ? recovered : confirmedTranscript,
+                      final: recovered, outcome: .failed)
         currentSession = nil
         inputTarget = nil
         inserting = false
@@ -1312,6 +1339,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.copyButton.title = L10n.text("Copy text")
         }
+    }
+
+    private func recordHistory(original: String, final: String, outcome: TextHistoryEntry.Outcome) {
+        let original = original.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty || !final.isEmpty else { return }
+        textHistory?.append(TextHistoryEntry(appName: targetAppName, bundleID: targetBundleID,
+                                             original: original, final: final,
+                                             polish: sessionPolish, outcome: outcome))
+        IMicLog.write("mac.history", "recorded outcome=\(outcome.rawValue) polish=\(sessionPolish != nil)")
+    }
+
+    @objc func showTextHistory() {
+        guard let textHistory else { return }
+        if textHistoryWindow == nil { textHistoryWindow = TextHistoryWindowController(store: textHistory) }
+        textHistoryWindow?.present()
     }
 
     @objc func showSettings() {
@@ -1623,6 +1665,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let pane = SettingsPane(rawValue: String(preview.dropFirst("settings-".count))) { settingsCoordinator?.select(pane) }
             showSettings()
         }
+        if preview == "history" { showTextHistory() }
         if preview == "menu" {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.popUpStatusMenu() }
         }

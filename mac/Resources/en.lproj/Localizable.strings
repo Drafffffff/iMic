@@ -4,7 +4,9 @@
 "%@ %@" = "%@ %@";
 "%@ Delete    %@ Move cursor" = "%@ Delete    %@ Move cursor";
 "%@ could not complete the request. Please retry later." = "%@ could not complete the request. Please retry later.";
+"%@ entries" = "%@ entries";
 "%@ has not been saved." = "%@ has not been saved.";
+"%@ of %@ entries" = "%@ of %@ entries";
 "%@ rejected the Key. Copy a valid API Key again." = "%@ rejected the Key. Copy a valid API Key again.";
 "%@ settings have not been saved." = "%@ settings have not been saved.";
 "%@ · %@" = "%@ · %@";
@@ -98,7 +100,10 @@
 "Choose the Mac to pair with" = "Choose the Mac to pair with";
 "Classical Chinese" = "Classical Chinese";
 "Clear" = "Clear";
+"Clear History" = "Clear History";
+"Clear History…" = "Clear History…";
 "Clear all local waveforms?" = "Clear all local waveforms?";
+"Clear all text history on this Mac?" = "Clear all text history on this Mac?";
 "Clear and natural. Keep the original voice and the mode's style." = "Clear and natural. Keep the original voice and the mode's style.";
 "Clear keeps the original lines. Phosphor adds glow. CRT adds a retro screen texture." = "Clear keeps the original lines. Phosphor adds glow. CRT adds a retro screen texture.";
 "Clear text field" = "Clear text field";
@@ -187,6 +192,7 @@
 "Cut" = "Cut";
 "DeepSeek API" = "DeepSeek API";
 "Delete" = "Delete";
+"Delete Entry" = "Delete Entry";
 "Delete is disabled on your Mac" = "Delete is disabled on your Mac";
 "Deletes only the visualization cache. Connections and recognition results are unaffected." = "Deletes only the visualization cache. Connections and recognition results are unaffected.";
 "Deleting continuously · Move down or release to stop" = "Deleting continuously · Move down or release to stop";
@@ -232,6 +238,7 @@
 "Export JSON" = "Export JSON";
 "Export waveform JSON" = "Export waveform JSON";
 "Extra cute" = "Extra cute";
+"Final text" = "Final text";
 "Find my Mac" = "Find my Mac";
 "Find the 6-digit pairing code in the VoxChord window on your Mac." = "Find the 6-digit pairing code in the VoxChord window on your Mac.";
 "Finish practice" = "Finish practice";
@@ -286,6 +293,7 @@
 "Input signal detected" = "Input signal detected";
 "Interface sounds" = "Interface sounds";
 "Interface sounds: %@" = "Interface sounds: %@";
+"Interrupted" = "Interrupted";
 "Invalid audio end frame or sample count" = "Invalid audio end frame or sample count";
 "Invalid audio frame format" = "Invalid audio frame format";
 "Invalid connection data" = "Invalid connection data";
@@ -380,8 +388,10 @@
 "No audio received" = "No audio received";
 "No automatic typing. Check the target and permissions." = "No automatic typing. Check the target and permissions.";
 "No available inputs" = "No available inputs";
+"No history yet. Text from each recording is saved here, on this Mac only." = "No history yet. Text from each recording is saved here, on this Mac only.";
 "No iPhone paired yet" = "No iPhone paired yet";
 "No input route" = "No input route";
+"No matches" = "No matches";
 "No speech recognized" = "No speech recognized";
 "No waveform cache. Complete a real recording first, or provide the path to an exported JSON file." = "No waveform cache. Complete a real recording first, or provide the path to an exported JSON file.";
 "No waveforms yet. Hold the bar on the home screen to speak and release normally to keep a waveform. Canceled recordings are not saved." = "No waveforms yet. Hold the bar on the home screen to speak and release normally to keep a waveform. Canceled recordings are not saved.";
@@ -391,6 +401,7 @@
 "Not found on the local network" = "Not found on the local network";
 "Not saved" = "Not saved";
 "Not selected" = "Not selected";
+"Not typed · kept here" = "Not typed · kept here";
 "Notice" = "Notice";
 "Off" = "Off";
 "On" = "On";
@@ -415,6 +426,7 @@
 "Optional · Connect when the local network is unavailable." = "Optional · Connect when the local network is unavailable.";
 "Optional · Locate the polish highlight. Processed only on this Mac." = "Optional · Locate the polish highlight. Processed only on this Mac.";
 "Optional · Polish highlight. macOS may ask you to reopen VoxChord. Setup will return to this step." = "Optional · Polish highlight. macOS may ask you to reopen VoxChord. Setup will return to this step.";
+"Original recognition" = "Original recognition";
 "Output language" = "Output language";
 "Over-the-top cuteness: playful sounds, repetition, and emoticons." = "Over-the-top cuteness: playful sounds, repetition, and emoticons.";
 "Pair a new iPhone" = "Pair a new iPhone";
@@ -448,6 +460,7 @@
 "Polish failed. Kept as a safe comment." = "Polish failed. Kept as a safe comment.";
 "Polish failed. Original text kept for copying." = "Polish failed. Original text kept for copying.";
 "Polish failed. Original text typed." = "Polish failed. Original text typed.";
+"Polish fell back to the original" = "Polish fell back to the original";
 "Polish provider: %@ · Change in Advanced" = "Polish provider: %@ · Change in Advanced";
 "Polish service provider" = "Polish service provider";
 "Polishing…" = "Polishing…";
@@ -457,6 +470,10 @@
 "Practice string controls" = "Practice string controls";
 "Preparing text…" = "Preparing text…";
 "Preview %@" = "Preview %@";
+"Preview history: The meeting has moved to Thursday at 3 p.m." = "The meeting has moved to Thursday at 3 p.m.";
+"Preview history: list the ten largest files in downloads" = "list the ten largest files in downloads";
+"Preview history: remember to send the revised layout tomorrow morning" = "remember to send the revised layout tomorrow morning";
+"Preview history: um so the meeting is moved to thursday afternoon I think three" = "um so the meeting is moved to thursday afternoon I think three";
 "Preview mode does not send text" = "Preview mode does not send text";
 "Preview: Your Mac did not confirm. This selection was not saved." = "Preview: Your Mac did not confirm. This selection was not saved.";
 "Previous text is still being typed. Please retry shortly." = "Previous text is still being typed. Please retry shortly.";
@@ -484,6 +501,7 @@
 "Recognition failed. Please retry." = "Recognition failed. Please retry.";
 "Recognition is complete. Copy the text to use it now." = "Recognition is complete. Copy the text to use it now.";
 "Recognition model (read-only)" = "Recognition model (read-only)";
+"Recognition only" = "Recognition only";
 "Recognition result received" = "Recognition result received";
 "Recognition result too long. Please make a shorter recording." = "Recognition result too long. Please make a shorter recording.";
 "Recognition service address" = "Recognition service address";
@@ -530,14 +548,17 @@
 "Route rebuilt. Speak to check the level." = "Route rebuilt. Speak to check the level.";
 "Sarcastic" = "Sarcastic";
 "Save" = "Save";
+"Saved only on this Mac. Never uploaded." = "Saved only on this Mac. Never uploaded.";
 "Saved to your connected Mac. Takes effect after your Mac confirms." = "Saved to your connected Mac. Takes effect after your Mac confirms.";
 "Screen Recording" = "Screen Recording";
 "Screen Recording allowed. Screenshots and OCR are processed only on this Mac. Failure to locate text does not block typing." = "Screen Recording allowed. Screenshots and OCR are processed only on this Mac. Failure to locate text does not block typing.";
 "Search again" = "Search again";
+"Search text or app" = "Search text or app";
 "Searching for Macs. Choose a computer below." = "Searching for Macs. Choose a computer below.";
 "Searching… Keep VoxChord open on your Mac." = "Searching… Keep VoxChord open on your Mac.";
 "Select All" = "Select All";
 "Select VoxChord in System Settings and click − to remove it. Then return here and click Open Settings. This is common after reinstalling or updating." = "Select VoxChord in System Settings and click − to remove it. Then return here and click Open Settings. This is common after reinstalling or updating.";
+"Select an entry to view its text." = "Select an entry to view its text.";
 "Selected" = "Selected";
 "Send failed" = "Send failed";
 "Send incomplete. Reconnect to confirm whether changes were saved." = "Send incomplete. Reconnect to confirm whether changes were saved.";
@@ -599,6 +620,8 @@
 "Test typing" = "Test typing";
 "Test your microphone" = "Test your microphone";
 "Text" = "Text";
+"Text History" = "Text History";
+"Text History…" = "Text History…";
 "Text attachment" = "Text attachment";
 "Text attachment: %@" = "Text attachment: %@";
 "Text field cleared" = "Text field cleared";
@@ -628,6 +651,7 @@
 "This doesn't look like a Model Studio API Key. Check that you copied all of it." = "This doesn't look like a Model Studio API Key. Check that you copied all of it.";
 "This input was canceled" = "This input was canceled";
 "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. VoxChord needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page." = "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. VoxChord needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page.";
+"This permanently deletes every saved original and final text. It cannot be undone." = "This permanently deletes every saved original and final text. It cannot be undone.";
 "This provider has no valid Key. Polish will keep the original text." = "This provider has no valid Key. Polish will keep the original text.";
 "This region does not support VoxChord’s speech model. Create a Key in Singapore (international) or Beijing (China)." = "This region does not support VoxChord’s speech model. Create a Key in Singapore (international) or Beijing (China).";
 "This removes the pairing from this iPhone. Enter the pairing code again to reconnect." = "This removes the pairing from this iPhone. Enter the pairing code again to reconnect.";
@@ -651,6 +675,7 @@
 "Typing permission has not taken effect" = "Typing permission has not taken effect";
 "US (Virginia)" = "US (Virginia)";
 "Undo" = "Undo";
+"Unknown app" = "Unknown app";
 "Unknown link frame type" = "Unknown link frame type";
 "Unsupported service address. Paste the official Model Studio pay-as-you-go Base URL (HTTPS, port 443, /compatible-mode/v1). Plan endpoints and other hosts are not supported." = "Unsupported service address. Paste the official Model Studio pay-as-you-go Base URL (HTTPS, port 443, /compatible-mode/v1). Plan endpoints and other hosts are not supported.";
 "Unsupported service address. Use an allowed Model Studio API Host (hostname only) or an HTTPS URL ending in /compatible-mode/v1 or /api/v1 (port 443). Plan addresses and other hosts are not supported." = "Unsupported service address. Use an allowed Model Studio API Host (hostname only) or an HTTPS URL ending in /compatible-mode/v1 or /api/v1 (port 443). Plan addresses and other hosts are not supported.";

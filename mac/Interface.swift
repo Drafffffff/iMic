@@ -393,7 +393,8 @@ extension AppDelegate {
         copyButton.isEnabled = false
         let controlsSpacer = NSView()
         controlsSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        controlsRow = row([controlsSpacer, copyButton], spacing: 12)
+        let historyButton = linkButton(L10n.text("Text History…"), #selector(showTextHistory))
+        controlsRow = row([historyButton, controlsSpacer, copyButton], spacing: 12)
 
         permissionState.font = .systemFont(ofSize: 11)
         permissionState.textColor = .imicMuted
