@@ -88,7 +88,7 @@ app.window.orderOut(nil)
 let settings = app.settingsCoordinator!
 check(!settings.loginCheck.isEnabled, "Preview/build paths cannot register login items")
 let tabs = settings.window.contentViewController as! NSTabViewController
-check(tabs.tabStyle == .toolbar && tabs.tabViewItems.count == 5, "Five native toolbar tabs")
+check(tabs.tabStyle == .toolbar && tabs.tabViewItems.count == 6, "Six native toolbar tabs")
 settings.select(.bailian)
 settings.window.makeKeyAndOrderFront(nil)
 RunLoop.main.run(until: Date().addingTimeInterval(0.2))
@@ -368,7 +368,7 @@ if let output = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("-
 #endif
 check(fileFingerprint() == before, "Previews and unchanged external credentials must not touch credentials.json")
 check(UserDefaults.standard.object(forKey: "polishProvider") as? String == standardBefore, "Preview actions must not change real preferences")
-print("Mac settings: five toolbar panes, external key override, verified save, rejected draft, close sheet, immediate provider, phone/menu sync, silent launch/reopen, waiting/pairing, failure actions and preview isolation passed")
+print("Mac settings: six toolbar panes, external key override, verified save, rejected draft, close sheet, immediate provider, phone/menu sync, silent launch/reopen, waiting/pairing, failure actions and preview isolation passed")
 
 settings.select(.general)
 let general = tabs.tabViewItems[0].viewController!.view
@@ -427,6 +427,34 @@ var synchronousCloseCallback = false
 check(settings.confirmClose(onAllow: { synchronousCloseCallback = true }), "Clean settings approve closing synchronously")
 check(!synchronousCloseCallback, "Synchronous approval must not send a terminateLater reply")
 check(app.applicationShouldTerminate(NSApp) == .terminateNow, "Clean settings do not defer application termination")
+// Vocabulary pane: preview store is in memory only, never the user's file.
+settings.select(.vocabulary)
+settings.window.makeKeyAndOrderFront(nil)
+RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+check(app.vocabulary.fileURL == nil, "Preview vocabulary never touches disk")
+let vocab = settings.vocabularySettings!
+let vocabularyPane = tabs.tabViewItems[5].viewController!.view
+let vocabularyChecks = allViews(vocabularyPane).compactMap { $0 as? NSButton }
+check(vocabularyChecks.contains { $0.identifier?.rawValue == "vocabulary.recognition" && $0.state == .on }, "Recognition vocabulary defaults on")
+check(vocabularyChecks.contains { $0.identifier?.rawValue == "vocabulary.polish" && $0.state == .on }, "Polish glossary defaults on")
+vocab.addField.stringValue = "  VoxChord "
+vocab.addTerm()
+check(app.vocabulary.entries.map(\.term) == ["VoxChord"] && app.vocabulary.entries[0].weight == 4, "Add trims and uses weight 4")
+check(vocab.table.numberOfRows == 1 && vocab.countLabel.stringValue == "1 / 2000", "Table and count follow the store")
+vocab.addField.stringValue = "voxchord"
+vocab.addTerm()
+check(app.vocabulary.entries.count == 1 && !vocab.issueLabel.isHidden && vocab.issueLabel.stringValue == L10n.text("This term already exists"), "Duplicate is rejected with a message")
+vocab.addField.stringValue = String(repeating: "\u{5B57}", count: 16)
+vocab.addTerm()
+check(app.vocabulary.entries.count == 1 && vocab.issueLabel.stringValue == L10n.text("Terms with Chinese or other non-ASCII characters can have up to 15 characters."), "Length rule is enforced locally")
+let imported = vocab.importText("Kubernetes\t5\tterminal\nvoxchord\nbad\t9\n")
+check(imported.entries.count == 1 && imported.skipped == 2 && app.vocabulary.entries.count == 2, "Import merges and skips duplicates and invalid weights")
+check(Vocabulary.hotwords(app.vocabulary.entries, mode: .agent) == ["VoxChord": 4], "Mode-scoped term stays out of other modes")
+check(Vocabulary.hotwords(app.vocabulary.entries, mode: .terminal) == ["VoxChord": 4, "Kubernetes": 5], "Mode-scoped term applies to its mode")
+vocab.table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+vocab.removeSelected()
+check(app.vocabulary.entries.map(\.term) == ["Kubernetes"] && vocab.table.numberOfRows == 1, "Remove deletes the selected term")
+try! app.vocabulary.replaceAll([])
 settings.window.orderOut(nil)
 print("Mac updater settings, menu and recording / typing / clearing / setup gates passed")
 
@@ -440,6 +468,8 @@ if let output = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("-
         view.cacheDisplay(in: view.bounds, to: bitmap)
         try! bitmap.representation(using: .png, properties: [:])!.write(to: directory.appendingPathComponent(name + ".png"))
     }
+    try! app.vocabulary.replaceAll(VocabularyPreview.entries)
+    settings.vocabularySettings?.addField.stringValue = ""
     for pane in SettingsPane.allCases {
         settings.select(pane); settings.window.makeKeyAndOrderFront(nil)
         RunLoop.main.run(until: Date().addingTimeInterval(0.15))
@@ -455,6 +485,6 @@ if let output = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("-
     RunLoop.main.run(until: Date().addingTimeInterval(0.1))
     captureView(wizard.window!.contentView!.superview!, "setup-permissions")
     wizard.close()
-    print("Captured main, all five settings panes and both setup steps")
+    print("Captured main, all settings panes and both setup steps")
 }
 #endif

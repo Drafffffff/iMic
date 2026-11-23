@@ -520,5 +520,11 @@
     "reason": "日志原因（非界面）",
     "count": 1,
     "excerpt": "\"发送失败\""
+  },
+  "430cf6a87f928823707c623837d66d811892c5935a7e9f8f3034d0dba9841ef1": {
+    "path": "shared/PolishOptions.swift",
+    "reason": "模型提示词与固定中文输入",
+    "count": 1,
+    "excerpt": "\"专有名词表：<glossary> 中每行是用户确认过写法的词，只用于校正拼写，"
   }
 }

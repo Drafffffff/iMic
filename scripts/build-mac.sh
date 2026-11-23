@@ -69,6 +69,7 @@ build_binary() {
     "$ROOT/shared/TextRevision.swift" \
     "$ROOT/shared/PolishOptions.swift" \
     "$ROOT/shared/GestureControl.swift" \
+    "$ROOT/shared/Vocabulary.swift" \
     "$ROOT/mac/CloudFailure.swift" \
     "$ROOT/mac/DeepSeek.swift" \
     "$ROOT/mac/BLEBridge.swift" \
@@ -83,6 +84,7 @@ build_binary() {
     "$ROOT/mac/SettingsValidation.swift" \
     "$ROOT/mac/SettingsField.swift" \
     "$ROOT/mac/SettingsWindow.swift" \
+    "$ROOT/mac/VocabularySettings.swift" \
     "$ROOT/mac/Updater.swift" \
     "$ROOT/mac/InputTarget.swift" \
     "$ROOT/mac/PolishPresentation.swift" \

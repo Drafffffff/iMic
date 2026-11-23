@@ -101,9 +101,18 @@ TestFlight 发布使用独立的签名归档流程，见 [TestFlight 发布说�
 
 菜单栏「文本历史…」（⌘Y）或主窗口左下角打开。每轮录音结束（含已输入、未输入及中断）都会记录原始识别、最终文字、时间、目标应用和模式；可按文字或应用名搜索，分别复制原始/最终文字，删除单条或清空全部。数据只在本机 `~/Library/Application Support/iMic/history.jsonl`；`--headless` 测试不写入，`--ui-preview=history` 使用临时目录与示例数据。
 
+### 自定义词库
+
+设置 › 词库（⌘6）管理专有名词、人名和术语。词条保存在 `~/Library/Application Support/iMic/vocabulary.json`（目录 `0700`、文件 `0600`），按百炼热词规则在本地校验：含非 ASCII 字符时不超过 15 个字符，纯 ASCII 时空格分段不超过 7 段，最多启用 2000 个，权重 1–5（默认 4）。
+
+- 识别：`BailianASR` 在 run-task 的 `parameters.vocabulary` 中发送当前润色模式适用的启用词条（即时热词）；词库为空或关闭「识别时使用词库」时不写该字段。百炼在 `task-started` 之前以 `task-failed` 拒绝时，换新任务不带词库重试一次，音频仍在本地队列中不丢失。
+- 润色：`PolishOptions.systemPrompt(glossary:)` 在系统提示词末尾追加 `<glossary>` 专有名词表，只保护写法；词库为空时提示词逐字不变。
+- 导入导出：纯文本，每行 `词条[<Tab>权重[<Tab>模式,模式]]`，模式为 `all` 或 `agent,terminal,classical,waffle,dubbed`，`#` 开头为注释。
+- 测试：`--headless --vocabulary-file=<纯文本>` 只读取该文件，不读写用户词库；`IMIC_TEST_VOCAB=<文件> ./scripts/test-link.sh` 会转交此参数。无界面运行会额外打印 `VOCABULARY recognition=<条数>` 与 `ASR_RAW <原始识别>`。`--ui-preview=settings-vocabulary` 使用内存中的示例词条。
+
 ### Mac 设置分页
 
-设置窗口分为「通用」「百炼」「iPhone」「权限」「高级」，可用 ⌘1…⌘5 切换，并记住上次停留的分页。百炼页的一个 Key 同时用于识别与润色；识别模型只读，地域与业务空间地址在高级页配置。Key 默认遮挡，可查看和验证；外部来源默认只读，点「改用 iMic 保存的 Key」后编辑，验证通过后才写入配置文件。未修改的外部 Key 不会被复制。
+设置窗口分为「通用」「百炼」「iPhone」「权限」「高级」「词库」，可用 ⌘1…⌘6 切换，并记住上次停留的分页。百炼页的一个 Key 同时用于识别与润色；识别模型只读，地域与业务空间地址在高级页配置。Key 默认遮挡，可查看和验证；外部来源默认只读，点「改用 iMic 保存的 Key」后编辑，验证通过后才写入配置文件。未修改的外部 Key 不会被复制。
 
 服务验证使用只读模型列表，不发送录音或转写正文，也不调用付费推理；具体模型的调用权限与效果仍以实际使用为准。自定义服务须提供 OpenAI 兼容的 `/models` 验证接口。切换到未配置 Key 的来源时会显示警告，失败保留原文。
 

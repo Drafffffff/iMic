@@ -96,6 +96,30 @@ final class PolishProviderTests: XCTestCase {
             options: PolishOptions(mode: .classical)), "今日劳甚，欲早归。")
     }
 
+    func testGlossaryOnlyExtendsSystemPrompt() throws {
+        let options = PolishOptions(mode: .agent)
+        func body(_ glossary: [String]?) throws -> [String: Any] {
+            let request = glossary.map {
+                try? DeepSeekClient.request(text: raw, key: officialKey, model: "deepseek-flash",
+                    endpoint: PolishProvider.deepseek.defaultEndpoint, provider: .deepseek, options: options, glossary: $0)
+            } ?? (try? DeepSeekClient.request(text: raw, key: officialKey, model: "deepseek-flash",
+                    endpoint: PolishProvider.deepseek.defaultEndpoint, provider: .deepseek, options: options))
+            return try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(request?.httpBody)) as? [String: Any])
+        }
+        func system(_ body: [String: Any]) -> String? { ((body["messages"] as? [[String: Any]])?.first?["content"]) as? String }
+        func user(_ body: [String: Any]) -> String? { ((body["messages"] as? [[String: Any]])?.last?["content"]) as? String }
+        let legacy = try body(nil), empty = try body([]), withTerms = try body(["VoxChord"])
+        // 空词库与旧调用逐字段一致。
+        XCTAssertEqual(try JSONSerialization.data(withJSONObject: empty, options: .sortedKeys),
+                       try JSONSerialization.data(withJSONObject: legacy, options: .sortedKeys))
+        XCTAssertEqual(system(empty), options.systemPrompt)
+        XCTAssertEqual(system(withTerms), options.systemPrompt(glossary: ["VoxChord"]))
+        XCTAssertTrue(system(withTerms)?.contains("<glossary>\nVoxChord\n</glossary>") == true)
+        // 素材、温度等不变，词表只在 system 中。
+        XCTAssertEqual(user(withTerms), user(empty))
+        XCTAssertEqual(withTerms["temperature"] as? Double, empty["temperature"] as? Double)
+    }
+
     func testExistingOfficialSettingsSurviveProviderRoundTrip() throws {
         defaults.set("deepseek", forKey: "polishProvider")
         defaults.set("existing-official-model", forKey: "deepseekModel")

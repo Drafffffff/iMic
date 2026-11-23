@@ -8,6 +8,7 @@ private final class RecognitionTransport: ASRMessageTransport {
     private var pendingSends: [() -> Void] = []
     private(set) var sentEvents: [String] = []
     private(set) var sentAudioChunks: [Data] = []
+    private(set) var runTasks: [[String: Any]] = []
     func resume() {}
     func send(_ message: ASRWireMessage, completion: @escaping (Error?) -> Void) {
         switch message {
@@ -17,6 +18,7 @@ private final class RecognitionTransport: ASRMessageTransport {
                let header = object["header"] as? [String: Any] {
                 if let id = header["task_id"] as? String { taskID = id }
                 if let action = header["action"] as? String { sentEvents.append(action) }
+                if header["action"] as? String == "run-task", let payload = object["payload"] as? [String: Any] { runTasks.append(payload) }
             }
         case .audio(let pcm):
             sentEvents.append("audio:\(pcm.count)")
@@ -241,6 +243,87 @@ final class ASRStreamingTests: XCTestCase {
         XCTAssertEqual(secondErrors.count, 1)
         XCTAssertEqual(secondASR.failureCode, "asr_early")
         XCTAssertNil(secondASR.onError)
+    }
+
+    // MARK: - 自定义词库
+
+    private func makeRecognizer(vocabulary: [String: Int]) -> (RecognitionTransport, BailianASR) {
+        let transport = RecognitionTransport()
+        let asr = BailianASR(transportFactory: { _ in transport })
+        asr.start(key: "sk-isolated-test", endpoint: ASRConfiguration.defaultEndpoint, model: ASRConfiguration.model, vocabulary: vocabulary)
+        return (transport, asr)
+    }
+
+    func testEmptyVocabularyKeepsRunTaskUnchanged() throws {
+        let parameters = try XCTUnwrap(transport.runTasks.first?["parameters"] as? [String: Any])
+        XCTAssertEqual(Set(parameters.keys), ["format", "sample_rate", "intermediate_result_enabled", "vad_model", "heartbeat"])
+        XCTAssertNil(parameters["vocabulary"])
+        XCTAssertEqual((transport.runTasks.first?["input"] as? [String: Any])?.isEmpty, true)
+        let (other, _) = makeRecognizer(vocabulary: [:])
+        XCTAssertNil((other.runTasks.first?["parameters"] as? [String: Any])?["vocabulary"])
+    }
+
+    func testVocabularyIsSentAsInstantHotwords() throws {
+        let (other, _) = makeRecognizer(vocabulary: ["VoxChord": 4, "祺元": 5])
+        let parameters = try XCTUnwrap(other.runTasks.first?["parameters"] as? [String: Any])
+        XCTAssertEqual(parameters["vocabulary"] as? [String: Int], ["VoxChord": 4, "祺元": 5])
+        XCTAssertEqual(parameters["format"] as? String, "pcm")
+    }
+
+    func testRejectedVocabularyRetriesOnceWithoutItAndKeepsAudio() throws {
+        let (other, asr) = makeRecognizer(vocabulary: ["VoxChord": 4])
+        var errors: [String] = [], finals: [String] = [], rejected = 0
+        asr.onError = { errors.append($0) }
+        asr.onFinal = { text, _ in finals.append(text) }
+        asr.onVocabularyRejected = { rejected += 1 }
+        let firstTask = other.taskID
+        asr.append(Data(repeating: 1, count: 3200))
+        try other.serviceFailure("InvalidParameter")
+        XCTAssertTrue(errors.isEmpty, "词库被拒时不应直接报错")
+        XCTAssertEqual(other.runTasks.count, 2)
+        XCTAssertNotEqual(other.taskID, firstTask)
+        XCTAssertNil((other.runTasks[1]["parameters"] as? [String: Any])?["vocabulary"])
+        XCTAssertFalse(other.sentEvents.contains { $0.hasPrefix("audio:") }, "开始前不上传音频")
+        // 旧任务迟到的事件被忽略。
+        try other.event("task-started", task: firstTask)
+        XCTAssertEqual(rejected, 0)
+        try other.event("task-started")
+        XCTAssertEqual(rejected, 1)
+        XCTAssertEqual(other.sentAudioChunks.first?.count, 3200, "排队的音频在重试后完整上传")
+        try other.sentence(1, "VoxChord。", ended: true)
+        asr.end()
+        try other.event("task-finished")
+        XCTAssertEqual(finals, ["VoxChord。"])
+        XCTAssertTrue(errors.isEmpty)
+    }
+
+    func testRetryWithoutVocabularyHappensOnlyOnce() throws {
+        let (other, asr) = makeRecognizer(vocabulary: ["VoxChord": 4])
+        var errors: [String] = []
+        asr.onError = { errors.append($0) }
+        try other.serviceFailure("InvalidParameter")
+        try other.serviceFailure("InvalidParameter")
+        XCTAssertEqual(other.runTasks.count, 2)
+        XCTAssertEqual(errors.count, 1)
+    }
+
+    func testFailureWithoutVocabularyDoesNotRetry() throws {
+        let (other, asr) = makeRecognizer(vocabulary: [:])
+        var errors: [String] = []
+        asr.onError = { errors.append($0) }
+        try other.serviceFailure("InvalidApiKey")
+        XCTAssertEqual(other.runTasks.count, 1)
+        XCTAssertEqual(errors.count, 1)
+    }
+
+    func testFailureAfterStartWithVocabularyDoesNotRetry() throws {
+        let (other, asr) = makeRecognizer(vocabulary: ["VoxChord": 4])
+        var errors: [String] = []
+        asr.onError = { errors.append($0) }
+        try other.event("task-started")
+        try other.serviceFailure("InternalError")
+        XCTAssertEqual(other.runTasks.count, 1)
+        XCTAssertEqual(errors.count, 1)
     }
 }
 

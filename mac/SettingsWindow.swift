@@ -6,9 +6,10 @@ import CryptoKit
 
 // The tab bar is owned by AppKit, with keyboard shortcuts handled by the window.
 enum SettingsPane: String, CaseIterable {
-    case general, bailian, iphone, permissions, advanced
-    var title: String { [L10n.text("General"), L10n.text("Model Studio"), "iPhone", L10n.text("Permissions"), L10n.text("Advanced")][Self.allCases.firstIndex(of: self)!] }
-    var symbol: String { ["gearshape", "key", "iphone", "lock.shield", "slider.horizontal.3"][Self.allCases.firstIndex(of: self)!] }
+    // New panes go last so existing ⌘1…⌘5 shortcuts keep their meaning.
+    case general, bailian, iphone, permissions, advanced, vocabulary
+    var title: String { [L10n.text("General"), L10n.text("Model Studio"), "iPhone", L10n.text("Permissions"), L10n.text("Advanced"), L10n.text("Vocabulary")][Self.allCases.firstIndex(of: self)!] }
+    var symbol: String { ["gearshape", "key", "iphone", "lock.shield", "slider.horizontal.3", "character.book.closed"][Self.allCases.firstIndex(of: self)!] }
 }
 
 private final class SettingsTabs: NSTabViewController {
@@ -22,7 +23,7 @@ private final class SettingsPanel: NSWindow {
     var selectPane: ((Int) -> Void)?
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
-           let number = Int(event.charactersIgnoringModifiers ?? ""), (1...5).contains(number) {
+           let number = Int(event.charactersIgnoringModifiers ?? ""), (1...SettingsPane.allCases.count).contains(number) {
             selectPane?(number - 1); return true
         }
         return super.performKeyEquivalent(with: event)
@@ -50,6 +51,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     var loginHint: NSTextField!
     var loginSettingsButton: NSButton!
     private var observers: [NSObjectProtocol] = []
+    private(set) var vocabularySettings: VocabularySettingsController?
     private var defaults: UserDefaults { MacPreferences.defaults }
     private var preview: Bool { app?.preview != nil }
 
@@ -112,6 +114,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         defaults.set(pane.rawValue, forKey: "settings.selectedPane")
         if pane == .permissions { refreshPermissions() }
         if pane == .general { refreshLoginState(); refreshUpdates() }
+        if pane == .vocabulary { vocabularySettings?.reload() }
         window.recalculateKeyViewLoop()
         resize()
     }
@@ -162,6 +165,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         case .iphone: return iphone()
         case .permissions: return permissions()
         case .advanced: return advanced()
+        case .vocabulary: return vocabularyPane()
         }
     }
     private func general() -> NSStackView {
@@ -196,6 +200,23 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
         app.saveFeedback.font = .systemFont(ofSize: 11); app.saveFeedback.textColor = .imicMuted
         return column([heading("INPUT"), input, app.divider(), heading("STARTUP"),
             loginCheck, loginHint, loginSettingsButton, show, app.divider(), updates, app.divider(), app.linkButton(L10n.text("Test typing"), #selector(AppDelegate.testInput)), app.saveFeedback])
+    }
+    private func vocabularyPane() -> NSStackView {
+        let controller = VocabularySettingsController(store: app!.vocabulary, defaults: defaults)
+        vocabularySettings = controller
+        let views = controller.makeViews(note: { [unowned self] in self.note($0) }, heading: { [unowned self] in self.heading($0) },
+            checkbox: { [unowned self] title, key in
+                let box = NSButton(checkboxWithTitle: title, target: self, action: #selector(self.toggleVocabularySetting(_:)))
+                box.identifier = NSUserInterfaceItemIdentifier(key)
+                box.font = .systemFont(ofSize: 12); box.setAccessibilityLabel(title)
+                box.state = (self.defaults.object(forKey: key) as? Bool ?? true) ? .on : .off
+                return box
+            })
+        return column(views, spacing: 10)
+    }
+    @objc private func toggleVocabularySetting(_ sender: NSButton) {
+        guard let key = sender.identifier?.rawValue else { return }
+        defaults.set(sender.state == .on, forKey: key)
     }
     private func refreshUpdates() {
         updateChecks?.state = app?.macUpdater.automaticallyChecks == true ? .on : .off

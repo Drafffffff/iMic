@@ -128,6 +128,15 @@ final class BailianASR {
     private var timer:Timer?
     private var startupTimer:Timer?
     private var totalBytes=0
+    private var request:URLRequest?
+    private var model=ASRConfiguration.model
+    /// 本地词库生成的即时热词；为空时 run-task 不写 vocabulary 字段，与无词库时完全一致。
+    private var vocabulary:[String:Int]=[:]
+    private var retriedWithoutVocabulary=false
+    /// 每次（重新）连接递增；旧连接迟到的回调一律丢弃。
+    private var generation=0
+    /// 词库被百炼拒绝、已改为不带词库识别时调用（task-started 之后），只用于提示。
+    var onVocabularyRejected:(()->Void)?
     /// audio.end 后先等上传，finish-task 送达后才进入最终识别期限。
     private(set) var completionDeadline:Date?
 
@@ -137,34 +146,55 @@ final class BailianASR {
         self.transportFactory=transportFactory
     }
     var onFailure: ((CloudFailure) -> Void)?
-    func start(key:String,endpoint:String,model:String) {
+    func start(key:String,endpoint:String,model:String,vocabulary:[String:Int]=[:]) {
         guard !started,!cancelled else{return}
         started=true;startedAt=Date()
         guard !key.isEmpty else{fail(L10n.text("Configure your Model Studio API Key first"), code: "key");return}
         guard model==ASRConfiguration.model else{fail(L10n.text("Set the recognition model to %@", L10n.argument(ASRConfiguration.model)), code: "asr_model");return}
-        IMicLog.write("mac.asr", "start model=\(model)")
+        IMicLog.write("mac.asr", "start model=\(model) vocabulary=\(vocabulary.count)")
         guard let url = BailianAddress.url(ASRConfiguration.inferenceEndpoint(endpoint), scheme: "wss", path: "/api-ws/v1/inference") else {
             onFailure?(.address); fail(BailianIssue.address.message, code: "cloud_address"); return
         }
         var request=URLRequest(url:url);request.timeoutInterval=ASRConfiguration.resourceTimeout
         request.setValue("Bearer \(key)",forHTTPHeaderField:"Authorization")
         request.setValue("iMic/1.0",forHTTPHeaderField:"User-Agent")
+        self.request=request;self.model=model;self.vocabulary=vocabulary
+        connect()
+    }
+    private func connect() {
+        guard let request,!cancelled else{return}
+        generation+=1;let current=generation
         let transport=transportFactory(request);self.transport=transport
-        transport.resume();receive()
+        transport.resume();receive(current)
         sending=true
+        var parameters:[String:Any]=["format":"pcm","sample_rate":16000,"intermediate_result_enabled":false,
+            "vad_model":"near_meeting_16k","heartbeat":true]
+        if !vocabulary.isEmpty {parameters["vocabulary"]=vocabulary}
         sendJSON(["header":header("run-task"),"payload":["task_group":"audio","task":"asr",
             "function":"recognition","model":model,"input":[:],
-            "parameters":["format":"pcm","sample_rate":16000,"intermediate_result_enabled":false,
-                "vad_model":"near_meeting_16k","heartbeat":true]]]){[weak self] error in
-            guard let self=self,!self.cancelled else{return}
+            "parameters":parameters]]){[weak self] error in
+            guard let self=self,!self.cancelled,self.generation==current else{return}
             self.sending=false
             if let error {self.failTransport(error)}else{self.pump()}
         }
+        startupTimer?.invalidate();startupTimer=nil
         if !cancelled && !ready {
             startupTimer=Timer.scheduledTimer(withTimeInterval:10,repeats:false){[weak self] _ in
-                if self?.ready != true{self?.failTransport(URLError(.timedOut))}
+                guard let self,self.generation==current else{return}
+                if !self.ready{self.failTransport(URLError(.timedOut))}
             }
         }
+    }
+    /// 词库在 task-started 之前被拒绝时，音频仍全部在本地队列里，换一个任务不带词库重试一次，
+    /// 保证这段话不丢。只重试一次；不带词库仍失败时按原错误处理。
+    private func retryWithoutVocabulary(code:String)->Bool {
+        guard !ready,!vocabulary.isEmpty,!retriedWithoutVocabulary,request != nil else{return false}
+        retriedWithoutVocabulary=true;vocabulary=[:]
+        IMicLog.write("mac.asr", "task failed before start code=\(code); retry without vocabulary queued=\(queuedBytes)")
+        transport?.cancel();transport=nil
+        taskID=UUID().uuidString;sending=false
+        connect()
+        return true
     }
     private func header(_ action:String)->[String:Any]{["action":action,"task_id":taskID,"streaming":"duplex"]}
     private func sendJSON(_ value:[String:Any],completion:@escaping (Error?)->Void) {
@@ -241,9 +271,9 @@ final class BailianASR {
             }
         }
     }
-    private func receive() {
+    private func receive(_ current:Int) {
         transport?.receive{[weak self] result in
-            guard let self=self,!self.cancelled else{return}
+            guard let self=self,!self.cancelled,self.generation==current else{return}
             switch result {
             case .failure(let error):self.failTransport(error)
             case .success(let data):
@@ -251,7 +281,7 @@ final class BailianASR {
                     self.fail(L10n.text("Model Studio returned an invalid recognition event"), code: "asr_event");return
                 }
                 self.handle(object)
-                if !self.cancelled{self.receive()}
+                if !self.cancelled,self.generation==current{self.receive(current)}
             }
         }
     }
@@ -261,6 +291,7 @@ final class BailianASR {
         case "task-started":
             guard !ready else{return};ready=true;readyAt=Date()
             startupTimer?.invalidate();startupTimer=nil
+            if retriedWithoutVocabulary {onVocabularyRejected?()}
             IMicLog.write("mac.asr", "task started after_ms=\(Int((readyAt ?? Date()).timeIntervalSince(startedAt)*1000)) queued=\(queuedBytes)")
             pump()
         case "result-generated":
@@ -316,6 +347,7 @@ final class BailianASR {
             let safeRaw = raw.hasPrefix("sk-") ? "redacted" : raw
             let code=String(safeRaw.prefix(64).filter{$0.isASCII && ($0.isLetter || $0.isNumber || $0=="_" || $0=="-" || $0==".")})
             IMicLog.write("mac.asr", "task failed code=\(code) queued=\(queuedBytes)")
+            if retryWithoutVocabulary(code:code) {return}
             let issue = CloudFailure.classify(code: code, message: header["error_message"] as? String ?? "")
             onFailure?(issue)
             fail(issue.title(service: L10n.text("Model Studio")), code: issue.linkCode)
@@ -326,7 +358,7 @@ final class BailianASR {
         cancelled=true;timer?.invalidate();timer=nil;startupTimer?.invalidate();startupTimer=nil
         completionDeadline=nil;queue.removeAll();queueHead=0;queueOffset=0;queuedBytes=0
         transport?.cancel();transport=nil
-        onPartial=nil;onPreview=nil;onConfirmed=nil;onFinal=nil;onError=nil;onFailure=nil;onMetrics=nil
+        onPartial=nil;onPreview=nil;onConfirmed=nil;onFinal=nil;onError=nil;onFailure=nil;onMetrics=nil;onVocabularyRejected=nil
     }
     private func failTransport(_ error: Error) {
         guard !cancelled else { return }
