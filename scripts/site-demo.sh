@@ -14,7 +14,7 @@
 #    of the main display for the length of each scene.
 # 4. tools/site-demo-compose.py aligns, composes and encodes site/assets/video/*.mp4.
 # Requires Xcode, ffmpeg, Python with Pillow and numpy, and the Accessibility grant of
-# the installed /Applications/iMic.app (the Mac demo window is signed the same way).
+# the installed /Applications/VoxChord.app (the Mac demo window is signed the same way).
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}

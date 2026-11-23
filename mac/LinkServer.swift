@@ -536,7 +536,7 @@ final class LinkServer {
     }
 
     private static func serviceName(_ macName: String) -> String {
-        var name = "iMic · \(macName)"
+        var name = "VoxChord · \(macName)"
         // Bonjour 服务名上限为 63 字节，按 UTF-8 截断且不切断字符。
         while name.utf8.count > 60 { name.removeLast() }
         return name

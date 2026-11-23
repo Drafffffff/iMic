@@ -39,7 +39,9 @@ fi
 SDK=$(xcrun --sdk macosx --show-sdk-path)
 ARCH=${IMIC_ARCH:-$(uname -m)}
 OUT=${IMIC_BUILD_DIR:-"$ROOT/build/mac.noindex"}
-APP="$OUT/iMic.app"
+APP="$OUT/VoxChord.app"
+# 旧产物名（iMic.app）不再生成；删除它，避免脚本或用户误开过期构建。
+rm -rf "$OUT/iMic.app"
 TOOLS="$ROOT/build/tools"
 
 case "$ARCH" in
@@ -88,6 +90,8 @@ build_binary() {
     "$ROOT/mac/TextPolishEffect.swift" \
     "$ROOT/mac/Brand.swift" \
     "$ROOT/mac/StatusBar.swift" \
+    "$ROOT/mac/TextHistoryStore.swift" \
+    "$ROOT/mac/TextHistoryWindow.swift" \
     "$ROOT/mac/MacExperience.swift" \
     "$ROOT/mac/Interface.swift" \
     "$ROOT/mac/main.swift" \
@@ -154,7 +158,7 @@ ditto "$ROOT/licenses" "$APP/Contents/Resources/Legal/licenses"
 IDENTITY=${IMIC_SIGNING_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | awk '/Apple Development/ {print $2; exit}')}
 if [ -z "$IDENTITY" ]; then
   echo "提示：未找到 Apple Development 证书，使用 ad-hoc 签名。" >&2
-  echo "每次重新构建后，辅助功能授权会失效：请在「系统设置 → 隐私与安全性 → 辅助功能」中删除旧的 iMic，再重新添加。" >&2
+  echo "每次重新构建后，辅助功能授权会失效：请在「系统设置 → 隐私与安全性 → 辅助功能」中删除旧的 VoxChord（旧版本可能显示为 iMic），再重新添加。" >&2
   echo "可设置 IMIC_SIGNING_IDENTITY 指定签名证书。" >&2
   IDENTITY="-"
 fi

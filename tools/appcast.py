@@ -80,7 +80,7 @@ def main():
         if a.command == 'update':
             channel = tree.find('channel')
             # A same-version overwrite replaces the old signature, length and build together.
-            url = f'{PREFIX}v{a.version}/iMic-{a.version}-macOS-universal.dmg'
+            url = f'{PREFIX}v{a.version}/VoxChord-{a.version}-macOS-universal.dmg'
             for item in list(channel.findall('item')):
                 enc = item.find('enclosure')
                 version = item.findtext(f'{{{NS}}}shortVersionString')

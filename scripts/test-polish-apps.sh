@@ -13,7 +13,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
 OUT_ROOT=${IMIC_POLISH_APPS_OUT:-"$ROOT/build/polish-apps"}
 RUN="$OUT_ROOT/$(date +%Y%m%d-%H%M%S)"
-APP="$ROOT/build/polish-apps.noindex/iMic.app"
+APP="$ROOT/build/polish-apps.noindex/VoxChord.app"
 mkdir -p "$APP/Contents/MacOS" "$RUN"
 
 xcrun swiftc -swift-version 5 -O -target "$(uname -m)-apple-macosx14.0" \

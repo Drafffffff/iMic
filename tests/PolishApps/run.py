@@ -8,7 +8,7 @@ text and records screenshots plus the effect log. It never presses Return.
 import base64, json, math, os, subprocess, sys, time, urllib.parse, plistlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-APP = os.environ.get("IMIC_SELFTEST_APP", os.path.join(ROOT, "build/polish-apps.noindex/iMic.app"))
+APP = os.environ.get("IMIC_SELFTEST_APP", os.path.join(ROOT, "build/polish-apps.noindex/VoxChord.app"))
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/tmp/imic-polish-apps"
 ONLY = sys.argv[2].split(",") if len(sys.argv) > 2 and sys.argv[2] else None
 CASE_ONLY = os.environ.get("IMIC_CASES", "").split(",") if os.environ.get("IMIC_CASES") else None
