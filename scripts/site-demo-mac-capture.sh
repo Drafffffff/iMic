@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 SCENE=${1:?scene}
 RAW=${2:?raw directory}
-APP="$ROOT/build/site-demo/mac/iMic.app"
+APP="$ROOT/build/site-demo/mac/VoxChord.app"
 TIMELINE="$RAW/$SCENE.timeline.json"
 READY="$RAW/$SCENE.ready"
 MOVIE="$RAW/$SCENE.mac.mov"

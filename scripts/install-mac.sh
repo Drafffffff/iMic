@@ -2,8 +2,10 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
-SOURCE="${IMIC_BUILD_DIR:-$ROOT/build/mac.noindex}/iMic.app"
-TARGET="/Applications/iMic.app"
+SOURCE="${IMIC_BUILD_DIR:-$ROOT/build/mac.noindex}/VoxChord.app"
+TARGET="/Applications/VoxChord.app"
+# 1.4.9 及更早版本安装为 iMic.app；同一 Bundle ID，安装时备份后替换。
+LEGACY_TARGET="/Applications/iMic.app"
 SUPPORT="$HOME/Library/Application Support/iMic"
 DRY_RUN=false
 BUILD=false
@@ -53,19 +55,39 @@ if { [ -e "$TARGET" ] && [ ! -w "$TARGET" ]; } || [ ! -w /Applications ]; then
 fi
 
 mkdir -p "$SUPPORT"
-if [ -d "$TARGET" ]; then
-  STAMP=$(date +%Y%m%d-%H%M%S)
-  BACKUP="$SUPPORT/backups/$STAMP/iMic.app.zip"
-  mkdir -p "$(dirname "$BACKUP")"
-  ditto -c -k --sequesterRsrc --keepParent "$TARGET" "$BACKUP"
-  unzip -t -q "$BACKUP"
-  echo "已备份旧版本: $BACKUP"
+STAMP=$(date +%Y%m%d-%H%M%S)
+backup_app() {
+  local app=$1
+  local backup="$SUPPORT/backups/$STAMP/$(basename "$app").zip"
+  mkdir -p "$(dirname "$backup")"
+  ditto -c -k --sequesterRsrc --keepParent "$app" "$backup"
+  unzip -t -q "$backup"
+  echo "已备份旧版本: $backup"
+}
+LEGACY=false
+if [ -d "$LEGACY_TARGET" ]; then
+  LEGACY_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$LEGACY_TARGET/Contents/Info.plist" 2>/dev/null || true)
+  # 只迁移本应用的旧包名；同名但不同 Bundle ID 的应用保持不动。
+  if [ "$LEGACY_ID" = "com.drafffffff.imic" ]; then
+    if [ ! -w "$LEGACY_TARGET" ]; then
+      echo "没有权限替换旧的 $LEGACY_TARGET，请手动删除后重试。" >&2
+      exit 1
+    fi
+    LEGACY=true
+  fi
 fi
+if [ -d "$TARGET" ]; then backup_app "$TARGET"; fi
+if [ "$LEGACY" = true ]; then backup_app "$LEGACY_TARGET"; fi
 
-# 只停止 iMic 自己的可执行文件，避免误伤同名进程。
+# 只停止本应用自己的可执行文件（可执行名仍为 iMic），避免误伤同名进程。
 pkill -f "$TARGET/Contents/MacOS/iMic" 2>/dev/null || true
+if [ "$LEGACY" = true ]; then pkill -f "$LEGACY_TARGET/Contents/MacOS/iMic" 2>/dev/null || true; fi
 sleep 0.4
 rm -rf "$TARGET"
+if [ "$LEGACY" = true ]; then
+  rm -rf "$LEGACY_TARGET"
+  echo "已将旧包名 $LEGACY_TARGET 替换为 $TARGET"
+fi
 ditto "$SOURCE" "$TARGET"
 codesign --verify --deep --strict "$TARGET"
 if [ "$NO_OPEN" = false ]; then
@@ -74,7 +96,7 @@ if [ "$NO_OPEN" = false ]; then
 else
   echo "已安装：$TARGET"
 fi
-echo "首次打开会显示设置向导：百炼 API Key → 辅助功能 → 配对 iPhone。之后可从菜单栏 iMic 图标 → 设置向导… 再次打开。"
+echo "首次打开会显示设置向导：百炼 API Key → 辅助功能 → 配对 iPhone。之后可从菜单栏 VoxChord 图标 → 设置向导… 再次打开。"
 if codesign -dv "$TARGET" 2>&1 | grep -q "Signature=adhoc"; then
-  echo "这是 ad-hoc 签名版本：若辅助功能列表里已有旧的 iMic，请先删除再重新添加。"
+  echo "这是 ad-hoc 签名版本：若辅助功能列表里已有旧的 VoxChord 或 iMic，请先删除再重新添加。"
 fi

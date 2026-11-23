@@ -105,7 +105,7 @@ final class BLEBridge: NSObject, CBPeripheralManagerDelegate {
         }
         peripheral.startAdvertising([
             CBAdvertisementDataServiceUUIDsKey: [Self.service],
-            CBAdvertisementDataLocalNameKey: "iMic · BLE"
+            CBAdvertisementDataLocalNameKey: "VoxChord · BLE"
         ])
         IMicLog.write("mac.ble", "advertising")
     }

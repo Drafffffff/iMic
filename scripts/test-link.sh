@@ -49,7 +49,7 @@ if [ "${IMIC_KEEP_SIMULATOR:-0}" != 1 ]; then
   xcrun simctl terminate booted "$IMIC_SIM_BUNDLE_ID" 2>/dev/null || true
 fi
 
-MAC_BIN="${IMIC_BUILD_DIR:-$ROOT/build/mac.noindex}/iMic.app/Contents/MacOS/iMic"
+MAC_BIN="${IMIC_BUILD_DIR:-$ROOT/build/mac.noindex}/VoxChord.app/Contents/MacOS/iMic"
 if [ "${IMIC_SKIP_MAC_BUILD:-0}" != 1 ]; then
   NEED_MAC_BUILD=0
   if [ ! -x "$MAC_BIN" ]; then

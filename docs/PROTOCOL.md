@@ -8,7 +8,7 @@ Mac 通过 Bonjour 广播：
 
 ```
 service type: _imic._tcp
-instance:     iMic · <Mac 名称>
+instance:     VoxChord · <Mac 名称>（1.4.9 及更早为 iMic · <Mac 名称>；iPhone 两种前缀都识别）
 TXT:          id=<Mac UUID>, v=1
 ```
 

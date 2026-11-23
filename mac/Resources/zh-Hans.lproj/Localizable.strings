@@ -4,7 +4,9 @@
 "%@ %@" = "%@%@";
 "%@ Delete    %@ Move cursor" = "%@ 删除    %@ 移动光标";
 "%@ could not complete the request. Please retry later." = "%@暂时无法完成请求，请稍后重试。";
+"%@ entries" = "%@ 条";
 "%@ has not been saved." = "%@尚未保存。";
+"%@ of %@ entries" = "%@ / %@ 条";
 "%@ rejected the Key. Copy a valid API Key again." = "%@拒绝了 Key，请重新复制有效的 API Key。";
 "%@ settings have not been saved." = "还有 %@ 项配置尚未保存。";
 "%@ · %@" = "%@ · %@";
@@ -98,7 +100,10 @@
 "Choose the Mac to pair with" = "选择你要配对的 Mac";
 "Classical Chinese" = "文言文";
 "Clear" = "清晰";
+"Clear History" = "清空历史";
+"Clear History…" = "清空历史…";
 "Clear all local waveforms?" = "清除所有本地波形？";
+"Clear all text history on this Mac?" = "清空这台 Mac 上的全部文本历史？";
 "Clear and natural. Keep the original voice and the mode's style." = "清楚自然，保留原来的口吻与模式风格。";
 "Clear keeps the original lines. Phosphor adds glow. CRT adds a retro screen texture." = "清晰模式保留原始线条；荧光模式增加发光；CRT 加入复古屏幕纹理。";
 "Clear text field" = "清空输入框";
@@ -187,6 +192,7 @@
 "Cut" = "剪切";
 "DeepSeek API" = "DeepSeek 官方 API";
 "Delete" = "删除";
+"Delete Entry" = "删除此条";
 "Delete is disabled on your Mac" = "删除已在 Mac 关闭";
 "Deletes only the visualization cache. Connections and recognition results are unaffected." = "仅删除可视化缓存，不影响连接或识别结果。";
 "Deleting continuously · Move down or release to stop" = "正在连续删除 · 下移或松手停止";
@@ -232,6 +238,7 @@
 "Export JSON" = "导出 JSON";
 "Export waveform JSON" = "导出波形 JSON";
 "Extra cute" = "萌系暴击";
+"Final text" = "最终文字";
 "Find my Mac" = "开始寻找 Mac";
 "Find the 6-digit pairing code in the VoxChord window on your Mac." = "在 Mac 的 VoxChord 窗口里找到 6 位配对码。";
 "Finish practice" = "完成练习";
@@ -286,6 +293,7 @@
 "Input signal detected" = "已检测到输入信号";
 "Interface sounds" = "界面音效";
 "Interface sounds: %@" = "界面音效：%@";
+"Interrupted" = "已中断";
 "Invalid audio end frame or sample count" = "语音结束帧数或采样数无效";
 "Invalid audio frame format" = "音频帧格式错误";
 "Invalid connection data" = "链路数据无效";
@@ -380,8 +388,10 @@
 "No audio received" = "没有收到声音";
 "No automatic typing. Check the target and permissions." = "未自动输入，请检查目标位置与权限";
 "No available inputs" = "无可用输入设备";
+"No history yet. Text from each recording is saved here, on this Mac only." = "暂无历史。每次录音的文字都会保存在这里，仅限这台 Mac。";
 "No iPhone paired yet" = "尚未配对 iPhone";
 "No input route" = "无输入路由";
+"No matches" = "没有匹配的记录";
 "No speech recognized" = "没有识别到语音";
 "No waveform cache. Complete a real recording first, or provide the path to an exported JSON file." = "没有波形缓存。先完成一次真实录音，或指定导出的 JSON 文件路径。";
 "No waveforms yet. Hold the bar on the home screen to speak and release normally to keep a waveform. Canceled recordings are not saved." = "还没有可复看的波形。按住主页面横条说话，正常松手后会自动保留；取消的录音不会保存。";
@@ -391,6 +401,7 @@
 "Not found on the local network" = "未在局域网发现";
 "Not saved" = "尚未保存";
 "Not selected" = "未选择";
+"Not typed · kept here" = "未输入 · 已保留";
 "Notice" = "提示";
 "Off" = "关闭";
 "On" = "开启";
@@ -415,6 +426,7 @@
 "Optional · Connect when the local network is unavailable." = "可选 · 局域网不可用时兜底连接。";
 "Optional · Locate the polish highlight. Processed only on this Mac." = "可选 · 扫光定位，仅在本机处理。";
 "Optional · Polish highlight. macOS may ask you to reopen VoxChord. Setup will return to this step." = "可选 · 润色扫光。开启后系统可能要求重新打开 VoxChord，向导会回到这一步";
+"Original recognition" = "原始识别";
 "Output language" = "输出语言";
 "Over-the-top cuteness: playful sounds, repetition, and emoticons." = "软萌拉满，叠词、拟声、颜文字，甜到过量。";
 "Pair a new iPhone" = "配对新 iPhone";
@@ -448,6 +460,7 @@
 "Polish failed. Kept as a safe comment." = "润色失败，已保留为安全注释。";
 "Polish failed. Original text kept for copying." = "润色失败，原文已保留，可复制。";
 "Polish failed. Original text typed." = "润色失败，已输入原文。";
+"Polish fell back to the original" = "润色未完成，使用原文";
 "Polish provider: %@ · Change in Advanced" = "当前润色使用：%@ · 在「高级」中更改";
 "Polish service provider" = "润色服务来源";
 "Polishing…" = "正在润色…";
@@ -457,6 +470,10 @@
 "Practice string controls" = "练习弦控制";
 "Preparing text…" = "正在整理文字…";
 "Preview %@" = "试听%@";
+"Preview history: The meeting has moved to Thursday at 3 p.m." = "会议改到周四下午三点。";
+"Preview history: list the ten largest files in downloads" = "列出下载文件夹里最大的十个文件";
+"Preview history: remember to send the revised layout tomorrow morning" = "记得明天上午把修改后的排版发出去";
+"Preview history: um so the meeting is moved to thursday afternoon I think three" = "嗯那个会议改到周四下午了好像是三点";
 "Preview mode does not send text" = "预览模式不发送文字";
 "Preview: Your Mac did not confirm. This selection was not saved." = "预览：Mac 未确认，本次选择未保存。";
 "Previous text is still being typed. Please retry shortly." = "上一条正在输入，请稍后重试";
@@ -484,6 +501,7 @@
 "Recognition failed. Please retry." = "识别失败，请重试";
 "Recognition is complete. Copy the text to use it now." = "文字已经识别完成，可以先复制使用。";
 "Recognition model (read-only)" = "识别模型（只读）";
+"Recognition only" = "仅识别";
 "Recognition result received" = "识别结果到达";
 "Recognition result too long. Please make a shorter recording." = "识别结果过长，请缩短本次录音";
 "Recognition service address" = "识别服务地址";
@@ -530,14 +548,17 @@
 "Route rebuilt. Speak to check the level." = "路由已重建，请说话检查电平。";
 "Sarcastic" = "阴阳怪气";
 "Save" = "保存";
+"Saved only on this Mac. Never uploaded." = "仅保存在这台 Mac 上，不会上传。";
 "Saved to your connected Mac. Takes effect after your Mac confirms." = "保存到当前连接的 Mac，等待 Mac 确认后生效";
 "Screen Recording" = "屏幕录制";
 "Screen Recording allowed. Screenshots and OCR are processed only on this Mac. Failure to locate text does not block typing." = "屏幕录制已允许。截图与 OCR 只在本机处理，定位失败不阻塞输入。";
 "Search again" = "重新搜索";
+"Search text or app" = "搜索文字或应用";
 "Searching for Macs. Choose a computer below." = "正在搜索 Mac，可从下方选择电脑";
 "Searching… Keep VoxChord open on your Mac." = "正在寻找… 请保持 Mac 上的 VoxChord 打开。";
 "Select All" = "全选";
 "Select VoxChord in System Settings and click − to remove it. Then return here and click Open Settings. This is common after reinstalling or updating." = "在系统设置的列表里选中 VoxChord，点「−」删除，再回到这里点「去开启」。重新安装或更新后常会遇到。";
+"Select an entry to view its text." = "选择一条记录查看文字。";
 "Selected" = "已选择";
 "Send failed" = "发送失败";
 "Send incomplete. Reconnect to confirm whether changes were saved." = "发送未完成，保存状态待重新连接确认。";
@@ -599,6 +620,8 @@
 "Test typing" = "测试输入";
 "Test your microphone" = "麦克风自检";
 "Text" = "文字";
+"Text History" = "文本历史";
+"Text History…" = "文本历史…";
 "Text attachment" = "文字附着";
 "Text attachment: %@" = "文字附着：%@";
 "Text field cleared" = "已清空当前输入框";
@@ -628,6 +651,7 @@
 "This doesn't look like a Model Studio API Key. Check that you copied all of it." = "这不像百炼 API Key，请检查是否复制完整。";
 "This input was canceled" = "本次输入已取消";
 "This looks like a Token Plan or Coding Plan Key. These Keys are for coding tools such as Claude Code. VoxChord needs a pay-as-you-go API Key. Create one on the Model Studio console's API Key page." = "这看起来是 Token Plan 或 Coding Plan 套餐的 Key。套餐 Key 只能用于 Claude Code 等编程工具，VoxChord 需要按量付费的 API Key。请在百炼控制台的「API Key」页面创建一个新的 Key。";
+"This permanently deletes every saved original and final text. It cannot be undone." = "将永久删除所有已保存的原始识别与最终文字，无法恢复。";
 "This provider has no valid Key. Polish will keep the original text." = "此来源缺少有效 Key，润色将保留原文。";
 "This region does not support VoxChord’s speech model. Create a Key in Singapore (international) or Beijing (China)." = "该地域不支持 VoxChord 的语音模型，请在国际站的新加坡或中国站的北京地域创建 Key。";
 "This removes the pairing from this iPhone. Enter the pairing code again to reconnect." = "从这台 iPhone 删除配对。下次连接需要重新输入配对码。";
@@ -651,6 +675,7 @@
 "Typing permission has not taken effect" = "输入授权尚未生效";
 "US (Virginia)" = "美国（弗吉尼亚）";
 "Undo" = "撤销";
+"Unknown app" = "未知应用";
 "Unknown link frame type" = "链路帧类型未知";
 "Unsupported service address. Paste the official Model Studio pay-as-you-go Base URL (HTTPS, port 443, /compatible-mode/v1). Plan endpoints and other hosts are not supported." = "服务地址不受支持。请粘贴百炼官方按量付费 Base URL（HTTPS、443 端口、/compatible-mode/v1），不要填写套餐地址或其他主机。";
 "Unsupported service address. Use an allowed Model Studio API Host (hostname only) or an HTTPS URL ending in /compatible-mode/v1 or /api/v1 (port 443). Plan addresses and other hosts are not supported." = "服务地址不受支持。请输入白名单内的百炼 API Host（裸主机名），或路径为 /compatible-mode/v1、/api/v1 的 HTTPS 地址（443 端口）。不支持套餐地址或其他主机。";

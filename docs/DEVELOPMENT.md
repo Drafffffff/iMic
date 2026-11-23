@@ -45,7 +45,7 @@
 
 从 [GitHub Releases](https://github.com/Drafffffff/iMic/releases/latest) 下载：
 
-- `iMic-1.4.5-macOS-universal.dmg`：macOS 13+，同时支持 Apple Silicon 与 Intel。打开镜像，把 `iMic.app` 拖入「Applications」，再从应用程序中启动。
+- `VoxChord-<版本>-macOS-universal.dmg`（1.4.9 及更早为 `iMic-<版本>-…`）：macOS 13+，同时支持 Apple Silicon 与 Intel。打开镜像，把 `VoxChord.app` 拖入「Applications」，再从应用程序中启动。
 - `iMic-1.4.5-iOS-unsigned.ipa`：iOS 17+ 的 iPhone 真机包，**未签名，不能直接点击安装**。需通过 AltStore、SideStore、Sideloadly 等工具，用自己的 Apple ID/开发团队重新签名；也可以按下方步骤从源码安装。个人团队通常需要每 7 天续签。
 - `SHA256SUMS.txt`：下载两个安装包和此文件到同一目录后，运行 `shasum -a 256 -c SHA256SUMS.txt` 校验完整性。
 
@@ -87,15 +87,19 @@ TestFlight 发布使用独立的签名归档流程，见 [TestFlight 发布说�
 
 ### Mac 常见问题
 
-- **辅助功能开关已开但不生效**：重装或更新后签名变化可能导致旧授权失效。在系统设置列表中选中 iMic，点「−」移除，再回到向导点「去开启」。
+- **辅助功能开关已开但不生效**：重装或更新后签名变化可能导致旧授权失效。在系统设置列表中选中 VoxChord（旧版本显示为 iMic），点「−」移除，再回到向导点「去开启」。
 - **从 DMG 或下载目录运行**：触发 App Translocation 时，iMic 会提示先移到「应用程序」，再从那里启动。
 - **Key 保存与读取**：所有在 iMic 中输入的 Key 保存于 `~/Library/Application Support/iMic/credentials.json`，目录权限 `0700`、文件权限 `0600`，仅当前用户可读；不使用钥匙串，也不再写入 shell 配置。每个服务依次读取此文件 → 进程环境变量 → `~/.zshenv`、`~/.zprofile`、`~/.zshrc`、`~/.bash_profile`、`~/.bashrc`、`~/.profile`、`~/.config/fish/config.fish` 中的字面量赋值（只解析，不执行）。百炼使用 `DASHSCOPE_API_KEY` / `BAILIAN_API_KEY`，DeepSeek 官方使用 `DEEPSEEK_API_KEY`，自定义服务使用 `IMIC_CUSTOM_POLISH_API_KEY`，不跨服务代用。
-- **iPhone 找不到 Mac**：确认在同一 Wi-Fi，并在「系统设置 → 隐私与安全性 → 本地网络」允许 iMic；必要时在 Mac 设置中开启蓝牙兜底。
-- **卸载**：退出 iMic，删除 `/Applications/iMic.app` 与 `~/Library/Application Support/iMic`（Key、配对令牌和备份）；可选执行 `defaults delete com.drafffffff.imic` 清除偏好。
+- **iPhone 找不到 Mac**：确认在同一 Wi-Fi，并在「系统设置 → 隐私与安全性 → 本地网络」允许 VoxChord；必要时在 Mac 设置中开启蓝牙兜底。
+- **卸载**：退出 VoxChord，删除 `/Applications/VoxChord.app`（旧版本为 `/Applications/iMic.app`）与 `~/Library/Application Support/iMic`（Key、配对令牌和备份）；可选执行 `defaults delete com.drafffffff.imic` 清除偏好。
 
 完成设置后，启动默认只显示菜单栏图标；再次从 Finder 打开或点击图标可显示主窗口。「设置 → 通用」可以开启启动时显示主窗口，以及登录时启动。登录项只允许在「应用程序」中的 iMic 配置，并以系统登录项的实际状态为准。
 
 右键菜单栏图标可查看连接状态、开关 AI 润色或切换转换模式；这些设置会同步给 iPhone。「设置…」快捷键为 ⌘,，设置分页可用 ⌘1…⌘5 切换。已配对时，主窗口以等待设备自动连接为主；「配对新 iPhone…」再展开配对码。
+
+### Mac 文本历史
+
+菜单栏「文本历史…」（⌘Y）或主窗口左下角打开。每轮录音结束（含已输入、未输入及中断）都会记录原始识别、最终文字、时间、目标应用和模式；可按文字或应用名搜索，分别复制原始/最终文字，删除单条或清空全部。数据只在本机 `~/Library/Application Support/iMic/history.jsonl`；`--headless` 测试不写入，`--ui-preview=history` 使用临时目录与示例数据。
 
 ### Mac 设置分页
 
@@ -174,6 +178,11 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 
 # 前后台恢复：生产 TCP 两端，正常复用、55 秒静默断链、令牌认证与退避跳过（本机回环，无云端/录音）
 ./scripts/test-ios-reconnect.sh --long-background
+# 前后台生命周期：旧发现器、断线交接期间回到前台、退避重建静默发现器等时序（本机回环）
+./scripts/test-ios-foreground-lifecycle.sh
+
+# Mac 文本历史：本地 JSONL 读写、权限、损坏行容错、搜索、删除与清空（不联网）
+./scripts/test-text-history.sh
 
 # ASR 临时/确认句子、乱序补齐、修订、取消与会话隔离（不联网）
 ./scripts/test-asr.sh
@@ -199,7 +208,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 ./scripts/test-link.sh
 
 # App 界面预览
-open build/mac.noindex/iMic.app --args --ui-preview=ready
+open build/mac.noindex/VoxChord.app --args --ui-preview=ready
 xcrun simctl launch booted art.malette.imic.app --ui-preview=result
 
 # Debug 专用弹射预览：自动装载文字，3 秒后弹射；可分别检查 8 / 120 / 1000 字
@@ -227,7 +236,7 @@ xcrun simctl launch --terminate-running-process booted art.malette.imic.app \
 当公司网络或访客网络阻断 Bonjour / 同网段 TCP 时，可在 Mac 设置 →「BLUETOOTH FALLBACK」启用蓝牙 GATT 兜底：
 
 - Mac 作为 BLE 外设，iPhone 作为 BLE 中心；音频与握手字节通过 GATT 隧道转发到 Mac 的 LinkServer，协议与加密不变。
-- 首次使用需要允许 Mac 和 iPhone 使用蓝牙；macOS 若没有弹出授权，请在「系统设置 → 隐私与安全性 → 蓝牙」中允许 iMic。
+- 首次使用需要允许 Mac 和 iPhone 使用蓝牙；macOS 若没有弹出授权，请在「系统设置 → 隐私与安全性 → 蓝牙」中允许 VoxChord。
 - PCM16 加帧头与 AES-GCM 至少约需 34,050 字节/秒持续上行（不含 ATT 开销）；蓝牙性能受环境影响，不保证总能实时。发送按动态 MTU 持续排空，遇系统背压等待 ready，控制帧等待最后 ATT 确认；两端都有 64 MiB 队列上限，超限明确失败，不丢掉开头继续识别尾段。
 - iPhone 在 TCP 约 3 秒内仍未建立时扫描已选择 Mac 的蓝牙身份特征；TCP 一旦建立立即取消该兜底定时器，等待用户输入配对码不再触发误降级。不会连接任意扫描结果。Mac 和 iPhone 需同时更新；首次先在同一 Wi-Fi 选择目标并配对。
 - 2026-10-25 的 iPhone 16 Pro → Mac 纯 BLE 实测：ATT 上限 512 字节，有效上行约 18–22 KB/s，低于实时所需速率；5 秒、250 帧、80,000 样本最终完整到达并确认结束。该结果说明必须保留缓存和上传状态，不能把 BLE 当成低延迟主链路；它不是所有设备/环境的速度保证。

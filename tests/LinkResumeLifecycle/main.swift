@@ -189,6 +189,38 @@ Task { @MainActor in
         print("PASS browser failure cannot overwrite a healthy link's ready state")
     } catch {failures+=1;print("FAIL discovery presentation: \(error)")}
     await healthy.resumeTestStop()
+    let suspendedLoss=client()
+    do {
+        var readyCount=0,losses=0
+        suspendedLoss.onReady={_ in readyCount+=1};suspendedLoss.onLost={losses+=1}
+        await suspendedLoss.resumeTestStart(mac)
+        try await until("authenticated link before suspension") {suspendedLoss.phase.isReady}
+        let before=await suspendedLoss.resumeTestConnectionIdentity()
+        let readyBefore=readyCount
+        suspendedLoss.enterBackground()
+        let suspended=suspendedLoss.resumeTestLossBeforeForegroundActivation()
+        try await until("loss before activation still reconnects without relaunch",timeout:8) {readyCount>readyBefore && suspendedLoss.phase.isReady}
+        let after=await suspendedLoss.resumeTestConnectionIdentity()
+        let kept=await suspendedLoss.resumeTestBrowserIs(suspended)
+        try require(!kept,"Foreground return during a loss handoff kept the suspended discovery instance")
+        try require(after != nil && after != before && losses==1,"Recovery reused the lost socket or repeated the loss callback")
+        print("PASS foreground return during a socket-loss handoff rebuilds discovery and reauthenticates")
+    } catch {failures+=1;print("FAIL loss before activation: \(error)")}
+    await suspendedLoss.resumeTestStop()
+    let silentDiscovery=client()
+    do {
+        var readyCount=0
+        silentDiscovery.onReady={_ in readyCount+=1}
+        await silentDiscovery.resumeTestStart(mac)
+        try await until("authenticated link before foreground loss") {silentDiscovery.phase.isReady}
+        let readyBefore=readyCount
+        let silent=silentDiscovery.resumeTestLossBeforeForegroundActivation(activating:false)
+        try await until("reconnect backoff rebuilds silent discovery",timeout:8) {readyCount>readyBefore && silentDiscovery.phase.isReady}
+        let kept=await silentDiscovery.resumeTestBrowserIs(silent)
+        try require(!kept,"Reconnect backoff kept a browser with no results")
+        print("PASS reconnect backoff rebuilds a silent browser instead of retrying empty cached results")
+    } catch {failures+=1;print("FAIL silent discovery backoff: \(error)")}
+    await silentDiscovery.resumeTestStop()
     let lossHandoff=client()
     do {
         var lostDelivered=false
@@ -221,6 +253,6 @@ Task { @MainActor in
         print("PASS connectionLost handoff gates autoConnect, clears backgroundAt on activate, and BLE probe times out only when progress stalls")
     } catch {failures+=1;print("FAIL loss handoff / BLE probe: \(error)")}
     await lossHandoff.resumeTestStop()
-    print("Lifecycle regressions: \(7-failures)/7 passed")
+    print("Lifecycle regressions: \(9-failures)/9 passed")
 }
 dispatchMain()

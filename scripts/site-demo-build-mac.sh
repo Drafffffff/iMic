@@ -4,7 +4,7 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
-APP="$ROOT/build/site-demo/mac/iMic.app"
+APP="$ROOT/build/site-demo/mac/VoxChord.app"
 mkdir -p "$APP/Contents/MacOS"
 xcrun swiftc -swift-version 5 -O -target "$(uname -m)-apple-macosx14.0" \
   -framework AppKit -framework ApplicationServices -framework Vision -framework ScreenCaptureKit -framework CoreImage \
@@ -23,7 +23,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 </dict></plist>
 PLIST
-IDENTITY=${IMIC_DEMO_SIGNING_IDENTITY:-$(codesign -dvv /Applications/iMic.app 2>&1 | sed -n 's/^Authority=\(Developer ID Application: .*\)$/\1/p' | head -1)}
+IDENTITY=${IMIC_DEMO_SIGNING_IDENTITY:-$({ codesign -dvv /Applications/VoxChord.app 2>&1 || codesign -dvv /Applications/iMic.app 2>&1; } | sed -n 's/^Authority=\(Developer ID Application: .*\)$/\1/p' | head -1)}
 codesign --force --timestamp=none --sign "${IDENTITY:--}" --identifier com.drafffffff.imic \
   --entitlements "$ROOT/mac/iMic.entitlements" "$APP"
 echo "Built $APP (${IDENTITY:-ad-hoc})"

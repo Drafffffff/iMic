@@ -58,7 +58,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-MAC_NAME="iMic-$VERSION-macOS-universal.dmg"
+MAC_NAME="VoxChord-$VERSION-macOS-universal.dmg"
 IOS_NAME="iMic-$VERSION-iOS-unsigned.ipa"
 # 正式签名：IMIC_RELEASE_IDENTITY="Developer ID Application: …"（私钥须已在本机钥匙串）。
 # 公证：再设置 IMIC_NOTARY_PROFILE（先用 `xcrun notarytool store-credentials` 保存凭据）。
@@ -94,15 +94,15 @@ if [ "$MODE" = resume ]; then
   MOUNT="$WORK/mounted"
   mkdir -p "$MOUNT"
   hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT" "$DMG"
-  ditto "$MOUNT/iMic.app" "$WORK/iMic.app"
+  ditto "$MOUNT/VoxChord.app" "$WORK/VoxChord.app"
   hdiutil detach "$MOUNT"
   MOUNT=""
-  APP="$WORK/iMic.app"
+  APP="$WORK/VoxChord.app"
   "$ROOT/scripts/fetch-sparkle.sh"
 else
   IMIC_CONFIGURATION=release IMIC_ARCH=universal IMIC_BUILD_DIR="$WORK/mac" IMIC_SIGNING_IDENTITY=- \
     "$ROOT/scripts/build-mac.sh"
-  APP="$WORK/mac/iMic.app"
+  APP="$WORK/mac/VoxChord.app"
   if [ -n "$RELEASE_IDENTITY" ]; then
     "$ROOT/scripts/sign-mac.sh" "$APP" "$RELEASE_IDENTITY" release
     TEAM=$(codesign -dv "$APP" 2>&1 | sed -n 's/^TeamIdentifier=//p')
@@ -127,10 +127,10 @@ xcrun lipo "$APP/Contents/MacOS/iMic" -verify_arch arm64
 xcrun lipo "$APP/Contents/MacOS/iMic" -verify_arch x86_64
 if [ "$MODE" != resume ]; then
   mkdir -p "$WORK/dmg"
-  ditto "$APP" "$WORK/dmg/iMic.app"
+  ditto "$APP" "$WORK/dmg/VoxChord.app"
   ln -s /Applications "$WORK/dmg/Applications"
   cp "$ROOT/README.md" "$WORK/dmg/README.md"
-  hdiutil create -volname "iMic $VERSION" -srcfolder "$WORK/dmg" \
+  hdiutil create -volname "VoxChord $VERSION" -srcfolder "$WORK/dmg" \
     -format UDZO -fs HFS+ "$WORK/$MAC_NAME"
   DMG="$WORK/$MAC_NAME"
   if [ -n "$RELEASE_IDENTITY" ]; then
