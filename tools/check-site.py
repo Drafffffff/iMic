@@ -16,7 +16,7 @@ ANALYTICS_HOSTS = {'cloud.umami.is', 'gateway.umami.is'}
 EXTERNAL_HOSTS = {
     'api.github.com', 'github.com', 'drafffffff.github.io',
     'bailian.console.aliyun.com', 'modelstudio.console.alibabacloud.com',
-    'testflight.apple.com',
+    'apps.apple.com',
 } | ANALYTICS_HOSTS
 ANALYTICS_URLS = {'https://cloud.umami.is/script.js', 'https://gateway.umami.is'}
 
@@ -128,7 +128,7 @@ if faq:
     require('macOS 14+' in answers and '屏幕录制' in answers, 'Polish highlight requirements missing from FAQ')
     require('手写' in answers and '不会自动执行' in answers, 'Polish example and terminal-mode notes missing from FAQ')
 require('Mac 上任意输入框' in index and '一只手机，接管所有输入' in index, 'Slogan or any-field metadata missing')
-for identifier in ('origin-banner', 'mac-download-link', 'share-link', 'release-meta', 'mobile-download-note', 'share-status', 'share-manual', 'checksum-link', 'testflight-pending', 'testflight-link'):
+for identifier in ('origin-banner', 'mac-download-link', 'share-link', 'release-meta', 'mobile-download-note', 'share-status', 'share-manual', 'checksum-link', 'appstore-link'):
     require(identifier in documents[root/'index.html'].ids, f'Download contract missing: {identifier}')
 require('data-hero-version' in index and index.count('data-dmg-link') >= 2, 'Download data attributes missing')
 require('brand-dot' not in index, 'Duplicate brand dot')
