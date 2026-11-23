@@ -61,7 +61,7 @@ for path in sorted(root.rglob('*.html')):
     page = Page(path)
     documents[path] = page
     require(page.h1 == 1, f'{path.name}: expected exactly one h1, got {page.h1}')
-    expected_language = 'en' if path.parent.name == 'en' else 'zh-Hans'
+    expected_language = 'en' if path.relative_to(root).parts[0] == 'en' else 'zh-Hans'
     require(page.lang == expected_language, f'{path}: lang must be {expected_language}')
 
 def resolve(path, url):
@@ -253,6 +253,17 @@ for link in external:
         require(link in ANALYTICS_URLS, f'Unexpected analytics URL: {link}')
 print('\nExternal links (navigation/API; optional Umami script/ingestion only):')
 for link in sorted(external):print('  '+link)
+# The changelog pages are generated from docs/releases/changelog.json.
+import subprocess
+if root == (Path(__file__).resolve().parents[1] / 'site'):
+    generated = subprocess.run([sys.executable, str(Path(__file__).with_name('site-changelog.py')), '--check'],
+                               capture_output=True, text=True)
+    require(generated.returncode == 0, (generated.stderr or generated.stdout).strip() or 'changelog check failed')
+for name in ('changelog/index.html', 'en/changelog/index.html'):
+    require((root / name).is_file(), f'{name} missing')
+for source, href in ((index, 'changelog/'), (english, 'changelog/')):
+    require(f'<a href="{href}">' in source, 'Footer changelog link missing')
+
 if errors:
     print('\nFAILED:\n'+'\n'.join('  '+e for e in errors),file=sys.stderr)
     sys.exit(1)

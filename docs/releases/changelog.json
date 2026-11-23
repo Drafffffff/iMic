@@ -1,0 +1,137 @@
+[
+  {
+    "version": "1.4.9", "date": "2026-11-11",
+    "zh": [
+      "iPhone：连续说话较久时，主页四周会轻微收拢，边缘渐入模糊与色散；松手发送时弹回，取消时平稳恢复。",
+      "iPhone：开启系统「减少动态效果」时不做形变，改为柔和的边缘变暗。"
+    ],
+    "en": [
+      "iPhone: during a long recording the home screen gently closes in from the edges with soft blur and colour fringing, then springs back when you send or settles when you cancel.",
+      "iPhone: with Reduce Motion on, a soft edge vignette replaces the deformation."
+    ]
+  },
+  {
+    "version": "1.4.8", "date": "2026-11-10",
+    "zh": [
+      "iMic 正式更名为 VoxChord：iPhone 主屏、像素字标、引导与权限说明，以及 Mac 菜单栏、窗口、设置和提示都换成新名称。",
+      "已有配对、Key、偏好设置与辅助功能授权继续有效，无需重新配对；iPhone 也能识别仍在运行旧版的 Mac。"
+    ],
+    "en": [
+      "iMic is now VoxChord: the new name and pixel wordmark appear across the iPhone home screen, onboarding and permission prompts, and the Mac menu bar, windows, settings and alerts.",
+      "Existing pairings, keys, preferences and Accessibility access keep working with no re-pairing, and the iPhone still finds Macs running the previous version."
+    ]
+  },
+  {
+    "version": "1.4.7", "date": "2026-11-04",
+    "zh": [
+      "iPhone：默认固定连接上次使用的 Mac，不再自动跳到其他已配对电脑；设备页可以删除已配对的 Mac。",
+      "iPhone：从后台返回后重连更可靠；修复系统调整麦克风格式时录音被误取消。",
+      "Mac：设置保存、凭据保护、配对与识别稳定性多项修复。"
+    ],
+    "en": [
+      "iPhone: stays with the Mac you used last instead of jumping to another paired computer, and paired Macs can now be removed from the device list.",
+      "iPhone: more reliable reconnection after returning from the background; recordings are no longer cancelled when the system adjusts the microphone format.",
+      "Mac: fixes for saving settings, protecting credentials, pairing and recognition stability."
+    ]
+  },
+  {
+    "version": "1.4.6", "date": "2026-11-03",
+    "zh": [
+      "iPhone：录音默认启用苹果语音处理，带降噪、回声消除与自动增益；麦克风失效时自动恢复，并新增 MIC TEST 自检。",
+      "iPhone：新手引导改为在真实主页上练习按住、松手和下拉发送，不开麦、不联网，可随时重播。",
+      "Mac：百炼服务地址更容易填写，并兼容新版格式的 Key。"
+    ],
+    "en": [
+      "iPhone: Apple voice processing (noise reduction, echo cancellation, auto gain) is on by default, a stalled microphone recovers by itself, and a new MIC TEST checks your input.",
+      "iPhone: onboarding now teaches hold, release and pull-to-send on the real home screen, offline and without the microphone, and can be replayed any time.",
+      "Mac: Model Studio endpoints are easier to enter, and newer key formats are accepted."
+    ]
+  },
+  {
+    "version": "1.4.5", "date": "2026-11-01",
+    "zh": [
+      "Mac：支持自动更新，默认每天检查一次，也可以在菜单中手动检查。",
+      "Mac：百炼 Key 更容易配置，自动识别地域；设置向导改为先填 Key 再开权限。",
+      "iPhone：全新首次引导与五张交互式手势练习；两端界面跟随系统语言显示简体中文或英文。",
+      "上线全新双语官网。"
+    ],
+    "en": [
+      "Mac: automatic updates, checked daily by default or on demand from the menu.",
+      "Mac: Model Studio keys are easier to set up and their region is detected automatically; setup now asks for the key before permissions.",
+      "iPhone: a new first-run guide with five interactive gesture lessons; both apps follow the system language in Simplified Chinese or English.",
+      "A new bilingual website."
+    ]
+  },
+  {
+    "version": "1.4.4", "date": "2026-10-29",
+    "zh": [
+      "Mac：一个百炼 Key 同时用于识别和润色；设置窗口改为分页，可安静启动、登录时启动，菜单栏可直接切换润色。",
+      "iPhone：启动、回到前台或断线后自动连接已配对的 Mac。",
+      "iPhone：修复多数时候听不到音效的问题，19 个音效重做为 8-bit 风格；待机变暗不再改动系统亮度。"
+    ],
+    "en": [
+      "Mac: one Model Studio key now covers recognition and polish; settings are split into tabs, with quiet launch, launch at login and polish toggles in the menu bar.",
+      "iPhone: reconnects to a paired Mac automatically on launch, on return to the foreground and after a drop.",
+      "iPhone: fixed sound effects that were often silent and remade all 19 in an 8-bit style; standby dimming no longer touches system brightness."
+    ]
+  },
+  {
+    "version": "1.4.3", "date": "2026-10-29",
+    "zh": [
+      "Mac：新增首次设置向导，引导打开辅助功能并当场验证百炼 Key；安装包改用 Developer ID 签名并通过 Apple 公证。",
+      "Mac：润色扫光改为骨架屏式加载，下划线贴合真实字迹，终端里的中文定位更准确。",
+      "输入安全：输入到终端时换行会替换为空格，多行结果不会被逐行执行。"
+    ],
+    "en": [
+      "Mac: a new setup guide enables Accessibility and verifies your Model Studio key on the spot; the app is now Developer ID signed and notarized by Apple.",
+      "Mac: the polish highlight shows a skeleton-style loading state, underlines sit on the real glyphs, and Chinese text in terminals is located accurately.",
+      "Safer typing: line breaks become spaces in terminals, so multi-line results are never run line by line."
+    ]
+  },
+  {
+    "version": "1.4.2", "date": "2026-10-28",
+    "zh": [
+      "Mac：Electron 编辑器中的实时文字改用键盘兼容模式，输入更稳定。"
+    ],
+    "en": [
+      "Mac: live text in Electron editors now uses keyboard compatibility mode for steadier input."
+    ]
+  },
+  {
+    "version": "1.4.1", "date": "2026-10-28",
+    "zh": [
+      "Mac：润色扫光在 Claude、ChatGPT、Cursor 等应用中定位更稳，修复外接 1x 显示器上的错位。",
+      "iPhone：发射时从弦上崩出会冷却熄灭的方形余烬。"
+    ],
+    "en": [
+      "Mac: the polish highlight locks on more reliably in apps such as Claude, ChatGPT and Cursor, and no longer drifts on external 1x displays.",
+      "iPhone: launching text now throws off square embers that cool and fade."
+    ]
+  },
+  {
+    "version": "1.4.0", "date": "2026-10-28",
+    "zh": [
+      "iPhone：全新荧光界面，提供清晰、荧光、荧光 CRT 三档显示效果。",
+      "文字转换：支持 Agent 指令、终端命令、文言文、废话文学、翻译腔五种模式，以及四种语气、四种输出语言。",
+      "修复顶部上拉清空与编辑器自动补全的干扰问题。"
+    ],
+    "en": [
+      "iPhone: a new phosphor interface with Clear, Phosphor and Phosphor CRT display styles.",
+      "Text conversion: five modes (agent prompts, terminal commands, classical Chinese, waffle and translationese), four tones and four output languages.",
+      "Fixed pull-to-clear and interference with editor autocompletion."
+    ]
+  },
+  {
+    "version": "1.3.0", "date": "2026-10-27",
+    "zh": [
+      "iPhone：全新弹射与琴弦手势，下拉发送、上拨删字、左右移动光标、拉到顶清空。",
+      "Mac：润色扫光，在原文位置逐行显示润色过程，可以关闭。",
+      "Mac 处理期间锁定拉弦；返回前台时恢复连接更快。"
+    ],
+    "en": [
+      "iPhone: new launch and string gestures: pull down to send, flick up to delete, swipe sideways to move the cursor, pull to the top to clear.",
+      "Mac: the polish highlight sweeps line by line over the original text and can be turned off.",
+      "The string locks while the Mac is still working, and connections recover faster on return to the foreground."
+    ]
+  }
+]
