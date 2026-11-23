@@ -11,7 +11,7 @@ App：VoxChord（iOS，Bundle ID `art.malette.imic.app`，App Store Connect App 
 | 副标题（≤30） | 按住说话，字落进 Mac 输入框（16） | Hold to speak. Type on Mac.（27） |
 | 主类别 | 效率 Productivity | Productivity |
 | 次类别 | 工具 Utilities | Utilities |
-| 价格 | 免费，无内购 | Free, no IAP |
+| 价格 | 2.99 美元（基准地区美国，其他地区按 Apple 自动换算），无内购 | USD 2.99, no IAP |
 | 支持网址 | https://drafffffff.github.io/iMic/ | https://drafffffff.github.io/iMic/en/ |
 | 营销网址 | https://drafffffff.github.io/iMic/ | https://drafffffff.github.io/iMic/en/ |
 | 隐私政策网址 | https://github.com/Drafffffff/iMic/blob/main/docs/PRIVACY.md | 同左（见 review.md「待补」） |
