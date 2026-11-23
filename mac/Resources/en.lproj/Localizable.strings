@@ -348,6 +348,7 @@
 "Looking for your Mac" = "Looking for your Mac";
 "Looking for your paired Mac" = "Looking for your paired Mac";
 "Loop replay" = "Loop replay";
+"Mac app: %@" = "Mac app: %@";
 "Mac is busy or the text field is unavailable" = "Mac is busy or the text field is unavailable";
 "Mac preferences not loaded" = "Mac preferences not loaded";
 "Mark as understood" = "Mark as understood";
@@ -437,6 +438,8 @@
 "Open VoxChord on your iPhone, tap the computer name at the top, and enter this pairing code." = "Open VoxChord on your iPhone, tap the computer name at the top, and enter this pairing code.";
 "Open microphone test" = "Open microphone test";
 "Open setup and paste your Model Studio Key to get started." = "Open setup and paste your Model Studio Key to get started.";
+"Open the website" = "Open the website";
+"Open this address on your Mac to download VoxChord for Mac" = "Open this address on your Mac to download VoxChord for Mac";
 "Optional · Connect when the local network is unavailable." = "Optional · Connect when the local network is unavailable.";
 "Optional · Locate the polish highlight. Processed only on this Mac." = "Optional · Locate the polish highlight. Processed only on this Mac.";
 "Optional · Polish highlight. macOS may ask you to reopen VoxChord. Setup will return to this step." = "Optional · Polish highlight. macOS may ask you to reopen VoxChord. Setup will return to this step.";

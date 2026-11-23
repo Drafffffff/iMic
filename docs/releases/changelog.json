@@ -4,12 +4,14 @@
     "date": "2026-11-23",
     "zh": [
       "iPhone：修复切到后台再回来后经常卡在「搜索中」、只能划掉 App 重开才恢复的问题。",
+      "iPhone：去掉新手引导，打开即用；还没配对 Mac 时，主页直接显示官网地址，可分享或复制到 Mac。",
       "Mac：新增自定义词库，人名、产品名、技术术语识别更准，润色时保持原有写法；词库只保存在本机。",
       "Mac：新增文本历史，保存每一轮的原始识别与润色后的文字，可以搜索、复制，找回没输入成功的内容。",
       "Mac：应用、安装包与广播名统一为 VoxChord，已有配对和授权不受影响。"
     ],
     "en": [
       "iPhone: fixed the app getting stuck searching after returning from the background, which previously needed a force quit.",
+      "iPhone: the tutorial is gone and the app opens straight to Home; until a Mac is paired, Home shows the website address to share or copy to your Mac.",
       "Mac: a custom vocabulary makes names, product names and technical terms more accurate, and polish keeps their spelling; it stays on your Mac.",
       "Mac: text history keeps the raw and polished text of every round, searchable and copyable, so nothing that failed to type is lost.",
       "Mac: the app, installer and network name are now VoxChord; existing pairings and permissions keep working."

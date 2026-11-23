@@ -175,6 +175,7 @@ struct InstrumentStatus: View {
     var color: Color = Theme.orange
     var teaching = false
     var celebrating = false
+    var detailColor: Color = Theme.muted
     var body: some View {
         VStack(spacing: 0) {
             HUDLabel(text: label).padding(.bottom, 13)
@@ -186,7 +187,7 @@ struct InstrumentStatus: View {
                 .frame(minHeight: 34, alignment: .top).fixedSize(horizontal: false, vertical: true).padding(.top, 13)
                 .accessibilityIdentifier(teaching ? (celebrating ? "onboarding.complete" : "onboarding.prompt") : "home.status")
             if let detail {
-                Text(detail).modifier(InstrumentHint()).multilineTextAlignment(.center)
+                Text(detail).modifier(InstrumentHint(color: detailColor)).multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true).padding(.top, 4)
             }
         }.fixedSize(horizontal: false, vertical: true)

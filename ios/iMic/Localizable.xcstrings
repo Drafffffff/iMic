@@ -5322,6 +5322,23 @@
         }
       }
     },
+    "Mac app: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac app: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac 版：%@"
+          }
+        }
+      }
+    },
     "Mac is busy or the text field is unavailable": {
       "extractionState": "manual",
       "localizations": {
@@ -6508,6 +6525,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "打开设置向导，粘贴百炼 Key 后就能开始。"
+          }
+        }
+      }
+    },
+    "Open the website": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the website"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开官网"
+          }
+        }
+      }
+    },
+    "Open this address on your Mac to download VoxChord for Mac": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open this address on your Mac to download VoxChord for Mac"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Mac 上打开这个网址，下载 VoxChord Mac 版"
           }
         }
       }

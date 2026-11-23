@@ -33,15 +33,5 @@ final class MicrophoneEntryMergeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["mic-test-message"].waitForExistence(timeout: 8))
         XCTAssertEqual(app.staticTexts["mic-test-message"].label, "Microphone access is off")
         app.buttons["Close"].firstMatch.tap()
-        // The first real-input coach must also yield to the existing error action.
-        app.terminate()
-        app.launchArguments = ["--ui-preview=error", "--ui-preview=onboarding-ready", "-AppleLanguages", "(en)"]
-        app.launch()
-        let recovery = app.buttons["Open microphone test"]
-        XCTAssertTrue(recovery.waitForExistence(timeout: 10))
-        XCTAssertTrue(recovery.isHittable); recovery.tap()
-        XCTAssertTrue(copy.waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["mic-test-message"].waitForExistence(timeout: 8))
-        app.buttons["Close"].firstMatch.tap()
     }
 }
