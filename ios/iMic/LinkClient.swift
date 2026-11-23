@@ -174,6 +174,8 @@ final class LinkClient: ObservableObject {
     private var foregroundProbe: (stamp: Double, started: TimeInterval, pingDispatched: Bool)?
     private var foregroundProbeWork: DispatchWorkItem?
     private var foregroundRestartEpoch: UInt64?
+    /// Foreground return observed while a loss handoff was in flight.
+    private var foregroundResumePending = false
     private var connectionGeneration = 0
     private var bleClient: BLELinkClient?
     private var usingBLE = false
@@ -359,7 +361,14 @@ final class LinkClient: ObservableObject {
         queue.async {
             let returning = self.backgroundAt != nil
             self.backgroundAt = nil
-            guard self.foregroundRestartEpoch == nil else { return }
+            guard self.foregroundRestartEpoch == nil else {
+                // A suspended socket's loss can reach this queue before the
+                // foreground signal. Its main-thread handoff must not swallow the
+                // return: the loss path alone keeps the pre-suspension browser,
+                // which may never report again until the app is relaunched.
+                if returning { self.foregroundResumePending = true }
+                return
+            }
             // A manually chosen target remains explicit while its first hello
             // or pairing code is pending; foreground must not turn it automatic.
             if returning, !self.hasPendingManualPairing, !self.needsCode {
@@ -517,6 +526,8 @@ final class LinkClient: ObservableObject {
             self.queue.async {
                 guard self.running, self.currentEpoch() == epoch else { return }
                 if self.foregroundRestartEpoch == epoch { self.foregroundRestartEpoch = nil }
+                // This restart already rebuilds discovery and transport.
+                self.foregroundResumePending = false
                 if self.forceBLE {
                     self.startBLELocked()
                 } else {
@@ -862,6 +873,16 @@ final class LinkClient: ObservableObject {
               reconnectWork == nil, foregroundRestartEpoch == nil else { return false }
         guard let match = networkCandidateLocked(discovered) else { return false }
         connectLocked(to: match)
+        return true
+    }
+
+    /// Loss already delivered on main; a foreground return seen meanwhile now
+    /// gets the same fresh discovery/transport restart a direct return would.
+    private func resumeDeferredForegroundLocked() -> Bool {
+        guard foregroundResumePending else { return false }
+        foregroundResumePending = false
+        guard !ready else { return false }
+        restartForegroundLocked(reason: "foreground after loss handoff")
         return true
     }
 
@@ -1298,9 +1319,16 @@ final class LinkClient: ObservableObject {
             self.queue.async {
                 guard self.running, self.currentEpoch() == epoch else { return }
                 if self.foregroundRestartEpoch == epoch { self.foregroundRestartEpoch = nil }
+                if self.resumeDeferredForegroundLocked() { return }
                 self.continueAfterLossLocked(reason: reason)
             }
         }
+    }
+
+    private var browserIsReadyLocked: Bool {
+        guard let browser else { return false }
+        if case .ready = browser.state { return true }
+        return false
     }
 
     private var hasConnectedNetwork: Bool {
@@ -1467,6 +1495,7 @@ final class LinkClient: ObservableObject {
             self.queue.async {
                 guard self.running, self.currentEpoch() == epoch else { return }
                 if self.foregroundRestartEpoch == epoch { self.foregroundRestartEpoch = nil }
+                if self.resumeDeferredForegroundLocked() { return }
                 self.continueAfterLossLocked(reason: "蓝牙断开")
                 self.scheduleBLEFallback(after: 3)
             }
@@ -1493,7 +1522,11 @@ final class LinkClient: ObservableObject {
             } else if let mac = self.directMac {
                 self.connectLocked(to: mac)
             } else {
-                if self.browser == nil { self.startBrowserLocked() }
+                // A browser that survived suspension can sit without results
+                // forever; retrying only cached results would never recover.
+                if self.browser == nil || self.discoveredMacs.isEmpty || !self.browserIsReadyLocked {
+                    self.startBrowserLocked()
+                }
                 self.autoConnect(self.discoveredMacs)
             }
         }
@@ -1504,6 +1537,7 @@ final class LinkClient: ObservableObject {
 
     private func closeConnectionLocked() {
         foregroundRestartEpoch = nil
+        foregroundResumePending = false
         foregroundProbeWork?.cancel()
         foregroundProbeWork = nil
         foregroundProbe = nil

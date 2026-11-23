@@ -102,6 +102,25 @@ extension LinkClient {
         }
     }
 
+    /// Resume ordering seen after suspension: the dead socket's callback reaches
+    /// the link queue first, then the foreground activation, all before main has
+    /// consumed the loss publication. The pre-suspension browser never reports
+    /// again (modelled by an unstarted instance with no cached results).
+    @MainActor func resumeTestLossBeforeForegroundActivation(activating: Bool = true) -> NWBrowser {
+        let suspended = queue.sync { () -> NWBrowser in
+            self.browser?.cancel()
+            let browser = self.passiveTestBrowser()
+            self.browser = browser
+            self.discoveredMacs.removeAll()
+            if activating { self.backgroundAt = ProcessInfo.processInfo.systemUptime - 30 }
+            self.connectionLost(generation: self.connectionGeneration, reason: "isolated suspended socket loss")
+            return browser
+        }
+        if activating { activate() }
+        queue.sync {}
+        return suspended
+    }
+
     func resumeTestBackgroundCleared() async -> Bool {
         await withCheckedContinuation { continuation in
             queue.async { continuation.resume(returning: self.backgroundAt == nil) }
