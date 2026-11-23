@@ -1,5 +1,3 @@
-/* Public TestFlight installation link. */
-const IOS_TESTFLIGHT_URL = "https://testflight.apple.com/join/BZmRwkZC";
 /* Umami Cloud website UUID. Empty means no analytics script or requests. */
 const ANALYTICS_SITE_ID = "c302cf40-d2ee-4601-9d76-fbacfd86a543";
 const RELEASE_API = "https://api.github.com/repos/Drafffffff/iMic/releases/latest";
@@ -87,7 +85,7 @@ const SHARE_URL = document.querySelector("#share-manual").href;
     const placement = link.closest(".hero-actions") ? "hero" : link.closest("#mobile-download-note") ? "mobile-direct" : "card";
     link.addEventListener("click", () => track("download_mac", { placement, lang }));
   });
-  document.querySelectorAll(".hero-actions .text-link, #testflight-link").forEach((link) => {
+  document.querySelectorAll(".hero-actions .text-link, #appstore-link").forEach((link) => {
     const placement = link.closest(".hero-actions") ? "hero" : "card";
     link.addEventListener("click", () => track("iphone_get", { placement, lang }));
   });
@@ -231,13 +229,6 @@ const SHARE_URL = document.querySelector("#share-manual").href;
     }
   }
   void updateRelease();
-
-  if (IOS_TESTFLIGHT_URL) {
-    const link = document.querySelector("#testflight-link");
-    link.href = IOS_TESTFLIGHT_URL;
-    link.hidden = false;
-    document.querySelector("#testflight-pending").hidden = true;
-  }
 
   const mobile = /iPhone|iPod|Android/i.test(navigator.userAgent)
     || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);

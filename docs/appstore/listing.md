@@ -21,21 +21,25 @@ App：VoxChord（iOS，Bundle ID `art.malette.imic.app`，App Store Connect App 
 
 ## 关键词（≤100，逗号分隔、不加空格）
 
-- 中文：`语音输入,听写,语音转文字,Mac,键盘,远程输入,AI润色,Agent,终端,口述,麦克风,写作,效率,输入法`（56）
-- English：`dictation,voice typing,speech to text,mac,keyboard,remote,microphone,ai,agent,terminal,transcribe`（97）
+- 中文：`听写,语音转文字,mini,麦克风,外接麦克风,迷你主机,键盘,远程输入,AI润色,Agent,终端,口述,写作,效率,输入法,语音打字`（68）
+- English：`dictation,speech to text,mini,studio,microphone,dictate,keyboard,remote,ai,agent,terminal,transcribe`（100）
+
+1.5.0 起（SEO 方案 `docs/seo/2026-11-23-seo-plan.md`）：名称和副标题里已有的词（语音输入、Mac、voice、typing）不再重复放进关键词，腾出位置给 Mac mini / Mac Studio 无麦克风场景。Apple 会把关键词与名称、副标题中的词组合匹配，`mini` 可与副标题里的 `Mac` 组成「mac mini」。
 
 不放其他公司的商标（如 Claude Code、Cursor），以免触犯审核指南 2.3.7。
 
 ## 推广文本（≤170，可随时修改，无需审核）
 
-- 中文：给 Agent 下指令、写文档、回消息，都不用再敲键盘。按住 iPhone 说话，松手文字就出现在 Mac 光标处；下拉琴弦，直接发送。
-- English: Prompt your agents, draft docs and reply to chats without typing. Hold your iPhone to speak, release and the words land at your Mac's cursor. Pull the string to send.
+- 中文：Mac mini、Mac Studio 没有麦克风？拿起 iPhone 按住说话，松手文字就出现在 Mac 光标处。给 Agent 下指令、写文档、回消息都不用敲键盘；下拉琴弦，直接发送。
+- English: No microphone on your Mac mini or Mac Studio? Hold your iPhone to speak and the words land at your Mac's cursor. Prompt agents, draft docs and reply without typing.
 
 ## 描述（中文）
 
 一只手机，接管所有输入。
 
 VoxChord 把 iPhone 变成 Mac 的语音输入键。按住底部横条说话，松手，文字就出现在 Mac 当前光标处：终端、编辑器、浏览器、聊天窗口都可以。
+
+Mac mini、Mac Studio、Mac Pro 没有内置麦克风？不用另买：VoxChord 用 iPhone 收音，Mac 不需要任何麦克风。
 
 【按住就说，松手落字】
 说话时 iPhone 上实时显示文字预览，松开后由 Mac 完成识别并输入到前台应用。录音中途上滑即可取消。
@@ -64,6 +68,8 @@ VoxChord 是开源软件（GPL-3.0）。问题反馈：i0.0ia@qq.com
 One phone. Every text field.
 
 VoxChord turns your iPhone into a voice key for your Mac. Hold the bar, speak, and release: the words appear at your Mac's cursor in terminals, editors, browsers or chat windows.
+
+No built-in microphone on your Mac mini, Mac Studio or Mac Pro? No need to buy one. VoxChord listens through your iPhone, so your Mac needs no microphone at all.
 
 HOLD TO SPEAK, RELEASE TO TYPE
 See a live text preview on your iPhone while you talk. When you let go, your Mac finishes recognition and types into the front app. Slide up mid-recording to cancel.

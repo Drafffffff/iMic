@@ -138,7 +138,7 @@ struct PhosphorArtwork: View {
     private var status:some View{
         InstrumentStatus(word:state.status, description:state.statusLine, detail:state.statusDetail,
                          cell:state.statusCell, color:state.statusColor, teaching:state.teaching,
-                         celebrating:state.celebrating)
+                         celebrating:state.celebrating, detailColor:Theme.orange)
     }
     private var bar:some View{
         ZStack{

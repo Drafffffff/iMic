@@ -348,6 +348,7 @@
 "Looking for your Mac" = "正在寻找你的 Mac";
 "Looking for your paired Mac" = "正在寻找已配对的 Mac";
 "Loop replay" = "循环复看";
+"Mac app: %@" = "Mac 版：%@";
 "Mac is busy or the text field is unavailable" = "Mac 忙碌或当前输入框不可用";
 "Mac preferences not loaded" = "尚未获取 Mac 偏好";
 "Mark as understood" = "标记为已了解";
@@ -437,6 +438,8 @@
 "Open VoxChord on your iPhone, tap the computer name at the top, and enter this pairing code." = "在 iPhone 上打开 VoxChord，点顶部的电脑名称，输入这个配对码。";
 "Open microphone test" = "打开麦克风自检";
 "Open setup and paste your Model Studio Key to get started." = "打开设置向导，粘贴百炼 Key 后就能开始。";
+"Open the website" = "打开官网";
+"Open this address on your Mac to download VoxChord for Mac" = "在 Mac 上打开这个网址，下载 VoxChord Mac 版";
 "Optional · Connect when the local network is unavailable." = "可选 · 局域网不可用时兜底连接。";
 "Optional · Locate the polish highlight. Processed only on this Mac." = "可选 · 扫光定位，仅在本机处理。";
 "Optional · Polish highlight. macOS may ask you to reopen VoxChord. Setup will return to this step." = "可选 · 润色扫光。开启后系统可能要求重新打开 VoxChord，向导会回到这一步";

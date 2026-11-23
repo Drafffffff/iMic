@@ -75,38 +75,6 @@ final class LinkClient: ObservableObject {
     /// Set synchronously before HomeView appears; also gates foreground activation.
     var startDeferred = false
     @Published private(set) var localNetworkDenied = false
-    private let practiceLock = NSLock()
-    private var practiceDepth = 0
-
-    func setPracticeActive(_ active: Bool) {
-        practiceLock.lock()
-        practiceDepth = max(0, practiceDepth + (active ? 1 : -1))
-        practiceLock.unlock()
-    }
-
-    /// Stop discovery and every transport before entering local practice, including replay.
-    func suspendForPractice() {
-        startDeferred = true
-        running = false
-        guard !isPreview else { return }
-        queue.sync {
-            closeConnectionLocked()
-            graceWork?.cancel(); graceWork = nil
-            browser?.cancel(); browser = nil
-            discoveredMacs.removeAll()
-        }
-        phase = .idle; transport = nil; gestureReady = false
-        macs = []; pairing = false; pairingError = nil
-    }
-
-    private func permitsSend(_ kind: String) -> Bool {
-        practiceLock.lock()
-        let blocked = practiceDepth > 0
-        practiceLock.unlock()
-        if blocked { IMicLog.write("iphone.practice", "blocked send kind=\(kind)") }
-        return !blocked
-    }
-
     @Published private(set) var transport: Transport?
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var macs: [DiscoveredMac] = []
@@ -294,16 +262,10 @@ final class LinkClient: ObservableObject {
             let mode = ProcessInfo.processInfo.arguments
                 .first { $0.hasPrefix("--ui-preview=") }?
                 .replacingOccurrences(of: "--ui-preview=", with: "") ?? "idle"
-            if mode.hasPrefix("onboarding-") {
-                macs = ["onboarding-pair", "onboarding-found"].contains(mode) ? [mac] : []
-                phase = mode == "onboarding-pair" ? .needsCode(name) : (["onboarding-ready", "onboarding-complete"].contains(mode) ? .ready(name) : .searching)
-                localNetworkDenied = mode == "onboarding-link-denied"
-            } else {
-                switch mode {
-                case "pairing": phase = .needsCode(name)
-                case "offline": phase = .searching
-                default: phase = .ready(name)
-                }
+            switch mode {
+            case "pairing": phase = .needsCode(name)
+            case "offline": phase = .searching
+            default: phase = .ready(name)
             }
             if mode.hasPrefix("devices-manage") {
                 let nearby = DiscoveredMac(id: "preview-studio", name: "Mac Studio", endpoint: .hostPort(host: "127.0.0.1", port: 2))
@@ -313,6 +275,11 @@ final class LinkClient: ObservableObject {
                 if mode == "devices-manage-repair" {
                     pairedMacIDs.remove(mac.id); phase = .searching
                 }
+            }
+            if mode == "first-run" {
+                // Fresh install: nothing paired, remembered or nearby.
+                phase = .searching; macs = []; rememberedMacs = []; pairedMacIDs = []
+                selectedMacID = nil; selectedMacName = nil; lastMac = nil
             }
             hasPairedMac = phase.isReady
             gestureReady = phase.isReady
@@ -1635,13 +1602,11 @@ final class LinkClient: ObservableObject {
     // MARK: - Audio / control
 
     func beginSession(_ session: UInt16) {
-        guard permitsSend("audio.start") else { return }
         IMicLog.write("iphone.link", "send audio.start session=\(session)")
         enqueue(.audioStart(session: Int(session)))
     }
 
     func sendAudio(_ pcm: Data, session: UInt16, seq: UInt32) {
-        guard permitsSend("audio") else { return }
         let epoch = currentEpoch()
         queue.async {
             guard epoch == self.currentEpoch() else { return }
@@ -1663,7 +1628,6 @@ final class LinkClient: ObservableObject {
     }
 
     func endSession(_ session: UInt16, samples: Int, frames: Int, completion: ((Bool) -> Void)? = nil) {
-        guard permitsSend("audio.end") else { completion?(false); return }
         guard IMicLink.isValidAudioEnd(samples: samples, frames: frames) else {
             IMicLog.write("iphone.link", "invalid audio.end samples=\(samples) frames=\(frames)")
             DispatchQueue.main.async { completion?(false) }
@@ -1679,14 +1643,12 @@ final class LinkClient: ObservableObject {
     }
 
     func cancelSession(_ session: UInt16) {
-        guard permitsSend("audio.cancel") else { return }
         IMicLog.write("iphone.link", "send audio.cancel session=\(session)")
         enqueue(.audioCancel(session: Int(session)))
     }
 
     @discardableResult
     func sendInput(_ action: String) -> Bool {
-        guard permitsSend("input") else { return false }
         guard phase.isReady, gestureSupported, gestureReady, !clearPending,
               let revision = gestureRevision else { return false }
         if action == "clear" { clearPending = true }
@@ -1708,14 +1670,12 @@ final class LinkClient: ObservableObject {
     }
 
     func sendPreview(_ text: String) {
-        guard permitsSend("preview") else { return }
         enqueue(.preview(text))
     }
 
     @MainActor
     @discardableResult
     func updatePolishPreferences(_ preferences: LinkPolishPreferences) -> Bool {
-        guard permitsSend("polish.settings") else { return false }
         guard phase.isReady, polishPreferencesSupported, polishPreferences != nil,
               !polishPreferencesSaving else {
             polishPreferencesError = L10n.text("Connect to a Mac that supports polish preferences and wait for the current save to finish.")

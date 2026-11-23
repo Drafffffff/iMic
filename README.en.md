@@ -4,7 +4,7 @@
 
 **One phone. Every input.**
 
-Switch Macs anytime and speak into any text field. Tell your agent what to do, then pull down to launch the idea.
+Voice typing for your Mac, from your iPhone: hold to speak into any text field, release to type. Works on a Mac mini or Mac Studio with no microphone. Switch Macs anytime, tell your agent what to do, then pull down to launch the idea.
 
 [中文](README.md) · [Website](https://drafffffff.github.io/iMic/en/) · [Get the Mac app](https://github.com/Drafffffff/iMic/releases/latest) · [Feedback](https://github.com/Drafffffff/iMic/issues)
 
@@ -14,6 +14,7 @@ Switch Macs anytime and speak into any text field. Tell your agent what to do, t
 
 ## What it does
 
+- **No Mac microphone needed**: your iPhone does the listening, so voice typing works on a Mac mini, Mac Studio, Mac Pro, or a closed MacBook with no extra hardware.
 - **One input source, many Macs**: your iPhone remembers each Mac and switches between them.
 - **Any text field**: terminal, editor, browser, chat. Hold to speak, release to type.
 - **String gestures**: pull down for Return, up to delete, or sideways to move the cursor. Talk back and forth with your agent without touching the keyboard.
@@ -25,7 +26,7 @@ Switch Macs anytime and speak into any text field. Tell your agent what to do, t
 You'll need a Mac with macOS 13+, an iPhone with iOS 17+, and your own [Model Studio (Bailian) API Key](https://modelstudio.console.alibabacloud.com/ap-southeast-1/model/settings/api-key). Connect both devices to the same Wi-Fi.
 
 1. **Mac**: download the [latest DMG](https://github.com/Drafffffff/iMic/releases/latest), drag VoxChord into Applications, and open it. Follow setup to enter your Key and allow Accessibility.
-2. **iPhone**: install via [TestFlight](https://testflight.apple.com/join/BZmRwkZC).
+2. **iPhone**: install from the [App Store](https://apps.apple.com/app/id6829771739) (paid; not available in mainland China).
 3. **Pair**: choose your Mac on iPhone and enter the 6-digit pairing code shown on your Mac.
 4. **Type**: click a text field on your Mac, hold the orange bar at the bottom of your iPhone to speak, then release.
 

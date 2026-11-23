@@ -9,25 +9,34 @@ final class EnglishUIReviewTests: XCTestCase {
     }
     func testScrollableEnglishAndChineseGuidance() {
         for language in ["en", "zh-Hans"] {
-            for state in ["onboarding-welcome", "onboarding-mac-download", "settings"] {
-                let app = XCUIApplication()
-                app.launchArguments = ["--ui-preview=" + state, "-AppleLanguages", "(" + language + ")"]
-                app.launch()
-                let marker = state == "settings" ? app.buttons[language == "en" ? "Close" : "关闭"].firstMatch : app.staticTexts["onboarding.title"]
-                XCTAssertTrue(marker.waitForExistence(timeout: 20))
-                capture(app, "scroll-" + state + "-" + language + "-top")
-                for index in 1...(state == "settings" ? 5 : 1) {
-                    app.scrollViews.firstMatch.swipeUp()
-                    capture(app, "scroll-" + state + "-" + language + "-" + String(index))
-                }
-                if state == "onboarding-welcome" {
-                    XCTAssertTrue(app.buttons[language == "en" ? "Get started" : "开始"].isHittable)
-                }
-                if state == "onboarding-mac-download" {
-                    XCTAssertTrue(app.buttons[language == "en" ? "It's installed on my Mac. Continue" : "Mac 上装好了，继续"].isHittable)
-                }
-                app.terminate()
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-preview=settings", "-AppleLanguages", "(" + language + ")"]
+            app.launch()
+            XCTAssertTrue(app.buttons[language == "en" ? "Close" : "关闭"].firstMatch.waitForExistence(timeout: 20))
+            capture(app, "scroll-settings-" + language + "-top")
+            for index in 1...5 {
+                app.scrollViews.firstMatch.swipeUp()
+                capture(app, "scroll-settings-" + language + "-" + String(index))
             }
+            app.terminate()
+        }
+    }
+
+    /// No tutorial: a first run with no Mac shows the website address and the download sheet.
+    func testFirstRunPointsToWebsite() {
+        for language in ["en", "zh-Hans"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-preview=first-run", "-AppleLanguages", "(" + language + ")"]
+            app.launch()
+            let entry = app.buttons["home.getMac"]
+            XCTAssertTrue(entry.waitForExistence(timeout: 20))
+            XCTAssertTrue(entry.isHittable)
+            capture(app, "first-run-" + language)
+            entry.tap()
+            XCTAssertTrue(app.staticTexts["download.address"].waitForExistence(timeout: 8))
+            XCTAssertEqual(app.staticTexts["download.address"].label, "drafffffff.github.io/iMic")
+            capture(app, "first-run-download-" + language)
+            app.terminate()
         }
     }
 }
