@@ -17,7 +17,7 @@
 ```
 VoxChord is the iPhone companion of a free, open-source macOS voice-input utility. The iPhone captures speech while the user holds the bar; the paired Mac recognizes it and types the text at the Mac's cursor. There is no account, subscription or in-app purchase.
 
-A Mac (macOS 13 or later) on the same Wi-Fi network is required for the full workflow. A demo video of the complete workflow is attached.
+A Mac (macOS 13 or later) on the same Wi-Fi network is required for the full workflow.
 
 1. On the Mac, download the signed and notarized VoxChord DMG from https://github.com/Drafffffff/iMic/releases/latest, move VoxChord to Applications and open it.
 2. In the Mac setup, grant Accessibility (used only to type text into the front app) and paste the Model Studio (Bailian) API key provided below. Screen Recording is optional and only drives a local visual effect.
