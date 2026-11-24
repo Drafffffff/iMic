@@ -225,6 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.setActivationPolicy(.accessory)
         buildUI()
+        DockPresence.shared = DockPresence()
         automatic.state = MacPreferences.defaults.object(forKey: "automaticInput") as? Bool ?? true ? .on : .off
         refreshInputPermission()
         refreshUI()
@@ -1333,6 +1334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Actions
 
     @objc func show() {
+        DockPresence.willShowWindow()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -1342,6 +1344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popUpStatusMenu()
         } else if window.isVisible && NSApp.isActive {
             window.orderOut(nil)
+            DockPresence.shared?.update()
         } else {
             show()
         }
@@ -1391,6 +1394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshInputPermission()
         rebuildPairedList()
         settingsCoordinator?.show()
+        DockPresence.willShowWindow()
         settingsWindow.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }

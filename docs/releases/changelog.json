@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.5.1",
+    "date": "2026-11-25",
+    "zh": [
+      "Mac：打开主窗口、设置或文本历史时显示 Dock 图标，可用 Dock 和 Cmd-Tab 找回窗口；关掉窗口后回到仅菜单栏。"
+    ],
+    "en": [
+      "Mac: VoxChord shows a Dock icon while its main window, Settings or Text History is open, so the Dock and Cmd-Tab can find it; it returns to the menu bar when they close."
+    ]
+  },
+  {
     "version": "1.5.0",
     "date": "2026-11-23",
     "zh": [
