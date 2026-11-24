@@ -46,6 +46,7 @@ final class TextHistoryWindowController: NSWindowController, NSTableViewDataSour
     func present() {
         reload(keepSelection: true)
         if window?.isVisible != true { window?.center() }
+        DockPresence.willShowWindow()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeFirstResponder(search)

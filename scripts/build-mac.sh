@@ -92,6 +92,7 @@ build_binary() {
     "$ROOT/mac/TextPolishEffect.swift" \
     "$ROOT/mac/Brand.swift" \
     "$ROOT/mac/StatusBar.swift" \
+    "$ROOT/mac/DockPresence.swift" \
     "$ROOT/mac/TextHistoryStore.swift" \
     "$ROOT/mac/TextHistoryWindow.swift" \
     "$ROOT/mac/MacExperience.swift" \

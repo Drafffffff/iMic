@@ -206,6 +206,7 @@ final class SetupWizard: NSWindowController, NSWindowDelegate, NSTextFieldDelega
         snapshot = host.setupSnapshot()
         lastAllowed = snapshot.permission.allowed
         show(requested ?? SetupProgress.saved() ?? SetupStep.first(for: snapshot))
+        DockPresence.willShowWindow()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
